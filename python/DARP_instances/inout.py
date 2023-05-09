@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Tuple, Dict, Iterable
 
 import darpbenchmark.log
-from darpbenchmark.instance import DARPInstance, Action, ActionType, Vehicle, VirtualVehicle, Request
-from darpbenchmark.vehicle_plan import ActionData, VehiclePlan
-from darpbenchmark.solution import Solution
+from DARP_instances.instance import DARPInstance, Action, ActionType, Vehicle, VirtualVehicle, Request
+from DARP_instances.vehicle_plan import ActionData, VehiclePlan
+from DARP_instances.solution import Solution
 
 
 def load_csv(filepath: str, delimiter: str = ",") -> Iterable:

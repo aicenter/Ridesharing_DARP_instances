@@ -6,11 +6,11 @@ import re
 import pandas as pd
 from pathlib import PurePath
 
-import darpbenchmark.exec
-import darpbenchmark.log
-from darpbenchmark.inout import check_file_exists
+import DARP_instances.exec
+import DARP_instances.log
+from DARP_instances.inout import check_file_exists
 
-from darpbenchmark.inout import check_file_exists
+from DARP_instances.inout import check_file_exists
 
 
 def call_experiment_runner_plain(params: Dict[str, str], timeout: Optional[int] = None) -> bool:
@@ -30,7 +30,7 @@ def call_experiment_runner_plain(params: Dict[str, str], timeout: Optional[int] 
 
     commands = [str(arg) for arg in commands]
 
-    return darpbenchmark.exec.call_executable(commands, timeout)
+    return DARP_instances.exec.call_executable(commands, timeout)
 
 
 def call_experiment_runner(
