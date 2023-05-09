@@ -1,0 +1,1479 @@
+{
+    "$schema": "https://json-schema.org/draft/2019-09/schema",
+    "$id": "http://example.com/example.json",
+    "type": "object",
+    "default": {},
+    "title": "Root Schema",
+    "required": [
+        "cost",
+        "cost_minutes",
+        "plans",
+        "dropped_requests"
+    ],
+    "properties": {
+        "cost": {
+            "type": "integer",
+            "default": 0,
+            "title": "The cost Schema",
+            "examples": [
+                29605
+            ]
+        },
+        "cost_minutes": {
+            "type": "integer",
+            "default": 0,
+            "title": "The cost_minutes Schema",
+            "examples": [
+                493
+            ]
+        },
+        "plans": {
+            "type": "array",
+            "default": [],
+            "title": "The plans Schema",
+            "items": {
+                "type": "object",
+                "title": "A Schema",
+                "required": [
+                    "cost",
+                    "vehicle",
+                    "departure_time",
+                    "arrival_time",
+                    "actions"
+                ],
+                "properties": {
+                    "cost": {
+                        "type": "integer",
+                        "title": "The cost Schema",
+                        "examples": [
+                            1701,
+                            1563
+                        ]
+                    },
+                    "vehicle": {
+                        "type": "object",
+                        "title": "The vehicle Schema",
+                        "required": [
+                            "index",
+                            "init_position",
+                            "capacity"
+                        ],
+                        "properties": {
+                            "index": {
+                                "type": "integer",
+                                "title": "The index Schema",
+                                "examples": [
+                                    0,
+                                    1
+                                ]
+                            },
+                            "init_position": {
+                                "type": "object",
+                                "title": "The init_position Schema",
+                                "required": [
+                                    "index"
+                                ],
+                                "properties": {
+                                    "index": {
+                                        "type": "integer",
+                                        "title": "The index Schema",
+                                        "examples": [
+                                            7976,
+                                            4466
+                                        ]
+                                    }
+                                },
+                                "examples": [{
+                                    "index": 7976
+                                },
+                                {
+                                    "index": 4466
+                                }]
+                            },
+                            "capacity": {
+                                "type": "integer",
+                                "title": "The capacity Schema",
+                                "examples": [
+                                    4
+                                ]
+                            }
+                        },
+                        "examples": [{
+                            "index": 0,
+                            "init_position": {
+                                "index": 7976
+                            },
+                            "capacity": 4
+                        },
+                        {
+                            "index": 1,
+                            "init_position": {
+                                "index": 4466
+                            },
+                            "capacity": 4
+                        }]
+                    },
+                    "departure_time": {
+                        "type": "integer",
+                        "title": "The departure_time Schema",
+                        "examples": [
+                            64606,
+                            64587
+                        ]
+                    },
+                    "arrival_time": {
+                        "type": "integer",
+                        "title": "The arrival_time Schema",
+                        "examples": [
+                            66307,
+                            66150
+                        ]
+                    },
+                    "actions": {
+                        "type": "array",
+                        "title": "The actions Schema",
+                        "items": {
+                            "type": "object",
+                            "title": "A Schema",
+                            "required": [
+                                "arrival_time",
+                                "departure_time",
+                                "action"
+                            ],
+                            "properties": {
+                                "arrival_time": {
+                                    "type": "integer",
+                                    "title": "The arrival_time Schema",
+                                    "examples": [
+                                        64886,
+                                        65078,
+                                        66303,
+                                        66307,
+                                        64869,
+                                        65256,
+                                        65701,
+                                        66150
+                                    ]
+                                },
+                                "departure_time": {
+                                    "type": "integer",
+                                    "title": "The departure_time Schema",
+                                    "examples": [
+                                        64886,
+                                        65078,
+                                        66303,
+                                        66307,
+                                        64869,
+                                        65256,
+                                        65701,
+                                        66150
+                                    ]
+                                },
+                                "action": {
+                                    "type": "object",
+                                    "title": "The action Schema",
+                                    "required": [
+                                        "id",
+                                        "request_index",
+                                        "type",
+                                        "position",
+                                        "min_time",
+                                        "max_time",
+                                        "service_duration"
+                                    ],
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer",
+                                            "title": "The id Schema",
+                                            "examples": [
+                                                10,
+                                                60,
+                                                11,
+                                                61,
+                                                8,
+                                                30,
+                                                31,
+                                                9
+                                            ]
+                                        },
+                                        "request_index": {
+                                            "type": "integer",
+                                            "title": "The request_index Schema",
+                                            "examples": [
+                                                5,
+                                                30,
+                                                4,
+                                                15
+                                            ]
+                                        },
+                                        "type": {
+                                            "type": "string",
+                                            "title": "The type Schema",
+                                            "examples": [
+                                                "pickup",
+                                                "drop_off"
+                                            ]
+                                        },
+                                        "position": {
+                                            "type": "object",
+                                            "title": "The position Schema",
+                                            "required": [
+                                                "index"
+                                            ],
+                                            "properties": {
+                                                "index": {
+                                                    "type": "integer",
+                                                    "title": "The index Schema",
+                                                    "examples": [
+                                                        12559,
+                                                        31112,
+                                                        4583,
+                                                        8787,
+                                                        11423,
+                                                        15598,
+                                                        19031,
+                                                        742
+                                                    ]
+                                                }
+                                            },
+                                            "examples": [{
+                                                "index": 12559
+                                            },
+                                            {
+                                                "index": 31112
+                                            },
+                                            {
+                                                "index": 4583
+                                            },
+                                            {
+                                                "index": 8787
+                                            },
+                                            {
+                                                "index": 11423
+                                            },
+                                            {
+                                                "index": 15598
+                                            },
+                                            {
+                                                "index": 19031
+                                            },
+                                            {
+                                                "index": 742
+                                            }]
+                                        },
+                                        "min_time": {
+                                            "type": "integer",
+                                            "title": "The min_time Schema",
+                                            "examples": [
+                                                64886,
+                                                65061,
+                                                66018,
+                                                66290,
+                                                64869,
+                                                64986,
+                                                65431,
+                                                66028
+                                            ]
+                                        },
+                                        "max_time": {
+                                            "type": "integer",
+                                            "title": "The max_time Schema",
+                                            "examples": [
+                                                65186,
+                                                65361,
+                                                66318,
+                                                66590,
+                                                65169,
+                                                65286,
+                                                65731,
+                                                66328
+                                            ]
+                                        },
+                                        "service_duration": {
+                                            "type": "integer",
+                                            "title": "The service_duration Schema",
+                                            "examples": [
+                                                0
+                                            ]
+                                        }
+                                    },
+                                    "examples": [{
+                                        "id": 10,
+                                        "request_index": 5,
+                                        "type": "pickup",
+                                        "position": {
+                                            "index": 12559
+                                        },
+                                        "min_time": 64886,
+                                        "max_time": 65186,
+                                        "service_duration": 0
+                                    },
+                                    {
+                                        "id": 60,
+                                        "request_index": 30,
+                                        "type": "pickup",
+                                        "position": {
+                                            "index": 31112
+                                        },
+                                        "min_time": 65061,
+                                        "max_time": 65361,
+                                        "service_duration": 0
+                                    },
+                                    {
+                                        "id": 11,
+                                        "request_index": 5,
+                                        "type": "drop_off",
+                                        "position": {
+                                            "index": 4583
+                                        },
+                                        "min_time": 66018,
+                                        "max_time": 66318,
+                                        "service_duration": 0
+                                    },
+                                    {
+                                        "id": 61,
+                                        "request_index": 30,
+                                        "type": "drop_off",
+                                        "position": {
+                                            "index": 8787
+                                        },
+                                        "min_time": 66290,
+                                        "max_time": 66590,
+                                        "service_duration": 0
+                                    },
+                                    {
+                                        "id": 8,
+                                        "request_index": 4,
+                                        "type": "pickup",
+                                        "position": {
+                                            "index": 11423
+                                        },
+                                        "min_time": 64869,
+                                        "max_time": 65169,
+                                        "service_duration": 0
+                                    },
+                                    {
+                                        "id": 30,
+                                        "request_index": 15,
+                                        "type": "pickup",
+                                        "position": {
+                                            "index": 15598
+                                        },
+                                        "min_time": 64986,
+                                        "max_time": 65286,
+                                        "service_duration": 0
+                                    },
+                                    {
+                                        "id": 31,
+                                        "request_index": 15,
+                                        "type": "drop_off",
+                                        "position": {
+                                            "index": 19031
+                                        },
+                                        "min_time": 65431,
+                                        "max_time": 65731,
+                                        "service_duration": 0
+                                    },
+                                    {
+                                        "id": 9,
+                                        "request_index": 4,
+                                        "type": "drop_off",
+                                        "position": {
+                                            "index": 742
+                                        },
+                                        "min_time": 66028,
+                                        "max_time": 66328,
+                                        "service_duration": 0
+                                    }]
+                                }
+                            },
+                            "examples": [{
+                                "arrival_time": 64886,
+                                "departure_time": 64886,
+                                "action": {
+                                    "id": 10,
+                                    "request_index": 5,
+                                    "type": "pickup",
+                                    "position": {
+                                        "index": 12559
+                                    },
+                                    "min_time": 64886,
+                                    "max_time": 65186,
+                                    "service_duration": 0
+                                }
+                            },
+                            {
+                                "arrival_time": 65078,
+                                "departure_time": 65078,
+                                "action": {
+                                    "id": 60,
+                                    "request_index": 30,
+                                    "type": "pickup",
+                                    "position": {
+                                        "index": 31112
+                                    },
+                                    "min_time": 65061,
+                                    "max_time": 65361,
+                                    "service_duration": 0
+                                }
+                            },
+                            {
+                                "arrival_time": 66303,
+                                "departure_time": 66303,
+                                "action": {
+                                    "id": 11,
+                                    "request_index": 5,
+                                    "type": "drop_off",
+                                    "position": {
+                                        "index": 4583
+                                    },
+                                    "min_time": 66018,
+                                    "max_time": 66318,
+                                    "service_duration": 0
+                                }
+                            },
+                            {
+                                "arrival_time": 66307,
+                                "departure_time": 66307,
+                                "action": {
+                                    "id": 61,
+                                    "request_index": 30,
+                                    "type": "drop_off",
+                                    "position": {
+                                        "index": 8787
+                                    },
+                                    "min_time": 66290,
+                                    "max_time": 66590,
+                                    "service_duration": 0
+                                }
+                            },
+                            {
+                                "arrival_time": 64869,
+                                "departure_time": 64869,
+                                "action": {
+                                    "id": 8,
+                                    "request_index": 4,
+                                    "type": "pickup",
+                                    "position": {
+                                        "index": 11423
+                                    },
+                                    "min_time": 64869,
+                                    "max_time": 65169,
+                                    "service_duration": 0
+                                }
+                            },
+                            {
+                                "arrival_time": 65256,
+                                "departure_time": 65256,
+                                "action": {
+                                    "id": 30,
+                                    "request_index": 15,
+                                    "type": "pickup",
+                                    "position": {
+                                        "index": 15598
+                                    },
+                                    "min_time": 64986,
+                                    "max_time": 65286,
+                                    "service_duration": 0
+                                }
+                            },
+                            {
+                                "arrival_time": 65701,
+                                "departure_time": 65701,
+                                "action": {
+                                    "id": 31,
+                                    "request_index": 15,
+                                    "type": "drop_off",
+                                    "position": {
+                                        "index": 19031
+                                    },
+                                    "min_time": 65431,
+                                    "max_time": 65731,
+                                    "service_duration": 0
+                                }
+                            },
+                            {
+                                "arrival_time": 66150,
+                                "departure_time": 66150,
+                                "action": {
+                                    "id": 9,
+                                    "request_index": 4,
+                                    "type": "drop_off",
+                                    "position": {
+                                        "index": 742
+                                    },
+                                    "min_time": 66028,
+                                    "max_time": 66328,
+                                    "service_duration": 0
+                                }
+                            }]
+                        },
+                        "examples": [
+                            [{
+                                "arrival_time": 64886,
+                                "departure_time": 64886,
+                                "action": {
+                                    "id": 10,
+                                    "request_index": 5,
+                                    "type": "pickup",
+                                    "position": {
+                                        "index": 12559
+                                    },
+                                    "min_time": 64886,
+                                    "max_time": 65186,
+                                    "service_duration": 0
+                                }
+                            },
+                            {
+                                "arrival_time": 65078,
+                                "departure_time": 65078,
+                                "action": {
+                                    "id": 60,
+                                    "request_index": 30,
+                                    "type": "pickup",
+                                    "position": {
+                                        "index": 31112
+                                    },
+                                    "min_time": 65061,
+                                    "max_time": 65361,
+                                    "service_duration": 0
+                                }
+                            },
+                            {
+                                "arrival_time": 66303,
+                                "departure_time": 66303,
+                                "action": {
+                                    "id": 11,
+                                    "request_index": 5,
+                                    "type": "drop_off",
+                                    "position": {
+                                        "index": 4583
+                                    },
+                                    "min_time": 66018,
+                                    "max_time": 66318,
+                                    "service_duration": 0
+                                }
+                            },
+                            {
+                                "arrival_time": 66307,
+                                "departure_time": 66307,
+                                "action": {
+                                    "id": 61,
+                                    "request_index": 30,
+                                    "type": "drop_off",
+                                    "position": {
+                                        "index": 8787
+                                    },
+                                    "min_time": 66290,
+                                    "max_time": 66590,
+                                    "service_duration": 0
+                                }
+                            }],
+                            [{
+                                "arrival_time": 64869,
+                                "departure_time": 64869,
+                                "action": {
+                                    "id": 8,
+                                    "request_index": 4,
+                                    "type": "pickup",
+                                    "position": {
+                                        "index": 11423
+                                    },
+                                    "min_time": 64869,
+                                    "max_time": 65169,
+                                    "service_duration": 0
+                                }
+                            },
+                            {
+                                "arrival_time": 65256,
+                                "departure_time": 65256,
+                                "action": {
+                                    "id": 30,
+                                    "request_index": 15,
+                                    "type": "pickup",
+                                    "position": {
+                                        "index": 15598
+                                    },
+                                    "min_time": 64986,
+                                    "max_time": 65286,
+                                    "service_duration": 0
+                                }
+                            },
+                            {
+                                "arrival_time": 65701,
+                                "departure_time": 65701,
+                                "action": {
+                                    "id": 31,
+                                    "request_index": 15,
+                                    "type": "drop_off",
+                                    "position": {
+                                        "index": 19031
+                                    },
+                                    "min_time": 65431,
+                                    "max_time": 65731,
+                                    "service_duration": 0
+                                }
+                            },
+                            {
+                                "arrival_time": 66150,
+                                "departure_time": 66150,
+                                "action": {
+                                    "id": 9,
+                                    "request_index": 4,
+                                    "type": "drop_off",
+                                    "position": {
+                                        "index": 742
+                                    },
+                                    "min_time": 66028,
+                                    "max_time": 66328,
+                                    "service_duration": 0
+                                }
+                            }]
+                        ]
+                    }
+                },
+                "examples": [{
+                    "cost": 1701,
+                    "vehicle": {
+                        "index": 0,
+                        "init_position": {
+                            "index": 7976
+                        },
+                        "capacity": 4
+                    },
+                    "departure_time": 64606,
+                    "arrival_time": 66307,
+                    "actions": [{
+                        "arrival_time": 64886,
+                        "departure_time": 64886,
+                        "action": {
+                            "id": 10,
+                            "request_index": 5,
+                            "type": "pickup",
+                            "position": {
+                                "index": 12559
+                            },
+                            "min_time": 64886,
+                            "max_time": 65186,
+                            "service_duration": 0
+                        }
+                    },
+                    {
+                        "arrival_time": 65078,
+                        "departure_time": 65078,
+                        "action": {
+                            "id": 60,
+                            "request_index": 30,
+                            "type": "pickup",
+                            "position": {
+                                "index": 31112
+                            },
+                            "min_time": 65061,
+                            "max_time": 65361,
+                            "service_duration": 0
+                        }
+                    },
+                    {
+                        "arrival_time": 66303,
+                        "departure_time": 66303,
+                        "action": {
+                            "id": 11,
+                            "request_index": 5,
+                            "type": "drop_off",
+                            "position": {
+                                "index": 4583
+                            },
+                            "min_time": 66018,
+                            "max_time": 66318,
+                            "service_duration": 0
+                        }
+                    },
+                    {
+                        "arrival_time": 66307,
+                        "departure_time": 66307,
+                        "action": {
+                            "id": 61,
+                            "request_index": 30,
+                            "type": "drop_off",
+                            "position": {
+                                "index": 8787
+                            },
+                            "min_time": 66290,
+                            "max_time": 66590,
+                            "service_duration": 0
+                        }
+                    }]
+                },
+                {
+                    "cost": 1563,
+                    "vehicle": {
+                        "index": 1,
+                        "init_position": {
+                            "index": 4466
+                        },
+                        "capacity": 4
+                    },
+                    "departure_time": 64587,
+                    "arrival_time": 66150,
+                    "actions": [{
+                        "arrival_time": 64869,
+                        "departure_time": 64869,
+                        "action": {
+                            "id": 8,
+                            "request_index": 4,
+                            "type": "pickup",
+                            "position": {
+                                "index": 11423
+                            },
+                            "min_time": 64869,
+                            "max_time": 65169,
+                            "service_duration": 0
+                        }
+                    },
+                    {
+                        "arrival_time": 65256,
+                        "departure_time": 65256,
+                        "action": {
+                            "id": 30,
+                            "request_index": 15,
+                            "type": "pickup",
+                            "position": {
+                                "index": 15598
+                            },
+                            "min_time": 64986,
+                            "max_time": 65286,
+                            "service_duration": 0
+                        }
+                    },
+                    {
+                        "arrival_time": 65701,
+                        "departure_time": 65701,
+                        "action": {
+                            "id": 31,
+                            "request_index": 15,
+                            "type": "drop_off",
+                            "position": {
+                                "index": 19031
+                            },
+                            "min_time": 65431,
+                            "max_time": 65731,
+                            "service_duration": 0
+                        }
+                    },
+                    {
+                        "arrival_time": 66150,
+                        "departure_time": 66150,
+                        "action": {
+                            "id": 9,
+                            "request_index": 4,
+                            "type": "drop_off",
+                            "position": {
+                                "index": 742
+                            },
+                            "min_time": 66028,
+                            "max_time": 66328,
+                            "service_duration": 0
+                        }
+                    }]
+                }]
+            },
+            "examples": [
+                [{
+                    "cost": 1701,
+                    "vehicle": {
+                        "index": 0,
+                        "init_position": {
+                            "index": 7976
+                        },
+                        "capacity": 4
+                    },
+                    "departure_time": 64606,
+                    "arrival_time": 66307,
+                    "actions": [{
+                        "arrival_time": 64886,
+                        "departure_time": 64886,
+                        "action": {
+                            "id": 10,
+                            "request_index": 5,
+                            "type": "pickup",
+                            "position": {
+                                "index": 12559
+                            },
+                            "min_time": 64886,
+                            "max_time": 65186,
+                            "service_duration": 0
+                        }
+                    },
+                    {
+                        "arrival_time": 65078,
+                        "departure_time": 65078,
+                        "action": {
+                            "id": 60,
+                            "request_index": 30,
+                            "type": "pickup",
+                            "position": {
+                                "index": 31112
+                            },
+                            "min_time": 65061,
+                            "max_time": 65361,
+                            "service_duration": 0
+                        }
+                    },
+                    {
+                        "arrival_time": 66303,
+                        "departure_time": 66303,
+                        "action": {
+                            "id": 11,
+                            "request_index": 5,
+                            "type": "drop_off",
+                            "position": {
+                                "index": 4583
+                            },
+                            "min_time": 66018,
+                            "max_time": 66318,
+                            "service_duration": 0
+                        }
+                    },
+                    {
+                        "arrival_time": 66307,
+                        "departure_time": 66307,
+                        "action": {
+                            "id": 61,
+                            "request_index": 30,
+                            "type": "drop_off",
+                            "position": {
+                                "index": 8787
+                            },
+                            "min_time": 66290,
+                            "max_time": 66590,
+                            "service_duration": 0
+                        }
+                    }]
+                },
+                {
+                    "cost": 1563,
+                    "vehicle": {
+                        "index": 1,
+                        "init_position": {
+                            "index": 4466
+                        },
+                        "capacity": 4
+                    },
+                    "departure_time": 64587,
+                    "arrival_time": 66150,
+                    "actions": [{
+                        "arrival_time": 64869,
+                        "departure_time": 64869,
+                        "action": {
+                            "id": 8,
+                            "request_index": 4,
+                            "type": "pickup",
+                            "position": {
+                                "index": 11423
+                            },
+                            "min_time": 64869,
+                            "max_time": 65169,
+                            "service_duration": 0
+                        }
+                    },
+                    {
+                        "arrival_time": 65256,
+                        "departure_time": 65256,
+                        "action": {
+                            "id": 30,
+                            "request_index": 15,
+                            "type": "pickup",
+                            "position": {
+                                "index": 15598
+                            },
+                            "min_time": 64986,
+                            "max_time": 65286,
+                            "service_duration": 0
+                        }
+                    },
+                    {
+                        "arrival_time": 65701,
+                        "departure_time": 65701,
+                        "action": {
+                            "id": 31,
+                            "request_index": 15,
+                            "type": "drop_off",
+                            "position": {
+                                "index": 19031
+                            },
+                            "min_time": 65431,
+                            "max_time": 65731,
+                            "service_duration": 0
+                        }
+                    },
+                    {
+                        "arrival_time": 66150,
+                        "departure_time": 66150,
+                        "action": {
+                            "id": 9,
+                            "request_index": 4,
+                            "type": "drop_off",
+                            "position": {
+                                "index": 742
+                            },
+                            "min_time": 66028,
+                            "max_time": 66328,
+                            "service_duration": 0
+                        }
+                    }]
+                }]
+            ]
+        },
+        "dropped_requests": {
+            "type": "array",
+            "default": [],
+            "title": "The dropped_requests Schema",
+            "items": {
+                "type": "object",
+                "title": "A Schema",
+                "required": [
+                    "index",
+                    "pickup",
+                    "drop_off",
+                    "min_travel_time"
+                ],
+                "properties": {
+                    "index": {
+                        "type": "integer",
+                        "title": "The index Schema",
+                        "examples": [
+                            27,
+                            28
+                        ]
+                    },
+                    "pickup": {
+                        "type": "object",
+                        "title": "The pickup Schema",
+                        "required": [
+                            "id",
+                            "request_index",
+                            "type",
+                            "position",
+                            "min_time",
+                            "max_time",
+                            "service_duration"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer",
+                                "title": "The id Schema",
+                                "examples": [
+                                    54,
+                                    56
+                                ]
+                            },
+                            "request_index": {
+                                "type": "integer",
+                                "title": "The request_index Schema",
+                                "examples": [
+                                    27,
+                                    28
+                                ]
+                            },
+                            "type": {
+                                "type": "string",
+                                "title": "The type Schema",
+                                "examples": [
+                                    "pickup"
+                                ]
+                            },
+                            "position": {
+                                "type": "object",
+                                "title": "The position Schema",
+                                "required": [
+                                    "index"
+                                ],
+                                "properties": {
+                                    "index": {
+                                        "type": "integer",
+                                        "title": "The index Schema",
+                                        "examples": [
+                                            30127,
+                                            14774
+                                        ]
+                                    }
+                                },
+                                "examples": [{
+                                    "index": 30127
+                                },
+                                {
+                                    "index": 14774
+                                }]
+                            },
+                            "min_time": {
+                                "type": "integer",
+                                "title": "The min_time Schema",
+                                "examples": [
+                                    65050,
+                                    65055
+                                ]
+                            },
+                            "max_time": {
+                                "type": "integer",
+                                "title": "The max_time Schema",
+                                "examples": [
+                                    65350,
+                                    65355
+                                ]
+                            },
+                            "service_duration": {
+                                "type": "integer",
+                                "title": "The service_duration Schema",
+                                "examples": [
+                                    0
+                                ]
+                            }
+                        },
+                        "examples": [{
+                            "id": 54,
+                            "request_index": 27,
+                            "type": "pickup",
+                            "position": {
+                                "index": 30127
+                            },
+                            "min_time": 65050,
+                            "max_time": 65350,
+                            "service_duration": 0
+                        },
+                        {
+                            "id": 56,
+                            "request_index": 28,
+                            "type": "pickup",
+                            "position": {
+                                "index": 14774
+                            },
+                            "min_time": 65055,
+                            "max_time": 65355,
+                            "service_duration": 0
+                        }]
+                    },
+                    "drop_off": {
+                        "type": "object",
+                        "title": "The drop_off Schema",
+                        "required": [
+                            "id",
+                            "request_index",
+                            "type",
+                            "position",
+                            "min_time",
+                            "max_time",
+                            "service_duration"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer",
+                                "title": "The id Schema",
+                                "examples": [
+                                    55,
+                                    57
+                                ]
+                            },
+                            "request_index": {
+                                "type": "integer",
+                                "title": "The request_index Schema",
+                                "examples": [
+                                    27,
+                                    28
+                                ]
+                            },
+                            "type": {
+                                "type": "string",
+                                "title": "The type Schema",
+                                "examples": [
+                                    "drop_off"
+                                ]
+                            },
+                            "position": {
+                                "type": "object",
+                                "title": "The position Schema",
+                                "required": [
+                                    "index"
+                                ],
+                                "properties": {
+                                    "index": {
+                                        "type": "integer",
+                                        "title": "The index Schema",
+                                        "examples": [
+                                            14784,
+                                            15962
+                                        ]
+                                    }
+                                },
+                                "examples": [{
+                                    "index": 14784
+                                },
+                                {
+                                    "index": 15962
+                                }]
+                            },
+                            "min_time": {
+                                "type": "integer",
+                                "title": "The min_time Schema",
+                                "examples": [
+                                    65222,
+                                    65510
+                                ]
+                            },
+                            "max_time": {
+                                "type": "integer",
+                                "title": "The max_time Schema",
+                                "examples": [
+                                    65522,
+                                    65810
+                                ]
+                            },
+                            "service_duration": {
+                                "type": "integer",
+                                "title": "The service_duration Schema",
+                                "examples": [
+                                    0
+                                ]
+                            }
+                        },
+                        "examples": [{
+                            "id": 55,
+                            "request_index": 27,
+                            "type": "drop_off",
+                            "position": {
+                                "index": 14784
+                            },
+                            "min_time": 65222,
+                            "max_time": 65522,
+                            "service_duration": 0
+                        },
+                        {
+                            "id": 57,
+                            "request_index": 28,
+                            "type": "drop_off",
+                            "position": {
+                                "index": 15962
+                            },
+                            "min_time": 65510,
+                            "max_time": 65810,
+                            "service_duration": 0
+                        }]
+                    },
+                    "min_travel_time": {
+                        "type": "integer",
+                        "title": "The min_travel_time Schema",
+                        "examples": [
+                            172,
+                            455
+                        ]
+                    }
+                },
+                "examples": [{
+                    "index": 27,
+                    "pickup": {
+                        "id": 54,
+                        "request_index": 27,
+                        "type": "pickup",
+                        "position": {
+                            "index": 30127
+                        },
+                        "min_time": 65050,
+                        "max_time": 65350,
+                        "service_duration": 0
+                    },
+                    "drop_off": {
+                        "id": 55,
+                        "request_index": 27,
+                        "type": "drop_off",
+                        "position": {
+                            "index": 14784
+                        },
+                        "min_time": 65222,
+                        "max_time": 65522,
+                        "service_duration": 0
+                    },
+                    "min_travel_time": 172
+                },
+                {
+                    "index": 28,
+                    "pickup": {
+                        "id": 56,
+                        "request_index": 28,
+                        "type": "pickup",
+                        "position": {
+                            "index": 14774
+                        },
+                        "min_time": 65055,
+                        "max_time": 65355,
+                        "service_duration": 0
+                    },
+                    "drop_off": {
+                        "id": 57,
+                        "request_index": 28,
+                        "type": "drop_off",
+                        "position": {
+                            "index": 15962
+                        },
+                        "min_time": 65510,
+                        "max_time": 65810,
+                        "service_duration": 0
+                    },
+                    "min_travel_time": 455
+                }]
+            },
+            "examples": [
+                [{
+                    "index": 27,
+                    "pickup": {
+                        "id": 54,
+                        "request_index": 27,
+                        "type": "pickup",
+                        "position": {
+                            "index": 30127
+                        },
+                        "min_time": 65050,
+                        "max_time": 65350,
+                        "service_duration": 0
+                    },
+                    "drop_off": {
+                        "id": 55,
+                        "request_index": 27,
+                        "type": "drop_off",
+                        "position": {
+                            "index": 14784
+                        },
+                        "min_time": 65222,
+                        "max_time": 65522,
+                        "service_duration": 0
+                    },
+                    "min_travel_time": 172
+                },
+                {
+                    "index": 28,
+                    "pickup": {
+                        "id": 56,
+                        "request_index": 28,
+                        "type": "pickup",
+                        "position": {
+                            "index": 14774
+                        },
+                        "min_time": 65055,
+                        "max_time": 65355,
+                        "service_duration": 0
+                    },
+                    "drop_off": {
+                        "id": 57,
+                        "request_index": 28,
+                        "type": "drop_off",
+                        "position": {
+                            "index": 15962
+                        },
+                        "min_time": 65510,
+                        "max_time": 65810,
+                        "service_duration": 0
+                    },
+                    "min_travel_time": 455
+                }]
+            ]
+        }
+    },
+    "examples": [{
+        "cost": 29605,
+        "cost_minutes": 493,
+        "plans": [{
+            "cost": 1701,
+            "vehicle": {
+                "index": 0,
+                "init_position": {
+                    "index": 7976
+                },
+                "capacity": 4
+            },
+            "departure_time": 64606,
+            "arrival_time": 66307,
+            "actions": [{
+                "arrival_time": 64886,
+                "departure_time": 64886,
+                "action": {
+                    "id": 10,
+                    "request_index": 5,
+                    "type": "pickup",
+                    "position": {
+                        "index": 12559
+                    },
+                    "min_time": 64886,
+                    "max_time": 65186,
+                    "service_duration": 0
+                }
+            },
+            {
+                "arrival_time": 65078,
+                "departure_time": 65078,
+                "action": {
+                    "id": 60,
+                    "request_index": 30,
+                    "type": "pickup",
+                    "position": {
+                        "index": 31112
+                    },
+                    "min_time": 65061,
+                    "max_time": 65361,
+                    "service_duration": 0
+                }
+            },
+            {
+                "arrival_time": 66303,
+                "departure_time": 66303,
+                "action": {
+                    "id": 11,
+                    "request_index": 5,
+                    "type": "drop_off",
+                    "position": {
+                        "index": 4583
+                    },
+                    "min_time": 66018,
+                    "max_time": 66318,
+                    "service_duration": 0
+                }
+            },
+            {
+                "arrival_time": 66307,
+                "departure_time": 66307,
+                "action": {
+                    "id": 61,
+                    "request_index": 30,
+                    "type": "drop_off",
+                    "position": {
+                        "index": 8787
+                    },
+                    "min_time": 66290,
+                    "max_time": 66590,
+                    "service_duration": 0
+                }
+            }]
+        },
+        {
+            "cost": 1563,
+            "vehicle": {
+                "index": 1,
+                "init_position": {
+                    "index": 4466
+                },
+                "capacity": 4
+            },
+            "departure_time": 64587,
+            "arrival_time": 66150,
+            "actions": [{
+                "arrival_time": 64869,
+                "departure_time": 64869,
+                "action": {
+                    "id": 8,
+                    "request_index": 4,
+                    "type": "pickup",
+                    "position": {
+                        "index": 11423
+                    },
+                    "min_time": 64869,
+                    "max_time": 65169,
+                    "service_duration": 0
+                }
+            },
+            {
+                "arrival_time": 65256,
+                "departure_time": 65256,
+                "action": {
+                    "id": 30,
+                    "request_index": 15,
+                    "type": "pickup",
+                    "position": {
+                        "index": 15598
+                    },
+                    "min_time": 64986,
+                    "max_time": 65286,
+                    "service_duration": 0
+                }
+            },
+            {
+                "arrival_time": 65701,
+                "departure_time": 65701,
+                "action": {
+                    "id": 31,
+                    "request_index": 15,
+                    "type": "drop_off",
+                    "position": {
+                        "index": 19031
+                    },
+                    "min_time": 65431,
+                    "max_time": 65731,
+                    "service_duration": 0
+                }
+            },
+            {
+                "arrival_time": 66150,
+                "departure_time": 66150,
+                "action": {
+                    "id": 9,
+                    "request_index": 4,
+                    "type": "drop_off",
+                    "position": {
+                        "index": 742
+                    },
+                    "min_time": 66028,
+                    "max_time": 66328,
+                    "service_duration": 0
+                }
+            }]
+        }],
+        "dropped_requests": [{
+            "index": 27,
+            "pickup": {
+                "id": 54,
+                "request_index": 27,
+                "type": "pickup",
+                "position": {
+                    "index": 30127
+                },
+                "min_time": 65050,
+                "max_time": 65350,
+                "service_duration": 0
+            },
+            "drop_off": {
+                "id": 55,
+                "request_index": 27,
+                "type": "drop_off",
+                "position": {
+                    "index": 14784
+                },
+                "min_time": 65222,
+                "max_time": 65522,
+                "service_duration": 0
+            },
+            "min_travel_time": 172
+        },
+        {
+            "index": 28,
+            "pickup": {
+                "id": 56,
+                "request_index": 28,
+                "type": "pickup",
+                "position": {
+                    "index": 14774
+                },
+                "min_time": 65055,
+                "max_time": 65355,
+                "service_duration": 0
+            },
+            "drop_off": {
+                "id": 57,
+                "request_index": 28,
+                "type": "drop_off",
+                "position": {
+                    "index": 15962
+                },
+                "min_time": 65510,
+                "max_time": 65810,
+                "service_duration": 0
+            },
+            "min_travel_time": 455
+        }]
+    }]
+}
