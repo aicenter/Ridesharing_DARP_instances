@@ -1,0 +1,7 @@
+[ssh]
+private_key_path = <path>
+;private_key_passphrase = <pass>
+
+[database]
+username = <name>
+db_password = <pass>
