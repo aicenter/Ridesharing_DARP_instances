@@ -1,7 +1,7 @@
 import os
 
-import DARP_instances.log
-import DARP_instances.instance_generation.instance_generation
+import darpinstances.log
+import darpinstances.instance_generation.instance_generation
 
 """
 This script generates all DARP instances based on configurations in directory. The map and dm files are created only
@@ -20,4 +20,4 @@ for root, dir, files in os.walk(root_path):
         filename = os.fsdecode(file)
         if filename == "config.yaml":
             filepath = os.path.join(root, filename)
-            DARP_instances.instance_generation.instance_generation.generate_instance(filepath)
+            darpinstances.instance_generation.instance_generation.generate_instance(filepath)

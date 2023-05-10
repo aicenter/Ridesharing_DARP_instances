@@ -1,5 +1,5 @@
 
-import DARP_instances.instance_generation.instance_generation
+import darpinstances.instance_generation.instance_generation
 
 
 # if len(sys.argv) < 2:
@@ -12,5 +12,5 @@ import DARP_instances.instance_generation.instance_generation
 # config_filepath = f'{base_filepath}/Real Demand and speeds/NYC/experiments/final_experiments/05_min/config.yaml'
 config_filepath = r'D:\Workspaces\AIC\TradeOffsSMOD_V2\compute_plans\data\Chicago\DARP instance\instances\first experiment/config.yaml'
 
-DARP_instances.instance_generation.instance_generation.generate_instance(config_filepath)
+darpinstances.instance_generation.instance_generation.generate_instance(config_filepath)
 

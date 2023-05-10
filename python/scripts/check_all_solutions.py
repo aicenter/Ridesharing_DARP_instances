@@ -4,9 +4,9 @@ import os
 
 import pandas as pd
 
-import DARP_instances.inout
-import DARP_instances.experiments
-import DARP_instances.solution_checker
+import darpinstances.inout
+import darpinstances.experiments
+import darpinstances.solution_checker
 
 darp_path = Path(r"C:\Google Drive/AIC Experiment Data\DARP")
 
@@ -43,15 +43,15 @@ last_instance_path = None
 last_instance = None
 for root, solution_path in zip(dir_df['root'], dir_df['solution path']):
     config_path = os.path.join(root, "config.yaml")
-    experiment_config = DARP_instances.experiments.load_experiment_config(config_path)
+    experiment_config = darpinstances.experiments.load_experiment_config(config_path)
     instance_path: str = experiment_config['instance']
     if instance_path == last_instance_path:
         instance = last_instance
     else:
-        instance, _ = DARP_instances.solution_checker.load_instance(instance_path)
+        instance, _ = darpinstances.solution_checker.load_instance(instance_path)
 
-    solution = DARP_instances.inout.load_solution(solution_path, instance)
-    stats[solution_path] = DARP_instances.solution_checker.check_solution(instance, solution)
+    solution = darpinstances.inout.load_solution(solution_path, instance)
+    stats[solution_path] = darpinstances.solution_checker.check_solution(instance, solution)
 
     last_instance_path = instance_path
     last_instance = instance

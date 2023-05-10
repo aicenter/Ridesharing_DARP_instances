@@ -1,0 +1,8 @@
+Metadata-Version: 2.1
+Name: darpinstances
+Version: 0.0.1
+Summary: Tools to create DARP benchmark instances define the soluton format and process the results
+Author: David Fiedler
+Author-email: david.fido.fiedler@gmail.com
+License: GNU GPLv3
+Requires-Python: >=3
