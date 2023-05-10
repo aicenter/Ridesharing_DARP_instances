@@ -1,3 +1,4 @@
+import copy
 import datetime
 import logging
 import os
@@ -382,9 +383,10 @@ def load_all_data_for_result(path: Path) -> Optional[Tuple[Dict,List]]:
 
     instance_config_path = path / exp_config['instance']
     instance_config = darpinstances.instance.load_instance_config(str(instance_config_path))
-    data['max_delay'] = instance_config['max_prolongation']
+    data['max_delay'] = int(instance_config['max_prolongation'])
     data['start_time'] = datetime.strptime(instance_config['demand']['min_time'], '%Y-%m-%d %H:%M:%S')
     data['end_time'] = datetime.strptime(instance_config['demand']['max_time'], '%Y-%m-%d %H:%M:%S')
+    data['duration_minutes']  = int((data['end_time'] - data['start_time']).total_seconds() / 60)
 
     return data, occupancies
 
@@ -406,7 +408,7 @@ def load_aggregate_stats_in_dir(path: Path) -> pd.DataFrame:
     return df
 
 
-def load_occupancies_in_dir(path: Path) -> pd.DataFrame:
+def load_occupancies_in_dir(path: Path) -> Optional[pd.DataFrame]:
     logging.info(f"Loading occupancy stats in {path}")
     out_data = []
 
@@ -419,8 +421,12 @@ def load_occupancies_in_dir(path: Path) -> pd.DataFrame:
                 if d is not None:
                     agg_data_for_result, occupancies = d[0], d[1]
                     for i, o in enumerate(occupancies):
-                        agg_data_for_result['occupancy'] = i
-                        agg_data_for_result['vehicle_hours'] = o / 3600
-                        out_data.append(agg_data_for_result)
+                        oc = copy.deepcopy(agg_data_for_result)
+                        oc['occupancy'] = i
+                        oc['vehicle_hours'] = o / 3600
+                        out_data.append(oc)
+
+    if len(out_data) == 0:
+        return None
 
     return pd.DataFrame(out_data)
