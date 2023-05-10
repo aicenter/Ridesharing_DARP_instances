@@ -16,7 +16,15 @@ setup(
 		'tqdm',
 		'typing',
 		'pyyaml',
-		'h5py'
+		'h5py',
+		'geopandas',
+		'osmnx',
+		'scipy',
+		'psycopg2',
+		'sqlalchemy',
+		'geoalchemy2',
+		'sshtunnel',
+		'scikit-learn'
 	],
-	python_requires='>=3'
+	python_requires='>=3.8'
 )
