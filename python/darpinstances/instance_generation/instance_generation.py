@@ -9,7 +9,7 @@ import pandas as pd
 import darpinstances.instance_generation.map
 import darpinstances.instance_generation.demand_generation
 import darpinstances.instance_generation.vehicles
-from darpbenchmark.instance import load_instance_config
+from darpinstances.instance import load_instance_config
 import darpbenchmark.exec
 
 
