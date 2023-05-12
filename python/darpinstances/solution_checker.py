@@ -1,19 +1,17 @@
 import os.path
+from pathlib import Path
+from typing import Tuple, Set, Optional
 
-import numpy as np
-
+import darpinstances.experiments
 import darpinstances.inout
 import darpinstances.instance
-import darpinstances.experiments
-import darpinstances.amodsim_benchmark
-
-from typing import Tuple, Set
 from darpinstances.cordeau_benchmark import load as load_cordeau
-from darpinstances.instance import Action, ActionType, DARPInstance, TravelTimeProvider, Request
-from darpinstances.solution import VehiclePlan, Solution
 from darpinstances.inout import check_file_exists
+from darpinstances.instance import DARPInstance, TravelTimeProvider
+from darpinstances.instance_generation.instance_objects import Request, Action, ActionType
+from darpinstances.solution import VehiclePlan, Solution
 
-darp_folder_path = r"C:\Google Drive/AIC Experiment Data\DARP"
+darp_folder_path = Path("C:\Google Drive/AIC Experiment Data\DARP")
 # darp_folder_path = r"D:\Google Drive/AIC Experiment Data\DARP"
 
 # solution_file_path = r"C:\AIC Experiment Data\DARP\Results\Real Demand\NYC memory benchmark/config.yaml-solution.json"
@@ -25,18 +23,23 @@ darp_folder_path = r"C:\Google Drive/AIC Experiment Data\DARP"
 # solution_file_path = r"D:\Google Drive/AIC Experiment Data\DARP\Results\final-real_speeds\DC-more_vehicles\15_min/halns-ih/config.yaml-solution.json"
 # solution_file_path = r"C:\Google Drive/AIC Experiment Data\DARP\Results\final-real_speeds\NYC-more_vehicles\05_min/ih/config.yaml-solution.json"
 # solution_file_path = darp_folder_path + r"\Results\final-real_speeds\NYC\05_min/ih/config.yaml-solution.json"
-solution_file_path = darp_folder_path + r"\Results\ihtest/config.yaml-solution.json"
+# solution_file_path = darp_folder_path + r"\Results\ihtest/config.yaml-solution.json"
+# solution_file_path = darp_folder_path / r"ITSC_instance_paper\old\incorrect results\DC\start_18-00\duration_015_min\max_delay_03_min\halns/config.yaml-solution.json"
+solution_file_path = darp_folder_path / r"C:\\Google Drive/AIC Experiment Data\\DARP/Results/test/config.yaml-solution.json"
+instance_path = darp_folder_path / r"ITSC_instance_paper\old\Instances\DC\instances/start_18-00\duration_015_min\max_delay_03_min\config.yaml"
 
 
-def load_data(solution_file_path: str) -> Tuple[DARPInstance, Solution]:
-    check_file_exists(solution_file_path)
-    solution_dir_path = os.path.dirname(solution_file_path)
+def load_data(solution_file_path: Path, instance_path: Optional[Path]) -> Tuple[DARPInstance, Solution]:
+    check_file_exists(str(solution_file_path))
+    solution_dir_path = solution_file_path.parent
     os.chdir(solution_dir_path)
-    config_path = os.path.join(solution_dir_path, "config.yaml")
-    experiment_config = darpinstances.experiments.load_experiment_config(config_path)
-    instance_path: str = experiment_config['instance']
 
-    instance, _ = load_instance(instance_path)
+    if instance_path is None:
+        config_path = os.path.join(solution_dir_path, "config.yaml")
+        experiment_config = darpinstances.experiments.load_experiment_config(config_path)
+        instance_path = Path(experiment_config['instance'])
+
+    instance, _ = load_instance(str(instance_path))
 
     # request_map = dict()
     # for request in instance.requests:
@@ -46,7 +49,7 @@ def load_data(solution_file_path: str) -> Tuple[DARPInstance, Solution]:
     # for vehicle in instance.vehicles:
     #     vehicle_map[vehicle.index] = vehicle
 
-    solution = darpinstances.inout.load_solution(solution_file_path, instance)
+    solution = darpinstances.solution.load_solution(str(solution_file_path), instance)
 
     return instance, solution
 
@@ -56,7 +59,7 @@ def load_data(solution_file_path: str) -> Tuple[DARPInstance, Solution]:
 
 def load_instance(instance_path: str) -> Tuple[DARPInstance, TravelTimeProvider]:
     if instance_path.endswith('yaml'):
-        instance = darpinstances.amodsim_benchmark.read_instance(instance_path)
+        instance = darpinstances.instance.read_instance(instance_path)
         travel_time_provider = instance.travel_time_provider
     else:
         instance = load_cordeau(instance_path)
@@ -132,8 +135,9 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         # capacity check
         if action_data.action.action_type == ActionType.PICKUP:
             if free_capacity == 0:
-                print("[{}. plan] Pickup action performed when vehicle was already full when handling request {}".format(
-                    plan_counter, action_data.action.request.index))
+                print(
+                    "[{}. plan] Pickup action performed when vehicle was already full when handling request {}".format(
+                        plan_counter, action_data.action.request.index))
                 plan_ok = False
             # break
             free_capacity -= 1
@@ -163,8 +167,8 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         if action_data.departure_time < time:
             print(
                 "[{}. plan, {}. action] Departure time mismatch (was {}, must be higher than {}) when handling request {}"
-                    .format(plan_counter, action_index + 1, action_data.departure_time, time,
-                            action_data.action.request.index))
+                .format(plan_counter, action_index + 1, action_data.departure_time, time,
+                        action_data.action.request.index))
 
         time = action_data.departure_time
 
@@ -242,7 +246,5 @@ def check_solution(instance: DARPInstance, solution: Solution) -> bool:
 
 
 if __name__ == '__main__':
-    instance, solution = load_data(solution_file_path)
+    instance, solution = load_data(solution_file_path, instance_path)
     check_solution(instance, solution)
-
-

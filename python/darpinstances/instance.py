@@ -6,7 +6,7 @@ import os
 import numpy as np
 import pandas as pd
 from numpy import round, ceil
-from typing import Iterable, Dict
+from typing import Iterable, Dict, List
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 import logging
@@ -14,64 +14,9 @@ from functools import singledispatchmethod
 import yaml
 import h5py
 
-import darpbenchmark.log
-
-
-class Coordinate(ABC):
-    @abstractmethod
-    def get_x(self) -> float:
-        pass
-
-    @abstractmethod
-    def get_y(self) -> float:
-        pass
-
-
-class ActionType(Enum):
-    PICKUP = auto()
-    DROP_OFF = auto()
-
-
-class Action:
-    def __init__(self, action_id, node, min_time: int, max_time: int, action_type: ActionType,
-                 request, service_time: int = 0):
-        self.id = action_id
-        self.node = node
-        self.min_time = min_time
-        self.max_time = max_time
-        self.action_type = action_type
-        self.request = request
-        self.service_time = service_time
-
-    def __str__(self):
-        return ('{} {} [{}, {}], {};'.format(self.id, self.action_type, self.min_time, self.max_time, self.node))
-
-
-class Request:
-    def __init__ (self, index: int, pickup_id: int, pickup_node, pickup_min_time: int, pickup_max_time: int,
-                  dropoff_id: int, drop_off_node, drop_off_min_time: int,
-                  drop_off_max_time: int, min_travel_time: int, pickup_service_time: int = 0, drop_off_service_time: int = 0):
-        self.index = index
-        self.pickup_action \
-            = Action(pickup_id, pickup_node, pickup_min_time, pickup_max_time,
-                     ActionType.PICKUP, self, pickup_service_time)
-        self.drop_off_action \
-            = Action(dropoff_id, drop_off_node, drop_off_min_time, drop_off_max_time,
-                     ActionType.DROP_OFF, self, drop_off_service_time)
-        self.min_travel_time = min_travel_time
-
-
-class Vehicle:
-    def __init__(self, index: int, initial_position, capacity: int):
-        self.index = index
-        self.initial_position = initial_position
-        self.capacity = capacity
-
-
-class VirtualVehicle(Vehicle):
-    def __init__(self, capacity: int, time_start):
-        super().__init__(0, None, capacity)
-        self.time_to_start = time_start
+import darpinstances.log
+from darpinstances.inout import check_file_exists
+from darpinstances.instance_generation.instance_objects import Coordinate, Request, Vehicle
 
 
 class TravelTimeProvider(ABC):
@@ -211,3 +156,88 @@ def load_instance_config(config_file_path: str) -> Dict:
             return config
         except yaml.YAMLError as er:
             logging.error(er)
+
+
+class Node:
+    def get_idx(self) -> int:
+        return self.idx
+
+    def __init__(self, idx: int):
+        self.idx = idx
+
+    def __str__(self):
+        return str(self.idx)
+
+
+def load_vehicles(vehicles_path: str) -> List[Vehicle]:
+    veh_data = darpinstances.inout.load_csv(vehicles_path, "\t")
+    vehicles = []
+    for index, veh in enumerate(veh_data):
+        vehicles.append(Vehicle(index, Node(int(veh[0])), int(veh[1])))
+
+    return vehicles
+
+
+def read_instance(filepath: str) -> DARPInstance:
+    instance_config = load_instance_config(filepath)
+    instance_dir_path = os.path.dirname(filepath)
+
+    # Here, we are completing the possibly relative paths. Therefore, we need to change the dir because dm path
+    # loaded from instance config is relative to the instance dir
+    os.chdir(instance_dir_path)
+    instance_path = instance_config['demand']['filepath']
+    check_file_exists(instance_path)
+
+    if 'dm_filepath' in instance_config:
+        dm_filepath = instance_config['dm_filepath']
+    # by default, the dm is located in the are folder
+    else:
+        dm_filepath = os.path.join(instance_config['area_dir'], 'dm.h5')
+    check_file_exists(dm_filepath)
+
+    vehicles_path = os.path.join(instance_dir_path, 'vehicles.csv')
+    check_file_exists(vehicles_path)
+
+    logging.info("Reading dm from: {}".format(os.path.realpath(dm_filepath)))
+    travel_time_provider = MatrixTravelTimeProvider.read_from_file(dm_filepath)
+
+    logging.info("Reading DARP instance from: {}".format(os.path.realpath(instance_path)))
+    with open(instance_path, "r", encoding="utf-8") as infile:
+        vehicles = load_vehicles(vehicles_path)
+
+        requests: List[Request] = []
+
+        line_string = infile.readline()
+        action_id = 0
+        while (line_string):
+            line = line_string.split()
+            request_id: int = int(line[0])
+            request_time: int = int(line[1]) / 1000
+            start_node = Node(int(line[2]))
+            end_node = Node(int(line[3]))
+            min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
+            max_pickup_time = request_time + int(instance_config['max_prolongation'])
+            requests.append(Request(request_id, action_id, start_node, request_time, max_pickup_time,
+                                    action_id + 1, end_node, request_time + min_travel_time,  max_pickup_time + min_travel_time,
+                                    min_travel_time))
+            line_string = infile.readline()
+            action_id += 2
+
+        start_time = instance_config['vehicles']['start_time']
+        if not isinstance(start_time, int):
+            # start_datetime = datetime.strptime(start_time)
+            timeparts = start_time.split(' ')[1].split(':')
+            h = timeparts[0]
+            m = timeparts[1]
+            s = 0 if len(timeparts) == 2 else timeparts[2]
+            start_time = int(h) * 3600 + int(m) * 60 + int(s)
+
+        config = DARPInstanceConfiguration(0, 0, False, False, start_time)
+        return DARPInstance(requests, vehicles, travel_time_provider, config)
+
+
+@MatrixTravelTimeProvider.get_travel_time.register
+def _(self, from_node: Node, to_dode: Node):
+    return self.get_travel_time(from_node.idx, to_dode.idx)
+
+

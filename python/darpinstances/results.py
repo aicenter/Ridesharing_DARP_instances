@@ -400,9 +400,9 @@ def load_aggregate_stats_in_dir(path: Path) -> pd.DataFrame:
             filename = os.fsdecode(file)
             if filename == "config.yaml":
                 exp_config_filepath = Path(root) / filename
-                agg_data_for_result, _ = load_all_data_for_result(exp_config_filepath.parent)
-                if agg_data_for_result is not None:
-                    data.append(agg_data_for_result)
+                d = load_all_data_for_result(exp_config_filepath.parent)
+                if d is not None:
+                    data.append(d[0])
 
     df = pd.DataFrame(data)
     return df

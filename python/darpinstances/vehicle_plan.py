@@ -1,7 +1,8 @@
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 
-from darpinstances.instance import Action, Vehicle
+from darpinstances.instance import Vehicle
+from darpinstances.instance_generation.instance_objects import Action
 
 
 class ActionData:
@@ -36,4 +37,3 @@ class VehiclePlan:
 
     def __str__(self):
         return 'plan: {} Cost {}'.format(' '.join([str(a) for a in self.actions]), self.cost)
-
