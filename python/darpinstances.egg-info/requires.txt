@@ -1,7 +1,0 @@
-numpy
-pandas
-plotly
-tqdm
-typing
-pyyaml
-h5py

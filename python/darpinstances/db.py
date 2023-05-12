@@ -42,7 +42,7 @@ class __Database:
     Import as:
     from db import db
     """
-
+    SERVER = 'its.fel.cvut.cz'
     DBNAME = "opendata"
     HOST = "localhost"
     config = CREDENTIALS
@@ -66,15 +66,22 @@ class __Database:
         self._sqlalchemy_engine = sqlalchemy.create_engine(self._sql_alchemy_engine_str)
 
     def set_ssh_to_db_server_and_set_port(self):
-        self.ssh_server = sshtunnel.open_tunnel(
-            'its.fel.cvut.cz',
+
+        ssh_kwargs = dict(
             ssh_username=self.config.username,
             ssh_pkey=self.config.private_key_path,
             ssh_private_key_password=self.config.private_key_phrase,
             remote_bind_address=('localhost', self.db_server_port),
-            local_bind_address=('localhost', self.ssh_tunnel_local_port),
+            local_bind_address=('localhost', self.ssh_tunnel_local_port)
             # skip_tunnel_checkup=False
         )
+        try:
+            self.ssh_server = sshtunnel.open_tunnel(self.SERVER, **ssh_kwargs)
+        except sshtunnel.paramiko.SSHException as e:
+            # sshtunnel dependency paramiko may attempt to use ssh-agent and crashes if it fails
+            logging.warning(f"sshtunnel.paramiko.SSHException: '{e}'")
+            self.ssh_server = sshtunnel.open_tunnel(self.SERVER, **ssh_kwargs, allow_agent=False)
+
         self.ssh_server.start()
         logging.info(
             "SSH tunnel established from %s to %s/%s",
