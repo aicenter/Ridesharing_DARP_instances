@@ -20,11 +20,12 @@ setup(
 		'geopandas',
 		'osmnx',
 		'scipy',
-		'psycopg2',
+		'psycopg2-binary',
 		'sqlalchemy',
 		'geoalchemy2',
 		'sshtunnel',
-		'scikit-learn'
+		'scikit-learn',
+		'ssh'
 	],
 	python_requires='>=3.8'
 )
