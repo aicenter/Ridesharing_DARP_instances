@@ -20,16 +20,16 @@ DB_SCHEMA = 'public'
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s', datefmt='%H:%M:%S')
 
 
-def check_and_reset_ssh(db_function):
+def connect_db_if_required(db_function):
     """
     Check and reset ssh connection decorator for methods working with the db
     """
 
     def wrapper(*args, **kwargs):
-        ssh_server = args[0].ssh_server
-        if ssh_server is not None:
-            if not ssh_server.is_alive or not ssh_server.is_active:
-                ssh_server.restart()
+        db = args[0]
+        db.start_or_restart_ssh_connection_if_needed()
+        if not db.is_connected():
+            db.set_up_db_connections()
         return db_function(*args, **kwargs)
 
     return wrapper
@@ -38,6 +38,8 @@ def check_and_reset_ssh(db_function):
 class __Database:
     """
     To be used as singleton instance db.
+
+    Connection only happens when it is required.
 
     Import as:
     from db import db
@@ -52,10 +54,14 @@ class __Database:
         self.db_server_port = self.config.db_server_port
         self.ssh_tunnel_local_port = 1113
         self.ssh_server = None
-        if self.config.private_key_path is not None:
-            logging.info("Connecting to ssh server")
-            self.set_ssh_to_db_server_and_set_port()
 
+        self._psycopg2_connection = None
+        self._sqlalchemy_engine = None
+
+    def is_connected(self):
+        return (self._psycopg2_connection is not None) and (self._sqlalchemy_engine is not None)
+
+    def set_up_db_connections(self):
         # psycopg2 connection object
         logging.info("Starting _psycopg2 connection")
         self._psycopg2_connection = self.get_new_psycopg2_connnection()
@@ -92,6 +98,20 @@ class __Database:
 
         self.db_server_port = self.ssh_server.local_bind_port
 
+    def start_or_restart_ssh_connection_if_needed(self):
+        """
+        Set up or reset ssh tunnel.
+        """
+        if self.config.private_key_path is not None:
+            if self.ssh_server is None:
+                # INITIALIZATION
+                logging.info("Connecting to ssh server")
+                self.set_ssh_to_db_server_and_set_port()
+            else:
+                # RESET
+                if not self.ssh_server.is_alive or not self.ssh_server.is_active:
+                    self.ssh_server.restart()
+
     def get_sql_alchemy_engine_str(self):
         sql_alchemy_engine_str = 'postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}'.format(
             user=self.config.username,
@@ -104,7 +124,7 @@ class __Database:
 
     def get_new_psycopg2_connnection(self):
         """
-        Handles creation of db connection. Connection is created on import of db thourgh global variable CONNECTION
+        Handles creation of db connection.
 
         TODO:
         For streamed connection, the sqlalchemy code was used for streamed reading into pandas:
@@ -128,7 +148,7 @@ class __Database:
             logging.info("Tunnel status: %s", str(self.ssh_server.tunnel_is_up))
             return None
 
-    @check_and_reset_ssh
+    @connect_db_if_required
     def execute_sql(self, query, *args) -> None:
         """
         Execute SQL that doesn't return any value.
@@ -152,7 +172,7 @@ class __Database:
         #         curs.execute(query, *args)
         self._sqlalchemy_engine.execute(query, *args)
 
-    @check_and_reset_ssh
+    @connect_db_if_required
     def execute_sql_and_fetch_all_rows(self, query, *args) -> list[Row]:
         # with self._psycopg2_connection as con:
         #     with con.cursor() as curs:
@@ -166,17 +186,17 @@ class __Database:
         result = self._sqlalchemy_engine.execute(query, *args).all()
         return result
 
-    @check_and_reset_ssh
+    @connect_db_if_required
     def execute_count_query(self, query: str) -> int:
         data = self.execute_sql_and_fetch_all_rows(query)
         return data[0][0]
 
-    @check_and_reset_ssh
+    @connect_db_if_required
     def drop_table_if_exists(self, table_name: str) -> None:
         drop_sql = sql.SQL("DROP TABLE IF EXISTS {table}").format(table=sql.Identifier(table_name))
         self.execute_sql(drop_sql)
 
-    @check_and_reset_ssh
+    @connect_db_if_required
     def execute_query_to_pandas(self, sql: str, **kwargs) -> pd.DataFrame:
         """
         Execute sql and load the result to Pandas DataFrame
@@ -188,7 +208,7 @@ class __Database:
         data = pd.read_sql_query(sql, self._sqlalchemy_engine, **kwargs)
         return data
 
-    @check_and_reset_ssh
+    @connect_db_if_required
     def execute_query_to_geopandas(self, sql: str, **kwargs) -> pd.DataFrame:
         """
         Execute sql and load the result to Pandas DataFrame
@@ -200,7 +220,7 @@ class __Database:
         data = gpd.read_postgis(sql, self._sqlalchemy_engine, **kwargs)
         return data
 
-    @check_and_reset_ssh
+    @connect_db_if_required
     def dataframe_to_db_table(self, df: pd.DataFrame, table_name: str, **kwargs) -> None:
         """
         Save DataFrame to a new table in the database
@@ -212,7 +232,7 @@ class __Database:
         """
         df.to_sql(table_name, con=self._sqlalchemy_engine, if_exists='append', index=False)
 
-    @check_and_reset_ssh
+    @connect_db_if_required
     def db_table_to_pandas(self, table_name: str, **kwargs) -> pd.DataFrame:
         return pd.read_sql_table(table_name, con=self._sqlalchemy_engine, **kwargs)
 
