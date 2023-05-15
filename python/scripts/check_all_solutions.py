@@ -11,10 +11,11 @@ import darpinstances.solution_checker
 darp_path = Path(r"C:\Google Drive/AIC Experiment Data\DARP")
 
 root_paths = [
-    darp_path / Path("Results/final-real_speeds/NYC-increased_start_time"),
-    darp_path / Path("Results/final-real_speeds/Manhattan"),
-    darp_path / Path("Results/final-real_speeds/Chicago-increased_start_time"),
-    darp_path / Path("Results/final-real_speeds/DC-more_vehicles")
+    # darp_path / Path("Results/final-real_speeds/NYC-increased_start_time"),
+    # darp_path / Path("Results/final-real_speeds/Manhattan"),
+    # darp_path / Path("Results/final-real_speeds/Chicago-increased_start_time"),
+    # darp_path / Path("Results/final-real_speeds/DC-more_vehicles")
+    darp_path / Path("ITSC_instance_paper/old/Results"),
 ]
 
 logging.info('Checking solutions in the following root paths: \n%s', '\n'.join((str(path) for path in root_paths)))

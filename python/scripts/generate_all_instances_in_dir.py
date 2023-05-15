@@ -12,7 +12,7 @@ once if they does not exist.
 # root_path = r'C:\Google Drive/AIC Experiment Data\DARP\Real Demand and speeds/Chicago/experiments/final_experiments-more_vehicles'
 # root_path = r'C:\AIC Experiment Data\DARP\Real Demand and speeds/Chicago'
 
-root_path = r'D:\Google Drive\AIC Experiment Data\DARP\ITSC_instance_paper\Instances/DC'
+root_path = r'C:\Google Drive\AIC Experiment Data\DARP\ITSC_instance_paper\Instances'
 
 
 for root, dir, files in os.walk(root_path):

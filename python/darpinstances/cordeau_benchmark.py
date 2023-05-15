@@ -5,7 +5,8 @@ import darpinstances.instance
 
 from typing import List, Tuple, Dict
 
-from darpinstances.instance import Request, DARPInstance, Vehicle, Action, ActionType
+from darpinstances.instance import DARPInstance
+from darpinstances.instance_generation.instance_objects import Request, ActionType, Vehicle
 from darpinstances.solution import Solution
 from darpinstances.vehicle_plan import VehiclePlan
 
