@@ -11,3 +11,9 @@ def load_yaml(path: Path):
         except yaml.YAMLError as exc:
             logging.error(exc)
     return py_yaml
+
+
+def get_instance_config_path_from_experiment_config_path(experiment_config_path: Path):
+    exp_config = load_yaml(experiment_config_path)
+    instance_config_path = (experiment_config_path.parent / Path(exp_config["instance"])).resolve()
+    return instance_config_path
