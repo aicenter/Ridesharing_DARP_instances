@@ -34,7 +34,7 @@ def _load_datetime(string: str):
     return datetime.strptime(string, '%Y-%m-%d %H:%M:%S')
 
 
-def _load_vehicle_positions_from_db(config: dict, nn_provider: NearestNodeProvider, desired_count: int):
+def _load_vehicle_positions_from_db(config: dict, nn_provider: NearestNodeProvider, desired_count: int, vehicle_ordering_seed:float=.123):
     count = 0
     # desired_count = config['vehicles']['vehicle_count']
 
@@ -48,31 +48,51 @@ def _load_vehicle_positions_from_db(config: dict, nn_provider: NearestNodeProvid
     while count < desired_count and horizon < 2 * max_horizon:
         veh_start = _load_datetime(config['vehicles']['start_time'])
 
-        sql = f"""
-        SELECT 
-            trip_locations.origin, 
-            ST_X(nodes.geom) as x, 
-            ST_X(st_transform(nodes.geom, {srid})) as x_utm,
-            ST_Y(nodes.geom) as y,
-            ST_Y(st_transform(nodes.geom, {srid})) as y_utm
-        FROM demand
-        JOIN trip_locations ON dataset IN({dataset_str})
-            AND origin_time BETWEEN '{veh_start - horizon / 2}' AND '{veh_start + horizon / 2}'
-            AND trip_locations.request_id = demand.id
-        JOIN nodes on trip_locations.origin = nodes.id
-        """
-
-
-        sql = f"""
-                WITH area AS (SELECT geom FROM areas WHERE id = {config['area_id']})
-                {sql}
-                    JOIN area ON st_within(nodes.geom, area.geom)
-            """
+        # sql = f"""
+        # WITH vehicle_seed AS (SELECT setseed({vehicle_seed})),
+        # area AS (SELECT geom FROM areas WHERE id = {config['area_id']})
+        # SELECT
+        #     trip_locations.origin,
+        #     ST_X(nodes.geom) as x,
+        #     ST_X(st_transform(nodes.geom, {srid})) as x_utm,
+        #     ST_Y(nodes.geom) as y,
+        #     ST_Y(st_transform(nodes.geom, {srid})) as y_utm
+        # FROM demand
+        # JOIN trip_locations ON dataset IN({dataset_str})
+        #     AND origin_time BETWEEN '{veh_start - horizon / 2}' AND '{veh_start + horizon / 2}'
+        #     AND trip_locations.request_id = demand.id
+        # JOIN nodes on trip_locations.origin = nodes.id
+        # JOIN area ON st_within(nodes.geom, area.geom)
+        # ORDER BY random()
+        # LIMIT {desired_count}
+        # """
 
         sql = f"""
-        {sql}
+        WITH
+            area AS (SELECT geom FROM areas WHERE id = {config['area_id']}),
+            vd AS (
+            SELECT setseed({vehicle_ordering_seed}) AS seed, null AS origin, null AS x, null AS x_utm, null AS y, null AS y_utm
+            UNION ALL
+            SELECT
+                null AS seed,
+                trip_locations.origin,
+                ST_X(nodes.geom)                      as x,
+                ST_X(st_transform(nodes.geom, {srid})) as x_utm,
+                ST_Y(nodes.geom)                      as y,
+                ST_Y(st_transform(nodes.geom, {srid})) as y_utm
+            FROM demand
+                  JOIN trip_locations ON dataset IN ({dataset_str})
+                     AND origin_time BETWEEN '{veh_start - horizon / 2}' AND '{veh_start + horizon / 2}'
+                     AND trip_locations.request_id = demand.id
+                  JOIN nodes on trip_locations.origin = nodes.id
+                  JOIN area ON st_within(nodes.geom, area.geom)
+            offset 1
+            )
+        
+        SELECT origin, x, x_utm, y, y_utm
+        FROM vd
         ORDER BY random()
-        LIMIT {desired_count}
+        LIMIT {desired_count};
         """
 
         positions = db.execute_query_to_pandas(sql)
