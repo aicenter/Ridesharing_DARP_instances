@@ -25,7 +25,6 @@ setup(
 		'geoalchemy2',
 		'sshtunnel',
 		'scikit-learn',
-		'ssh'
 	],
 	python_requires='>=3.8'
 )
