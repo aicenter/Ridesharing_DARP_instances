@@ -1,5 +1,5 @@
 # Instances and Results
-Both the instances and results can be downloaded from [Google Drive](https://drive.google.com/drive/folders/1iTwpQUZdbSC_5kdEb5-eFw2tLPBNnTxh?usp=sharing). Note that You need a fsat connection as the distance matrix files that represents the travel time model are upt to 45 GB
+Both the instances and results can be downloaded from [Google Drive](https://drive.google.com/drive/folders/1iTwpQUZdbSC_5kdEb5-eFw2tLPBNnTxh?usp=sharing). Note that You need a fast connection as the distance matrix files that represents the travel time model are up to 45 GB in size.
 
 # Instance Creation
 ## Road Network Processing
