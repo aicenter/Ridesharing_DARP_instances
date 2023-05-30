@@ -20,12 +20,12 @@ The instance folder contains the two main instance files:
 
 `📁Instances/<area>/instances/start_<start time>/duration_<duration>/max_delay_<max delay>/`
 
-- 🗎`trips.csv` - a 3 (4) column `<tab>` separated file containing the list of requests $R$ with a header defining the following columns:
+- `🗎 trips.csv` - a 3 (4) column `<tab>` separated file containing the list of requests $R$ with a header defining the following columns:
   - `time_ms` - a request time in milliseconds from the start of the instance $t$
   - `origin` - index of the origin node $o$. Used for indexing into the distance matrix 
   - `dest` - index of the destination node $d$
   - `min_travel_time` (optional) - direct travel time between origin and destination nodes
-- 🗎`vehicles.csv` - a 2-column `<tab>` separated file containing the set of vehicles $V$ with no header row and the following column meaning:
+- `🗎 vehicles.csv` - a 2-column `<tab>` separated file containing the set of vehicles $V$ with no header row and the following column meaning:
   - vehicle starting node $s$ 
   - vehicle capacity $c$
 
@@ -33,7 +33,7 @@ A concrete example of an instance path is `Instances/NYC/instances/start_18-00/d
 
 ### Distance Matrix - the travel time model
 
-`📁 Instances/<area>/🗎 dm.hd5`
+`🗎 Instances/<area>/dm.hd5`
   
 The travel time model $f_t(l, l')$ that determines the shortest travel time between any two nodes $l$ and $l'$ has a form of distance matrix and is shared by all instances in the same area. 
 Since for some areas the matrix is quite large, it is saved using the `hdf5` format. To load the distance matrix into Python, use [`h5py` python package](https://www.h5py.org/). The loading of the distance matrix is implemented in the [`MatrixTravelTimeProvider.from_hdf`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L62). Method [`get_travel_time(from_index, to_index)`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L73) implements the access to the distance matrix and is equivalent to $f_t(l, l')$
@@ -82,24 +82,24 @@ In addition to the main instance files, the instance and area folders contain se
 
 `📁 Instances/<area>/instances/start_<start time>/duration_<duration>/max_delay_<max delay>/`
 
-- 🖺`config.yaml` contains metadata used in the instance generation. Notable fields are 
+- `🖺 config.yaml` contains metadata used in the instance generation. Notable fields are 
   - `demand: min_time` and `demand:max_time` that give the interval for the demand used in the instance, 
   - `max_prolongation` - same as maximum delay $\Delta$
   - `vehicles: `start_time` - the start of the interval for demand used in vehicle location generation 
   - `vehicles: vehicle_capacity` - sets the capacity parameter $c$ for the instance generation
   - `vehicles: vehicle_count` - sets the number of vehicles for the instance generation
-- 🖺`sizing.csv` contains the results of the instance sizing, step in the instance generation process that selects the number of vehicles for the instance so that solution found by the insertion heuristic can service all requests in the instance. See the article for details. The file uses a comma as a separator and contains three columns with a header:
+- `🖺 sizing.csv` contains the results of the instance sizing, step in the instance generation process that selects the number of vehicles for the instance so that solution found by the insertion heuristic can service all requests in the instance. See the article for details. The file uses a comma as a separator and contains three columns with a header:
   - `vehicle_count` - the number of vehicles used at a given step of the sizing process
   - `dropped_requests` - the number of requests that cannot be serviced by the given number of vehicles when solved by the insertion heuristic
   - `interval_size` - the size of the interval-halving step used in the sizing process
 
 `📁 Instances/<area>/map/`
-- 🖺`nodes.csv` contains information about processed road network nodes in the area. The file uses `<tab>` as a separator and contains four columns with a header:
+- `🖺 nodes.csv` contains information about processed road network nodes in the area. The file uses `<tab>` as a separator and contains four columns with a header:
   - `id` - node id TODO David - rozdil mezi idecky a ktere je v DB?
   - `db_id` - node id in the database TODO David
   - `x` - node x coordinate TODO David - co je to za projekci?
   - `y` - node y coordinate TODO David - co je to za projekci?
-- 🖺`edges.csv` contains information about processed road network edges in the area, including the speed. The file uses `<tab>` as a separator and contains six columns with a header:
+- `🖺 edges.csv` contains information about processed road network edges in the area, including the speed. The file uses `<tab>` as a separator and contains six columns with a header:
   - `u` - from node `id`
   - `v` - to node `id`
   - `db_id_from` - from node `db_id`
@@ -112,15 +112,15 @@ In addition to the main instance files, the instance and area folders contain se
 Contains area and instance files for visuzalization in e.g. [Q-GIS](https://www.qgis.org)
 
 `📁 Instances/<area>/map/`
-- 🗺 `map.xeng`
+- `🗺 map.xeng`
 - 📁shapefiles/
- - 🗺 `nodes.[shx, shp, prh, dbf, cpg]`
- - 🗺 `edges.[shx, shp, prh, dbf, cpg]`
+ - `🗺 nodes.[shx, shp, prh, dbf, cpg]`
+ - `🗺 edges.[shx, shp, prh, dbf, cpg]`
 
 `📁 Instances/<area>/instances/start_<start time>/duration_<duration>/max_delay_<max delay>/shapefiles/` 
-- 🗺 `vehicles.[shx, shp, prh, dbf, cpg]` - starting vehicle locations
-- 🗺 `pickup.[shx, shp, prh, dbf, cpg]` - request pickup points
-- 🗺 `dropoff.[shx, shp, prh, dbf, cpg]` - request dropoff points
+- `🗺 vehicles.[shx, shp, prh, dbf, cpg]` - starting vehicle locations
+- `🗺 pickup.[shx, shp, prh, dbf, cpg]` - request pickup points
+- `🗺 dropoff.[shx, shp, prh, dbf, cpg]` - request dropoff points
 
 # Instance Creation
 ## Road Network Processing
