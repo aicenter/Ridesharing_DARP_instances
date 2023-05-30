@@ -24,7 +24,7 @@ The instance folder contains the two main instance files:
   - `time_ms` - a request time in milliseconds from the start of the instance $t$
   - `origin` - index of the origin node $o$. Used for indexing into the distance matrix 
   - `dest` - index of the destination node $d$
-  - `min_travel_time` (optional) - direct travel time between origin and destination nodes
+  - `min_travel_time` (optional) - direct minimal travel time between origin and destination nodes
 - `🗎 vehicles.csv` - a 2-column `<tab>` separated file containing the set of vehicles $V$ with no header row and the following column meaning:
   - vehicle starting node $s$ 
   - vehicle capacity $c$
