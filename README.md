@@ -78,7 +78,7 @@ In addition to the main instance files, the instance and area folders contain se
         └── ...
 ```
 
-**Instance generation config files** :
+### Instance generation config files
 
 `📁 Instances/<area>/instances/start_<start time>/duration_<duration>/max_delay_<max delay>/`
 
@@ -107,7 +107,8 @@ In addition to the main instance files, the instance and area folders contain se
   - `length` - length of the edge in TODO David - jednotky?
   - `speed` - speed of the edge used in travel time calculations, in TODO David - jednotky?
 
-**Visualization files**:
+### Visualization files
+
 Contains area and instance files for visuzalization in e.g. [Q-GIS](https://www.qgis.org)
 
 `📁 Instances/<area>/map/`
@@ -120,11 +121,6 @@ Contains area and instance files for visuzalization in e.g. [Q-GIS](https://www.
 - 🗺 `vehicles.[shx, shp, prh, dbf, cpg]` - starting vehicle locations
 - 🗺 `pickup.[shx, shp, prh, dbf, cpg]` - request pickup points
 - 🗺 `dropoff.[shx, shp, prh, dbf, cpg]` - request dropoff points
-
-  
-  
-  
-  
 
 # Instance Creation
 ## Road Network Processing
