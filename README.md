@@ -24,7 +24,7 @@ The instance folder contains the two main instance files:
   - `time_ms` - a request time in milliseconds from the start of the instance $t$
   - `origin` - index of the origin node $o$. Used for indexing into the distance matrix 
   - `dest` - index of the destination node $d$
-  - `min_travel_time` (optional) - direct minimal travel time between origin and destination nodes
+  - `min_travel_time` (optional) - direct minimal travel time in seconds between origin and destination nodes
 - `🗎 vehicles.csv` - a 2-column `<tab>` separated file containing the set of vehicles $V$ with no header row and the following column meaning:
   - vehicle starting node $s$ 
   - vehicle capacity $c$
@@ -83,8 +83,8 @@ In addition to the main instance files, the instance and area folders contain se
 `📁 Instances/<area>/instances/start_<start time>/duration_<duration>/max_delay_<max delay>/`
 
 - `🖺 config.yaml` contains metadata used in the instance generation. Notable fields are 
-  - `demand: min_time` and `demand:max_time` that give the interval for the demand used in the instance, 
-  - `max_prolongation` - same as maximum delay $\Delta$
+  - `demand: min_time` and `demand:max_time` that give the interval for the demand used in the instance, TODO David - add units (datetime at timezone of the area?)
+  - `max_prolongation` - same as maximum delay $\Delta$ (in seconds) 
   - `vehicles: `start_time` - the start of the interval for demand used in vehicle location generation 
   - `vehicles: vehicle_capacity` - sets the capacity parameter $c$ for the instance generation
   - `vehicles: vehicle_count` - sets the number of vehicles for the instance generation
