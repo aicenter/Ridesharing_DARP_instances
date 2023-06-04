@@ -1,3 +1,19 @@
+This repository presents a set of large-scale DARP instances based on real demand as well a the code needed to replicate the process or generate more instances. Additionally, the repository contains the results of two solution methods: Insertion Heuristic and the optimal Vehicle-group Assignment method. When using the instances or the code, please cite the following [paper](https://arxiv.org/abs/2305.18859): 
+
+[1] D. Fiedler and J. Mrkos, “Large-scale Ridesharing DARP Instances Based on Real Travel Demand.” arXiv, May 30, 2023. doi: 10.48550/arXiv.2305.18859.
+
+Bibtext entry:
+```bibtex
+@misc{fiedler2023largescale,
+      title={Large-scale Ridesharing DARP Instances Based on Real Travel Demand}, 
+      author={David Fiedler and Jan Mrkos},
+      year={2023},
+      eprint={2305.18859},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI}
+}
+``` 
+
 # Instances and Results
 **Both the instances and results can be downloaded from [Google Drive](https://drive.google.com/drive/folders/1iTwpQUZdbSC_5kdEb5-eFw2tLPBNnTxh?usp=sharing).** Note that You need a fast connection as the distance matrix files that represents the travel time model are up to 45 GB in size.
 
@@ -21,7 +37,7 @@ The instance folder contains the two main instance files:
 `📁Instances/<area>/instances/start_<start time>/duration_<duration>/max_delay_<max delay>/`
 
 - `🗎 trips.csv` - a 3 (4) column `<tab>` separated file containing the list of requests $R$ with a header defining the following columns:
-  - `time_ms` - a request time in milliseconds from the start of the instance $t$
+  - `time_ms` - a request time in milliseconds from the start of the day $t$
   - `origin` - index of the origin node $o$. Used for indexing into the distance matrix 
   - `dest` - index of the destination node $d$
   - `min_travel_time` (optional) - direct minimal travel time in seconds between origin and destination nodes
@@ -36,7 +52,7 @@ A concrete example of an instance path is `Instances/NYC/instances/start_18-00/d
 `🗎 Instances/<area>/dm.hd5`
   
 The travel time model $f_t(l, l')$ that determines the shortest travel time between any two nodes $l$ and $l'$ has a form of distance matrix and is shared by all instances in the same area. 
-Since for some areas the matrix is quite large, it is saved using the `hdf5` format. To load the distance matrix into Python, use [`h5py` python package](https://www.h5py.org/). The loading of the distance matrix is implemented in the [`MatrixTravelTimeProvider.from_hdf`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L62). Method [`get_travel_time(from_index, to_index)`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L73) implements the access to the distance matrix and is equivalent to $f_t(l, l')$
+Since for some areas the matrix is quite large, it is saved using the [`hdf5`](https://www.hdfgroup.org/solutions/hdf5/) format. To load the distance matrix into Python, use [`h5py` python package](https://www.h5py.org/). The loading of the distance matrix is implemented in the [`MatrixTravelTimeProvider.from_hdf`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L62). Method [`get_travel_time(from_index, to_index)`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L73) implements the access to the distance matrix and is equivalent to $f_t(l, l')$
 
 ## Instance metadata and supporting files
   
@@ -55,7 +71,7 @@ In addition to the main instance files, the instance and area folders contain se
     ├── 📁map/
     │   ├── 🖺 nodes.csv                      # List of nodes present in the area          
     │   ├── 🖺 edges.csv                      # List of edges present in the area
-    │   ├── 🗺 map.xeng                       # TODO David         
+    │   ├── 🗺 map.xeng                      # temporary file used for the distance matrix generation, to be removed         
     │   └── 📁shapefiles/                    # Area shapefiles for visualization
     │       ├── 🗺 nodes.[shx, shp, prh, dbf, cpg]
     │       └── 🗺 edges.[shx, shp, prh, dbf, cpg]
@@ -83,11 +99,16 @@ In addition to the main instance files, the instance and area folders contain se
 `📁 Instances/<area>/instances/start_<start time>/duration_<duration>/max_delay_<max delay>/`
 
 - `🖺 config.yaml` contains metadata used in the instance generation. Notable fields are 
-  - `demand: min_time` and `demand:max_time` that give the interval for the demand used in the instance, TODO David - add units (datetime at timezone of the area?)
-  - `max_prolongation` - same as maximum delay $\Delta$ (in seconds) 
-  - `vehicles: `start_time` - the start of the interval for demand used in vehicle location generation 
-  - `vehicles: vehicle_capacity` - sets the capacity parameter $c$ for the instance generation
-  - `vehicles: vehicle_count` - sets the number of vehicles for the instance generation
+  - `demand:`
+    - `min_time` and `demand: max_time` that give the interval for the demand used in the instance. The format is `yy-mm-dd HH:MM:SS` in the local timezone.
+  - `max_prolongation`: the maximum delay $\Delta$ (in seconds) 
+  - `vehicles:`
+    - `start_time`: The datetime of the start of the vehicle operation. The format is the same as for the demand interval.
+    - `vehicle_capacity` - sets the capacity parameter $c$ for the instance generation
+    - `vehicle_count` - sets the number of vehicles for the instance generation
+  - `map`: the objecct for the map configuration
+    - `SRID`: The SRID of the map projection. Example: `4326` (GPS)
+    - `SRID_plane`: The SRID of the map planar projection. Example: `32618` (UTM zone 18N)
 - `🖺 sizing.csv` contains the results of the instance sizing, step in the instance generation process that selects the number of vehicles for the instance so that solution found by the insertion heuristic can service all requests in the instance. See the article for details. The file uses a comma as a separator and contains three columns with a header:
   - `vehicle_count` - the number of vehicles used at a given step of the sizing process
   - `dropped_requests` - the number of requests that cannot be serviced by the given number of vehicles when solved by the insertion heuristic
@@ -95,25 +116,23 @@ In addition to the main instance files, the instance and area folders contain se
 
 `📁 Instances/<area>/map/`
 - `🖺 nodes.csv` contains information about processed road network nodes in the area. The file uses `<tab>` as a separator and contains four columns with a header:
-  - `id` - node id TODO David - rozdil mezi idecky a ktere je v DB?
-  - `db_id` - node id in the database TODO David
-  - `x` - node x coordinate TODO David - co je to za projekci?
-  - `y` - node y coordinate TODO David - co je to za projekci?
+  - `id` - node index in the distance matrix
+  - `db_id` - node id in the database that was used for the  instance generation
+  - `x` - node x coordinate in the map plannar projection 
+  - `y` - node y coordinate in the map plannar projection
 - `🖺 edges.csv` contains information about processed road network edges in the area, including the speed. The file uses `<tab>` as a separator and contains six columns with a header:
   - `u` - from node `id`
   - `v` - to node `id`
   - `db_id_from` - from node `db_id`
   - `db_id_to` - to node `db_id` 
-  - `length` - length of the edge in TODO David - jednotky?
-  - `speed` - speed of the edge used in travel time calculations, in TODO David - jednotky?
+  - `length` - length of the edge in meters
+  - `speed` - speed of the edge used in travel time calculations, in km/h.
 
 ### Visualization files
 
 Contains area and instance files for visuzalization in e.g. [Q-GIS](https://www.qgis.org)
 
-`📁 Instances/<area>/map/`
-- `🗺 map.xeng` TODO David - co je tohle za file?
-- 📁shapefiles/
+`📁 Instances/<area>/map/shapefiles/`
   - `🗺 nodes.[shx, shp, prh, dbf, cpg]`
   - `🗺 edges.[shx, shp, prh, dbf, cpg]`
 
