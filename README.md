@@ -1,4 +1,6 @@
-This repository presents a set of large-scale DARP instances based on real demand as well a the code needed to replicate the process or generate more instances. Additionally, the repository contains the results of two solution methods: Insertion Heuristic and the optimal Vehicle-group Assignment method. When using the instances or the code, please cite the following [paper](https://arxiv.org/abs/2305.18859): 
+# Large-scale Ridesharing DARP Instances Based on Real Travel Demand
+
+This repository presents the code for generating a set of large-scale DARP instances based on real demand. The instances and results of two solution methods, Insertion Heuristic and the optimal Vehicle-group Assignment method, are linked below.  When using the instances or the code, please cite the following [paper](https://arxiv.org/abs/2305.18859): 
 
 [1] D. Fiedler and J. Mrkos, “Large-scale Ridesharing DARP Instances Based on Real Travel Demand.” arXiv, May 30, 2023. doi: 10.48550/arXiv.2305.18859.
 
@@ -80,7 +82,7 @@ In addition to the main instance files, the instance and area folders contain se
         │   ├── 📁duration_<duration>/
         │   │   ├── 📁max_delay_<delay>/
         │   │   │   ├── 🖺 config.yaml        # Instance generation config file
-        │   │   │   ├── 🗎 requests.csv          # Requests file
+        │   │   │   ├── 🗎 requests.csv       # Requests file
         │   │   │   ├── 🗎 vehicles.csv       # Vehicles file
         │   │   │   ├── 🖺 trips.di           # Temporary file used by some solvers, to be removed
         │   │   │   ├── 🖺 sizing.csv         # (optional) - file holding data on the instance sizing process
@@ -148,8 +150,8 @@ Contains area and instance files for visuzalization in e.g. [Q-GIS](https://www.
 
 ### Extracting Demand from the Public Datasets
 
-| Area | Demand Dataset | Zone Dataset | Request times |
-| --- | --- | --- | --- |
-| New York City and Manhattan | [NYC Taxi and Limousine Commission](https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page) | [NYC taxi zones]() | exact
-| Chicago | [City of Chicago](https://data.cityofchicago.org/Transportation/Taxi-Trips/wrvz-psew) | [Census tracts and community areas]() | generated
-| Washington, DC | [City of Washington, DC](https://opendata.dc.gov/search?q=taxi%20trips) | [Master Address Repository]() | generated
+| Area                        | Demand Dataset                                                                                     | Zone Dataset                          | Request times |
+|-----------------------------|----------------------------------------------------------------------------------------------------|---------------------------------------|---------------|
+| New York City and Manhattan | [NYC Taxi and Limousine Commission](https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page) | [NYC taxi zones]()                    | exact         |
+| Chicago                     | [City of Chicago](https://data.cityofchicago.org/Transportation/Taxi-Trips/wrvz-psew)              | [Census tracts and community areas]() | generated     |
+| Washington, DC              | [City of Washington, DC](https://opendata.dc.gov/search?q=taxi%20trips)                            | [Master Address Repository]()         | generated     |
