@@ -26,9 +26,9 @@ The instances are organized into directories based on their parameters. That is,
 ├── 🗎 dm.hd5
 └── 📁instances/start_<start time>/duration_<duration>/max_delay_<max delay>/
     ├── 🗎 vehicles.csv
-    └── 🗎 trips.csv
+    └── 🗎 requests.csv
 ```
-and consists of three files, `vehicles.csv`, `trips.csv` and `dm.h5`. The `vehicles.csv` and `trips.csv` files are the main instance files, while the `dm.h5` file is the distance matrix file that represents the travel time model $f_t(l, l')$ used in the instance. The instance files are described in detail below.
+and consists of three files, `vehicles.csv`, `requests.csv` and `dm.h5`. The `vehicles.csv` and `requests.csv` files are the main instance files, while the `dm.h5` file is the distance matrix file that represents the travel time model $f_t(l, l')$ used in the instance. The instance files are described in detail below.
 
 ### Instance Requests and Vehicles files
 
@@ -36,7 +36,7 @@ The instance folder contains the two main instance files:
 
 `📁Instances/<area>/instances/start_<start time>/duration_<duration>/max_delay_<max delay>/`
 
-- `🗎 trips.csv` - a 3 (4) column `<tab>` separated file containing the list of requests $R$ with a header defining the following columns:
+- `🗎 requests.csv` - a 3 (4) column `<tab>` separated file containing the list of requests $R$ with a header defining the following columns:
   - `time_ms` - a request time in milliseconds from the start of the day $t$
   - `origin` - index of the origin node $o$. Used for indexing into the distance matrix 
   - `dest` - index of the destination node $d$
@@ -80,7 +80,7 @@ In addition to the main instance files, the instance and area folders contain se
         │   ├── 📁duration_<duration>/
         │   │   ├── 📁max_delay_<delay>/
         │   │   │   ├── 🖺 config.yaml        # Instance generation config file
-        │   │   │   ├── 🗎 trips.csv          # Requests file
+        │   │   │   ├── 🗎 requests.csv          # Requests file
         │   │   │   ├── 🗎 vehicles.csv       # Vehicles file
         │   │   │   ├── 🖺 trips.di           # Temporary file used by some solvers, to be removed
         │   │   │   ├── 🖺 sizing.csv         # (optional) - file holding data on the instance sizing process

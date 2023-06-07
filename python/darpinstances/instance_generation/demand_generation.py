@@ -12,7 +12,7 @@ from sklearn.cluster import KMeans
 
 import darpinstances
 from darpinstances.db import db
-from darpinstances.instance_generation.demand_generation_helpers import save_trips_csv
+from darpinstances.instance_generation.demand_generation_helpers import save_requests_csv
 from darpinstances.instance_generation.map import NearestNodeProvider
 
 
@@ -24,7 +24,7 @@ def generate_demand(nodes: gpd.GeoDataFrame, config: Dict, nearest_node_provider
     @param all_nodes: nodes
     """
     instance_dir = config['instance_dir']
-    outpath = path.join(instance_dir, 'trips.csv')
+    outpath = path.join(instance_dir, 'requests.csv')
     if path.exists(outpath):
         logging.info(f"The demand file is already in {path.abspath(outpath)}, skipping demand generation.")
         return pd.read_csv(outpath)
@@ -39,14 +39,14 @@ def generate_demand(nodes: gpd.GeoDataFrame, config: Dict, nearest_node_provider
         n_clusters = num_clusters(nodes, crs_metric, config['demand']['cluster_size'])
         centroids = cluster_points(nodes, n_clusters)
 
-        trips = _generate_demand_with_uniformly_distributed_positions(config, nodes, centroids, nearest_node_provider)
+        requests = _generate_demand_with_uniformly_distributed_positions(config, nodes, centroids, nearest_node_provider)
     elif config['demand']['mode'] == 'load':
-        trips = load_demand(config, nearest_node_provider)
+        requests = load_demand(config, nearest_node_provider)
     else:
         raise Exception('Unsupported demand generation mode')
 
-    # save generated trips
-    save_trips_csv(trips, outpath)
+    # save generated requests
+    save_requests_csv(requests, outpath)
 
     # save shapefiles
     save_shp = config["save_shp"]
@@ -54,18 +54,18 @@ def generate_demand(nodes: gpd.GeoDataFrame, config: Dict, nearest_node_provider
 
     # generate final instance file
     instance_dir = config['instance_dir']
-    trips_file_path = "{}/trips.csv".format(instance_dir)
+    requests_file_path = "{}/requests.csv".format(instance_dir)
 
     instance_file_path = config["demand"]["filepath"]
     darpinstances.instance_generation.demand_generation.finish_instance_file(
-        trips_file_path,
+        requests_file_path,
         instance_file_path
     )
 
     if save_shp:
-        save_shapefiles(trips, nodes, crs_geo, instance_dir)
+        save_shapefiles(requests, nodes, crs_geo, instance_dir)
 
-    return trips
+    return requests
 
 
 def _generate_demand_with_uniformly_distributed_positions(

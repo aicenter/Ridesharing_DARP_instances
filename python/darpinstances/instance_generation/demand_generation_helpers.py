@@ -5,9 +5,9 @@ import pandas as pd
 import logging
 
 
-def save_trips_csv(trips, outpath: str):
-    df = trips[['time_ms', 'origin', 'dest']]
-    logging.info("Saving trips to %s", outpath)
+def save_requests_csv(requests, outpath: str):
+    df = requests[['time_ms', 'origin', 'dest']]
+    logging.info("Saving requests to %s", outpath)
     df.to_csv(outpath, sep='\t', index=False)
 
 
