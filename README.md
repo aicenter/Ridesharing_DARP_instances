@@ -5,10 +5,10 @@
 This repository presents the code for generating a set of large-scale DARP instances based on real demand. The instances and results of two solution methods, Insertion Heuristic and the optimal Vehicle-group Assignment method, can be found in the linked dataset and generated using the code contained in this repository.  
 
 ## Table of contents
-- [Instances and Results download](##Instances and Results download)
-- [Instances structure](##Instances structure)
-- [Results structure](##Results structure)
-- [Instance creation](##Instance creation)
+- [Instances and Results download](##Instance-and-Results-download)
+- [Instances structure](##Instances-structure)
+- [Results structure](##Results-structure)
+- [Instance creation](##Instance-creation)
 - [Citation](##Citation)
 - [License](##License)
 
