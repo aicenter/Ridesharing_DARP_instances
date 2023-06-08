@@ -14,14 +14,19 @@ Bibtext entry:
       archivePrefix={arXiv},
       primaryClass={cs.AI}
 }
-``` 
+```
 
-# Instances and Results
-**Both the instances and results can be downloaded from [Google Drive](https://drive.google.com/drive/folders/1iTwpQUZdbSC_5kdEb5-eFw2tLPBNnTxh?usp=sharing).** Note that You need a fast connection as the distance matrix files that represents the travel time model are up to 45 GB in size.
+# Instances and Results download
+
+The dataset of instances and associate results will be available through dataset repository Zenodo. The dataset is currently in the process of submission and will be available soon.
+
+Latest, unversioned variant of the dataset can be downloaded from [Google Drive](https://drive.google.com/drive/folders/1iTwpQUZdbSC_5kdEb5-eFw2tLPBNnTxh?usp=sharing). Note that You need a fast connection as the distance matrix files that represents the travel time model are up to 45 GB in size. This latest version of the dataset contains additonal undocumented meta-data and may contain results of additional solution methods not described in the paper.
 
 ## Instance structure
 
 The instances are organized into directories based on their parameters. That is, an instance in an *area*, with a given *_start time_*, *duration* and *max delay* $\Delta$ is in the following directory structure:
+
+[//]: # (The tree structure generated with https://tree.nathanfriend.io/)
 
 ```text
 📁 Instances/<area>/
@@ -72,8 +77,7 @@ In addition to the main instance files, the instance and area folders contain se
     ├── 🗎 dm.h5                              # Area-specific distance matrix                 
     ├── 📁map/
     │   ├── 🖺 nodes.csv                      # List of nodes present in the area          
-    │   ├── 🖺 edges.csv                      # List of edges present in the area
-    │   ├── 🗺 map.xeng                      # temporary file used for the distance matrix generation, to be removed         
+    │   ├── 🖺 edges.csv                      # List of edges present in the area       
     │   └── 📁shapefiles/                    # Area shapefiles for visualization
     │       ├── 🗺 nodes.[shx, shp, prh, dbf, cpg]
     │       └── 🗺 edges.[shx, shp, prh, dbf, cpg]
@@ -84,7 +88,6 @@ In addition to the main instance files, the instance and area folders contain se
         │   │   │   ├── 🖺 config.yaml        # Instance generation config file
         │   │   │   ├── 🗎 requests.csv       # Requests file
         │   │   │   ├── 🗎 vehicles.csv       # Vehicles file
-        │   │   │   ├── 🖺 trips.di           # Temporary file used by some solvers, to be removed
         │   │   │   ├── 🖺 sizing.csv         # (optional) - file holding data on the instance sizing process
         │   │   │   ├── 🖺 vehicles_pre_sizing.csv    # (optional) - file holding data on the vehicles before the sizing process
         │   │   │   └── 📁shapefiles/        # Instance shapefiles for visualization
@@ -143,12 +146,52 @@ Contains area and instance files for visuzalization in e.g. [Q-GIS](https://www.
 - `🗺 pickup.[shx, shp, prh, dbf, cpg]` - request pickup points
 - `🗺 dropoff.[shx, shp, prh, dbf, cpg]` - request dropoff points
 
+## Results structure
+The results are stored in the `📁 Results/` folder. The folder structure follows similar pattern as the `📁 Instance/` folder:
+
+```text
+📁 Results/<area>/start_<start time>/duration_<duration>/max_delay_<max delay>/<method>/
+├── 🖺 config.yaml                   # experiment config file
+├── 🗎 config.yaml-solution.json      # results from experiment defined by `config.yaml`
+└── 🖺 config.yaml-performance.json  # performance metrics from experiment defined by `config.yaml`
+```
+
+The `<method>` folders are `ih` for [Insertion Heuristic]() and `vga` for [Vehicle Group Assignment method](https://www.pnas.org/doi/10.1073/pnas.1611675114). 
+
+
+### Solution file 
+The solution is stored in `🗎 config.yaml-solution.json` and contains following fields:
+
+`🗎 config.yaml-solution.json`
+- `cost` - total cost of the solution in seconds.
+- `cost_minutes` - total cost of the solution in minutes, rounded.
+- `dropped_requests` - array of requests that were dropped in this solution.
+- `plans` - array of vehicle plans, each plan is an array of actions that determine which requests are served by the given vehicle and in which order. The actions are "pickup" and "drop_off".
+
+All locations in the solution file are node ids from the road network. The node ids are the same as in the `🖺 nodes.csv` file in the instance folder. All times are in seconds from the start of the instance.
+
+Complete description of the solution format is given by the [json schema](solution_schema.json) in this repository.
+
+### Solution meta-data
+There are two files with meta-data for the solution, `🖺 config.yaml` and `🖺 config.yaml-performance.json`
+
+`🖺 config.yaml`
+The `config.yaml` file contains the experiment configuration, such as the relative path to the instance, method specific configuration and so on. 
+
+`🖺 config.yaml-performance.json`
+The performance file contains logged information on the run of the solver. The json has following fields
+- `total_time` - total time of the solver run in seconds
+- `peak_memory_KiB` - peak memory usage of the solver in KiB
+- `solver_stats`- solver specific statistics, if available. For example, for VGA method, `group_generation_time` and `vehicle_assignment_time` are logged separately.
+
 # Instance Creation
-## Road Network Processing
 
-## Demand and Vehicle Processing
+[//]: # (## Road Network Processing)
 
-### Extracting Demand from the Public Datasets
+[//]: # (## Demand and Vehicle Processing)
+
+### Public Datasets used in the creation of the instances
+Following data sources were used to generate demand and travel time data:
 
 | Area                        | Demand Dataset                                                                                     | Zone Dataset                          | Request times |
 |-----------------------------|----------------------------------------------------------------------------------------------------|---------------------------------------|---------------|
