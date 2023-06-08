@@ -1,28 +1,24 @@
 # Large-scale Ridesharing DARP Instances Based on Real Travel Demand
 
-This repository presents the code for generating a set of large-scale DARP instances based on real demand. The instances and results of two solution methods, Insertion Heuristic and the optimal Vehicle-group Assignment method, are linked below.  When using the instances or the code, please cite the following [paper](https://arxiv.org/abs/2305.18859): 
+[![arXiv](http://img.shields.io/badge/cs.AI-arXiv%3A2305.18859-B31B1B.svg)](https://arxiv.org/abs/2305.18859) 
 
-[1] D. Fiedler and J. Mrkos, “Large-scale Ridesharing DARP Instances Based on Real Travel Demand.” arXiv, May 30, 2023. doi: 10.48550/arXiv.2305.18859.
+This repository presents the code for generating a set of large-scale DARP instances based on real demand. The instances and results of two solution methods, Insertion Heuristic and the optimal Vehicle-group Assignment method, can be found in the linked dataset and generated using the code contained in this repository.  
 
-Bibtext entry:
-```bibtex
-@misc{fiedler2023largescale,
-      title={Large-scale Ridesharing DARP Instances Based on Real Travel Demand}, 
-      author={David Fiedler and Jan Mrkos},
-      year={2023},
-      eprint={2305.18859},
-      archivePrefix={arXiv},
-      primaryClass={cs.AI}
-}
-```
+## Table of contents
+- [Instances and Results download](##Instances and Results download)
+- [Instances structure](##Instances structure)
+- [Results structure](##Results structure)
+- [Instance creation](##Instance creation)
+- [Citation](##Citation)
+- [License](##License)
 
-# Instances and Results download
+## Instances and Results download
 
 The dataset of instances and associate results will be available through dataset repository Zenodo. The dataset is currently in the process of submission and will be available soon.
 
 Latest, unversioned variant of the dataset can be downloaded from [Google Drive](https://drive.google.com/drive/folders/1iTwpQUZdbSC_5kdEb5-eFw2tLPBNnTxh?usp=sharing). Note that You need a fast connection as the distance matrix files that represents the travel time model are up to 45 GB in size. This latest version of the dataset contains additonal undocumented meta-data and may contain results of additional solution methods not described in the paper.
 
-## Instance structure
+## Instances structure
 
 The instances are organized into directories based on their parameters. That is, an instance in an *area*, with a given *_start time_*, *duration* and *max delay* $\Delta$ is in the following directory structure:
 
@@ -61,7 +57,7 @@ A concrete example of an instance path is `Instances/NYC/instances/start_18-00/d
 The travel time model $f_t(l, l')$ that determines the shortest travel time between any two nodes $l$ and $l'$ has a form of distance matrix and is shared by all instances in the same area. 
 Since for some areas the matrix is quite large, it is saved using the [`hdf5`](https://www.hdfgroup.org/solutions/hdf5/) format. To load the distance matrix into Python, use [`h5py` python package](https://www.h5py.org/). The loading of the distance matrix is implemented in the [`MatrixTravelTimeProvider.from_hdf`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L62). Method [`get_travel_time(from_index, to_index)`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L73) implements the access to the distance matrix and is equivalent to $f_t(l, l')$
 
-## Instance metadata and supporting files
+### Instance metadata and supporting files
   
 In addition to the main instance files, the instance and area folders contain several additional files holding metadata about the instance used for instance generation, visualization or analysis. The list of the files with their location in the directory tree is below. 
   
@@ -99,7 +95,7 @@ In addition to the main instance files, the instance and area folders contain se
         └── ...
 ```
 
-### Instance generation config files
+#### Instance generation config files
 
 `📁 Instances/<area>/instances/start_<start time>/duration_<duration>/max_delay_<max delay>/`
 
@@ -133,7 +129,7 @@ In addition to the main instance files, the instance and area folders contain se
   - `length` - length of the edge in meters
   - `speed` - speed of the edge used in travel time calculations, in km/h.
 
-### Visualization files
+#### Visualization files
 
 Contains area and instance files for visuzalization in e.g. [Q-GIS](https://www.qgis.org)
 
@@ -184,7 +180,7 @@ The performance file contains logged information on the run of the solver. The j
 - `peak_memory_KiB` - peak memory usage of the solver in KiB
 - `solver_stats`- solver specific statistics, if available. For example, for VGA method, `group_generation_time` and `vehicle_assignment_time` are logged separately.
 
-# Instance Creation
+## Instance Creation
 
 [//]: # (## Road Network Processing)
 
@@ -198,3 +194,23 @@ Following data sources were used to generate demand and travel time data:
 | New York City and Manhattan | [NYC Taxi and Limousine Commission](https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page) | [NYC taxi zones]()                    | exact         |
 | Chicago                     | [City of Chicago](https://data.cityofchicago.org/Transportation/Taxi-Trips/wrvz-psew)              | [Census tracts and community areas]() | generated     |
 | Washington, DC              | [City of Washington, DC](https://opendata.dc.gov/search?q=taxi%20trips)                            | [Master Address Repository]()         | generated     |
+
+## Citiation
+When using the instances or the code, please cite the following [paper](https://arxiv.org/abs/2305.18859): 
+
+[1] D. Fiedler and J. Mrkos, “Large-scale Ridesharing DARP Instances Based on Real Travel Demand.” arXiv, May 30, 2023. doi: 10.48550/arXiv.2305.18859.
+
+Bibtext entry:
+```bibtex
+@misc{fiedler2023largescale,
+      title={Large-scale Ridesharing DARP Instances Based on Real Travel Demand}, 
+      author={David Fiedler and Jan Mrkos},
+      year={2023},
+      eprint={2305.18859},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI}
+}
+```
+
+## License
+The code in this repository is licensed using the GNU GENERAL PUBLIC LICENSE.
