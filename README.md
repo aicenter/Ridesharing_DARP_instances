@@ -1,8 +1,11 @@
 # Large-scale Ridesharing DARP Instances Based on Real Travel Demand
 
-[![arXiv](http://img.shields.io/badge/cs.AI-arXiv%3A2305.18859-B31B1B.svg)](https://arxiv.org/abs/2305.18859) 
+[![arXiv link](http://img.shields.io/badge/cs.AI-arXiv%3A2305.18859-B31B1B.svg?style=flat&logo=arxiv)](https://arxiv.org/abs/2305.18859)
+![Licence badge](https://img.shields.io/github/license/aicenter/Ridesharing_DARP_instances)
 
-This repository presents the code for generating a set of large-scale DARP instances based on real demand. The instances and results of two solution methods, Insertion Heuristic and the optimal Vehicle-group Assignment method, can be found in the linked dataset and generated using the code contained in this repository.  
+This repository presents the code for generating a set of large-scale DARP instances based on real demand and realistic travel time data from 3 different US cities, Chicago, New York City and Washington, DC. The instances consist of real travel requests from selected period, positions of vehicles with their capacities and realistic shortest travel times between all pairs of locations in each city.
+
+The instances and results of two solution methods, Insertion Heuristic and the optimal Vehicle-group Assignment method, can be found in the linked dataset. The dataset and methodology used to create it is described in the paper [Large-scale Ridesharing DARP Instances Based on Real Travel Demand](https://arxiv.org/abs/2305.18859).
 
 ## Table of contents
 - [Instances and Results download](##Instance-and-Results-download)
@@ -14,7 +17,7 @@ This repository presents the code for generating a set of large-scale DARP insta
 
 ## Instances and Results download
 
-The dataset of instances and associate results will be available through dataset repository Zenodo. The dataset is currently in the process of submission and will be available soon.
+The dataset of instances and associated results will be available through dataset repository Zenodo. The dataset is currently in the process of submission and will be available soon.
 
 Latest, unversioned variant of the dataset can be downloaded from [Google Drive](https://drive.google.com/drive/folders/1iTwpQUZdbSC_5kdEb5-eFw2tLPBNnTxh?usp=sharing). Note that You need a fast connection as the distance matrix files that represents the travel time model are up to 45 GB in size. This latest version of the dataset contains additonal undocumented meta-data and may contain results of additional solution methods not described in the paper.
 
