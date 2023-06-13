@@ -1,9 +1,9 @@
 {
     "$schema": "https://json-schema.org/draft/2019-09/schema",
-    "$id": "http://example.com/example.json",
+    "$id": "https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/solution_schema.json",
     "type": "object",
     "default": {},
-    "title": "Root Schema",
+    "title": "Instance Solution Schema",
     "required": [
         "cost",
         "cost_minutes",
@@ -14,7 +14,7 @@
         "cost": {
             "type": "integer",
             "default": 0,
-            "title": "The cost Schema",
+            "title": "The total cost of all plans in seconds",
             "examples": [
                 29605
             ]
@@ -22,7 +22,7 @@
         "cost_minutes": {
             "type": "integer",
             "default": 0,
-            "title": "The cost_minutes Schema",
+            "title": "The total cost of all plans in minutes, rounded",
             "examples": [
                 493
             ]
@@ -30,10 +30,10 @@
         "plans": {
             "type": "array",
             "default": [],
-            "title": "The plans Schema",
+            "title": "Plans for all vehicles",
             "items": {
                 "type": "object",
-                "title": "A Schema",
+                "title": "Plan Schema",
                 "required": [
                     "cost",
                     "vehicle",
@@ -44,7 +44,7 @@
                 "properties": {
                     "cost": {
                         "type": "integer",
-                        "title": "The cost Schema",
+                        "title": "Cost in seconds",
                         "examples": [
                             1701,
                             1563
@@ -61,7 +61,7 @@
                         "properties": {
                             "index": {
                                 "type": "integer",
-                                "title": "The index Schema",
+                                "title": "Vehicle index",
                                 "examples": [
                                     0,
                                     1

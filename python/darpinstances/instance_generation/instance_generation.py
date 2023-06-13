@@ -82,14 +82,14 @@ def generate_instance(config_filepath: str):
     # generate dm
     generate_dm(config, map_nodes, map_edges)
 
-    # Generate trips
-    trips = darpinstances.instance_generation.demand_generation.generate_demand(
+    # Generate trip requests
+    requests = darpinstances.instance_generation.demand_generation.generate_demand(
         map_nodes, config, nearest_node_provider, crs_metric)
 
     # Generate vehicles
     logging.info("Generating vehicles")
     if 'vehicle_to_request_ratio' in config['vehicles']:
-        desired_vehicle_count = len(trips) * config['vehicles']['vehicle_to_request_ratio']
+        desired_vehicle_count = len(requests) * config['vehicles']['vehicle_to_request_ratio']
     else:
         desired_vehicle_count = config['vehicles']['vehicle_count']
     darpinstances.instance_generation.vehicles.generate_vehicles(
