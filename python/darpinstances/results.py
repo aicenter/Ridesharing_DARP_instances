@@ -394,7 +394,7 @@ def load_all_data_for_result(path: Path) -> Optional[Tuple[Dict,List]]:
     return data, occupancies
 
 
-def load_aggregate_stats_in_dir(path: Path) -> pd.DataFrame:
+def load_aggregate_stats_in_dir(path: Path, included_config_keys: Optional[List[str]] = None) -> pd.DataFrame:
     logging.info(f"Loading aggregate stats in {path}")
     data = []
 
@@ -405,9 +405,40 @@ def load_aggregate_stats_in_dir(path: Path) -> pd.DataFrame:
                 exp_config_filepath = Path(root) / filename
                 d = load_all_data_for_result(exp_config_filepath.parent)
                 if d is not None:
+                    if included_config_keys is not None:
+                        config = darpinstances.experiments.load_experiment_config(str(exp_config_filepath))
+                        for key in included_config_keys:
+                            if key in config:
+                                d[0][key] = config[key]
                     data.append(d[0])
 
     df = pd.DataFrame(data)
+
+    columns = ['method']
+    for key in included_config_keys:
+        columns.append(key)
+    columns.extend([
+        'cost_minutes',
+        'total_time',
+        'avg_delay',
+        'dropped_requests',
+        'req_count',
+        'plan_count',
+        'total_driving_duration',
+        'total_waiting_duration',
+        'avg_waiting_duration',
+        'avg_occupancy',
+        'tts_cost',
+        'tts_cost_per_plan',
+        'used_connections',
+        'duration_minutes',
+        'max_delay',
+        'start_time',
+        'end_time'
+    ])
+
+    df = pd.DataFrame(df[columns])
+
     return df
 
 
