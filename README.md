@@ -1,11 +1,16 @@
+![banner_light.png](figures%2Fbanner_light_gradient.png)
+
 # Large-scale Ridesharing DARP Instances Based on Real Travel Demand
 
-[![arXiv link](http://img.shields.io/badge/cs.AI-arXiv%3A2305.18859-B31B1B.svg?style=flat&logo=arxiv)](https://arxiv.org/abs/2305.18859)
+[![arXiv link](http://img.shields.io/badge/cs.AI-arXiv%3A2305.18859-B31B1B.svg?style=flat)](https://arxiv.org/abs/2305.18859)
+[![Dataset DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7986104.svg)](https://doi.org/10.5281/zenodo.7986104)
 ![Licence badge](https://img.shields.io/github/license/aicenter/Ridesharing_DARP_instances)
 
-This repository presents the code for generating a set of large-scale DARP instances based on real demand and realistic travel time data from 3 different US cities, Chicago, New York City and Washington, DC. The instances consist of real travel requests from selected period, positions of vehicles with their capacities and realistic shortest travel times between all pairs of locations in each city.
+This repository presents a set of large-scale DARP instances. The instances were created as a standardized set of ridesharing DARP problems for the purpose of benchmarking and comparing different solution methods.  
 
-The instances and results of two solution methods, Insertion Heuristic and the optimal Vehicle-group Assignment method, can be found in the linked dataset. The dataset and methodology used to create it is described in the paper [Large-scale Ridesharing DARP Instances Based on Real Travel Demand](https://arxiv.org/abs/2305.18859).
+The instances are based on real demand and realistic travel time data from 3 different US cities, Chicago, New York City and Washington, DC. The instances consist of real travel requests from the selected period, positions of vehicles with their capacities and realistic shortest travel times between all pairs of locations in each city.
+
+The instances and results of two solution methods, the Insertion Heuristic and the optimal Vehicle-group Assignment method, can be found in the linked dataset. The dataset and methodology used to create it are described in the paper [Large-scale Ridesharing DARP Instances Based on Real Travel Demand](https://arxiv.org/abs/2305.18859).
 
 ## Table of contents
 - [Instances and Results download](##Instance-and-Results-download)
@@ -17,9 +22,14 @@ The instances and results of two solution methods, Insertion Heuristic and the o
 
 ## Instances and Results download
 
-The dataset of instances and associated results will be available through dataset repository Zenodo. The dataset is currently in the process of submission and will be available soon.
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7986104.svg)](https://doi.org/10.5281/zenodo.7986104)
 
-Latest, unversioned variant of the dataset can be downloaded from [Google Drive](https://drive.google.com/drive/folders/1iTwpQUZdbSC_5kdEb5-eFw2tLPBNnTxh?usp=sharing). Note that You need a fast connection as the distance matrix files that represents the travel time model are up to 45 GB in size. This latest version of the dataset contains additonal undocumented meta-data and may contain results of additional solution methods not described in the paper.
+The dataset of instances and associated results are available through dataset repository Zenodo. The dataset is compressed by [7zip](https://7-zip.org/) to adhere to the Zenodo dataset size limits, with some of the archives split into multiple parts. The dataset is licensed under the [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/) license.
+
+
+[![G-drive link](https://img.shields.io/badge/Drive-Bleeding%20Edge%20Dataset-%234285F4?logo=googledrive)](https://drive.google.com/drive/folders/1iTwpQUZdbSC_5kdEb5-eFw2tLPBNnTxh?usp=sharing)
+
+Latest, unversioned variant of the dataset can be downloaded from Google Drive. Note that the full distance matrix files that represents the travel time model are up to 45 GB in size. This latest version of the dataset contains additonal undocumented meta-data and may contain results of additional solution methods not described in the paper.
 
 ## Instances structure
 
@@ -184,6 +194,11 @@ The performance file contains logged information on the run of the solver. The j
 - `solver_stats`- solver specific statistics, if available. For example, for VGA method, `group_generation_time` and `vehicle_assignment_time` are logged separately.
 
 ## Instance Creation
+The methodology for the instance creation is described in the article. The process is divided into following steps:
+
+![FlowChart_v3-1.png](figures%2FFlowChart_v3-1.png)
+
+Many of the steps are implemented in the associated repository, byt some of them rely on external binaries. That is why the published dataset contains full distance matricies for every area instead of the instance-specific, smaller distance matricies.
 
 [//]: # (## Road Network Processing)
 
@@ -216,4 +231,6 @@ Bibtext entry:
 ```
 
 ## License
-The code in this repository is licensed using the GNU GENERAL PUBLIC LICENSE.
+The code in the repository used to generate the instances is licensed using the [GNU GENERAL PUBLIC LICENSE v3](https://www.gnu.org/licenses/gpl-3.0.en.html).
+
+The dataset is licensed using the [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/) license.
