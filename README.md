@@ -19,12 +19,12 @@ The instances are based on real demand and realistic travel time data from 3 dif
 The instances and results of two solution methods, the Insertion Heuristic and the optimal Vehicle-group Assignment method, can be found in the linked dataset. The dataset and methodology used to create it are described in the paper [Large-scale Ridesharing DARP Instances Based on Real Travel Demand](https://arxiv.org/abs/2305.18859).
 
 ## Table of contents
-- [Instances and Results download](##Instance-and-Results-download)
-- [Instances structure](##Instances-structure)
-- [Results structure](##Results-structure)
-- [Instance creation](##Instance-creation)
-- [Citation](##Citation)
-- [License](##License)
+- [Instances and Results download](#Instance-and-Results-download)
+- [Instances structure](#Instances-structure)
+- [Results structure](#Results-structure)
+- [Instance creation](#Instance-creation)
+- [Citation](#Citation)
+- [License](#License)
 
 ## Instances and Results download
 
