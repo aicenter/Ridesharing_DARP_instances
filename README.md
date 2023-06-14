@@ -1,4 +1,10 @@
-![banner_light.png](figures%2Fbanner_light.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="figures/banner_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="figures/banner_light.png">
+  <img alt="Collage displaying different steps of the instance generation, the speed model, demand zones and generated request origins." src="figures/banner_light.png">
+</picture>
+
+
 
 # Large-scale Ridesharing DARP Instances Based on Real Travel Demand
 
