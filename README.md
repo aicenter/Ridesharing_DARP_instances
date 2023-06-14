@@ -178,23 +178,21 @@ The `<method>` folders are `ih` for [Insertion Heuristic]() and `vga` for [Vehic
 The solution is stored in `🗎 config.yaml-solution.json` and contains following fields:
 
 `🗎 config.yaml-solution.json`
-- `cost` - total cost of the solution in seconds.
+- `cost` - total cost (total travel time of all vehicles) of the solution in seconds.
 - `cost_minutes` - total cost of the solution in minutes, rounded.
-- `dropped_requests` - array of requests that were dropped in this solution.
-- `plans` - array of vehicle plans, each plan is an array of actions that determine which requests are served by the given vehicle and in which order. The actions are "pickup" and "drop_off".
+- `dropped_requests` - list of requests that were dropped in this solution.
+- `plans` - list of vehicle plans, each plan contains a list of actions that determine which requests are served by the given vehicle and in which order. The actions are "pickup" and "drop_off".
 
-All locations in the solution file are node ids from the road network. The node ids are the same as in the `🖺 nodes.csv` file in the instance folder. All times are in seconds from the start of the instance.
+All locations in the solution file are node ids from the road network. The node ids are the same as in the `🖺 nodes.csv` file in the instance folder. All times are in seconds from the start of the day.
 
 Complete description of the solution format is given by the [json schema](solution_schema.json) in this repository.
 
 ### Solution meta-data
 There are two files with meta-data for the solution, `🖺 config.yaml` and `🖺 config.yaml-performance.json`
 
-`🖺 config.yaml`
-The `config.yaml` file contains the experiment configuration, such as the relative path to the instance, method specific configuration and so on. 
+`🖺 config.yaml` file contains the experiment configuration, such as the relative path to the instance, method specific configuration and so on. 
 
-`🖺 config.yaml-performance.json`
-The performance file contains logged information on the run of the solver. The json has following fields
+`🖺 config.yaml-performance.json` file contains logged information on the run of the solver. The json has following fields
 - `total_time` - total time of the solver run in seconds
 - `peak_memory_KiB` - peak memory usage of the solver in KiB
 - `solver_stats`- solver specific statistics, if available. For example, for VGA method, `group_generation_time` and `vehicle_assignment_time` are logged separately.
