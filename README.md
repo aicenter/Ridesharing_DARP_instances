@@ -1,4 +1,4 @@
-![banner_light.png](figures%2Fbanner_light_gradient.png)
+![banner_light.png](figures%2Fbanner_light.png)
 
 # Large-scale Ridesharing DARP Instances Based on Real Travel Demand
 
