@@ -12,7 +12,7 @@
 [![Dataset DOI](https://img.shields.io/static/v1?label=Dataset&message=DOI%3A10.5281/zenodo.7986104&color=1682D4)](https://doi.org/10.5281/zenodo.7986104)
 ![Licence badge](https://img.shields.io/github/license/aicenter/Ridesharing_DARP_instances)
 
-This repository presents a set of large-scale DARP instances. The instances were created as a standardized set of ridesharing DARP problems for the purpose of benchmarking and comparing different solution methods.  
+This repository presents a set of large-scale ridesharing Dial-a-Ride Problem (DARP) instances. The instances were created as a standardized set of ridesharing DARP problems for the purpose of benchmarking and comparing different solution methods.  
 
 The instances are based on real demand and realistic travel time data from 3 different US cities, Chicago, New York City and Washington, DC. The instances consist of real travel requests from the selected period, positions of vehicles with their capacities and realistic shortest travel times between all pairs of locations in each city.
 
