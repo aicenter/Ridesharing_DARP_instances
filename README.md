@@ -19,7 +19,7 @@ The instances are based on real demand and realistic travel time data from 3 dif
 The instances and results of two solution methods, the Insertion Heuristic and the optimal Vehicle-group Assignment method, can be found in the linked dataset. The dataset and methodology used to create it are described in the paper [Large-scale Ridesharing DARP Instances Based on Real Travel Demand](https://arxiv.org/abs/2305.18859).
 
 ## Table of contents
-- [Instances and Results download](#Instance-and-Results-download)
+- [Instances and Results download](#Instances-and-Results-download)
 - [Instances structure](#Instances-structure)
 - [Results structure](#Results-structure)
 - [Instance creation](#Instance-creation)
@@ -217,7 +217,7 @@ Following data sources were used to generate demand and travel time data:
 | Chicago                     | [City of Chicago](https://data.cityofchicago.org/Transportation/Taxi-Trips/wrvz-psew)              | [Census tracts and community areas]() | generated     |
 | Washington, DC              | [City of Washington, DC](https://opendata.dc.gov/search?q=taxi%20trips)                            | [Master Address Repository]()         | generated     |
 
-## Citiation
+## Citation
 When using the instances or the code, please cite the following [paper](https://arxiv.org/abs/2305.18859): 
 
 [1] D. Fiedler and J. Mrkos, “Large-scale Ridesharing DARP Instances Based on Real Travel Demand.” arXiv, May 30, 2023. doi: 10.48550/arXiv.2305.18859.
