@@ -8,8 +8,8 @@
 
 # Large-scale Ridesharing DARP Instances Based on Real Travel Demand
 
-[![arXiv link](http://img.shields.io/badge/cs.AI-arXiv%3A2305.18859-B31B1B.svg?style=flat)](https://arxiv.org/abs/2305.18859)
-[![Dataset DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7986104.svg)](https://doi.org/10.5281/zenodo.7986104)
+[![arXiv link](http://img.shields.io/badge/Paper-arXiv%3A2305.18859-B31B1B.svg?style=flat)](https://arxiv.org/abs/2305.18859)
+[![Dataset DOI](https://img.shields.io/static/v1?label=Dataset&message=DOI%3A10.5281/zenodo.7986104&color=1682D4)](https://doi.org/10.5281/zenodo.7986104)
 ![Licence badge](https://img.shields.io/github/license/aicenter/Ridesharing_DARP_instances)
 
 This repository presents a set of large-scale DARP instances. The instances were created as a standardized set of ridesharing DARP problems for the purpose of benchmarking and comparing different solution methods.  
@@ -28,12 +28,12 @@ The instances and results of two solution methods, the Insertion Heuristic and t
 
 ## Instances and Results download
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7986104.svg)](https://doi.org/10.5281/zenodo.7986104)
+[![Dataset DOI](https://img.shields.io/static/v1?label=Dataset&message=DOI%3A10.5281/zenodo.7986104&color=1682D4)](https://doi.org/10.5281/zenodo.7986104)
 
 The dataset of instances and associated results are available through dataset repository Zenodo. The dataset is compressed by [7zip](https://7-zip.org/) to adhere to the Zenodo dataset size limits, with some of the archives split into multiple parts. The dataset is licensed under the [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/) license.
 
 
-[![G-drive link](https://img.shields.io/badge/Drive-Bleeding%20Edge%20Dataset-%234285F4?logo=googledrive)](https://drive.google.com/drive/folders/1iTwpQUZdbSC_5kdEb5-eFw2tLPBNnTxh?usp=sharing)
+[![G-drive link](https://img.shields.io/badge/Dataset-Bleeding%20Edge-%234285F4?logo=googledrive)](https://drive.google.com/drive/folders/1iTwpQUZdbSC_5kdEb5-eFw2tLPBNnTxh?usp=sharing)
 
 Latest, unversioned variant of the dataset can be downloaded from Google Drive. Note that the full distance matrix files that represents the travel time model are up to 45 GB in size. This latest version of the dataset contains additonal undocumented meta-data and may contain results of additional solution methods not described in the paper.
 
