@@ -9,6 +9,8 @@ from pathlib import Path
 
 from typing import Tuple, Dict, Iterable
 
+import yaml
+
 import darpinstances.log
 
 
@@ -74,3 +76,12 @@ def load_hdf(file_path: str) -> np.ndarray:
 		a_group_key = list(f.keys())[0]
 		dm_ar = f[a_group_key][()]
 		return dm_ar
+
+
+def load_yaml(path: Path):
+	with open(path, "r") as stream:
+		try:
+			py_yaml = yaml.safe_load(stream)
+		except yaml.YAMLError as exc:
+			logging.error(exc)
+	return py_yaml
