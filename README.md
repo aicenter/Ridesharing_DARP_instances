@@ -12,19 +12,19 @@
 [![Dataset DOI](https://img.shields.io/static/v1?label=Dataset&message=DOI%3A10.5281/zenodo.7986104&color=1682D4)](https://doi.org/10.5281/zenodo.7986104)
 ![Licence badge](https://img.shields.io/github/license/aicenter/Ridesharing_DARP_instances)
 
-This repository presents a set of large-scale DARP instances. The instances were created as a standardized set of ridesharing DARP problems for the purpose of benchmarking and comparing different solution methods.  
+This repository presents a set of large-scale ridesharing Dial-a-Ride Problem (DARP) instances. The instances were created as a standardized set of ridesharing DARP problems for the purpose of benchmarking and comparing different solution methods.  
 
 The instances are based on real demand and realistic travel time data from 3 different US cities, Chicago, New York City and Washington, DC. The instances consist of real travel requests from the selected period, positions of vehicles with their capacities and realistic shortest travel times between all pairs of locations in each city.
 
 The instances and results of two solution methods, the Insertion Heuristic and the optimal Vehicle-group Assignment method, can be found in the linked dataset. The dataset and methodology used to create it are described in the paper [Large-scale Ridesharing DARP Instances Based on Real Travel Demand](https://arxiv.org/abs/2305.18859).
 
 ## Table of contents
-- [Instances and Results download](##Instance-and-Results-download)
-- [Instances structure](##Instances-structure)
-- [Results structure](##Results-structure)
-- [Instance creation](##Instance-creation)
-- [Citation](##Citation)
-- [License](##License)
+- [Instances and Results download](#Instances-and-Results-download)
+- [Instances structure](#Instances-structure)
+- [Results structure](#Results-structure)
+- [Instance creation](#Instance-creation)
+- [Citation](#Citation)
+- [License](#License)
 
 ## Instances and Results download
 
@@ -217,7 +217,7 @@ Following data sources were used to generate demand and travel time data:
 | Chicago                     | [City of Chicago](https://data.cityofchicago.org/Transportation/Taxi-Trips/wrvz-psew)              | [Census tracts and community areas]() | generated     |
 | Washington, DC              | [City of Washington, DC](https://opendata.dc.gov/search?q=taxi%20trips)                            | [Master Address Repository]()         | generated     |
 
-## Citiation
+## Citation
 When using the instances or the code, please cite the following [paper](https://arxiv.org/abs/2305.18859): 
 
 [1] D. Fiedler and J. Mrkos, “Large-scale Ridesharing DARP Instances Based on Real Travel Demand.” arXiv, May 30, 2023. doi: 10.48550/arXiv.2305.18859.
