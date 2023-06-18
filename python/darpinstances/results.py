@@ -233,6 +233,7 @@ def instance_results_to_dataframe(
 
 
 def rename_method(method_name: str) -> str:
+    logging.warning('Use conversion in methods.py instead')
     method_name = method_name.replace('ih', 'IH')
     method_name = method_name.replace('vga', 'VGA')
     method_name = method_name.replace('halns', 'HALNS')
