@@ -10,7 +10,7 @@ import darpinstances.instance_generation.instance_generation
 # base_filepath = r'C:\AIC Experiment Data\DARP'
 # base_filepath = r'D:\Google Drive/AIC Experiment Data\DARP'
 # config_filepath = f'{base_filepath}/Real Demand and speeds/NYC/experiments/final_experiments/05_min/config.yaml'
-config_filepath = r'D:\Workspaces\AIC\TradeOffsSMOD_V2\compute_plans\data\Chicago\DARP instance\instances\first experiment/config.yaml'
+config_filepath = r'C:\Google Drive/AIC Experiment Data\Article Michal/Chicago\instances\first_experiment/config.yaml'
 
 darpinstances.instance_generation.instance_generation.generate_instance(config_filepath)
 
