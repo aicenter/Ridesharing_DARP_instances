@@ -41,7 +41,7 @@ def _load_vehicle_positions_from_db(config: dict, nn_provider: NearestNodeProvid
     exp_time_horizon = _load_datetime(config['demand']['max_time']) - _load_datetime(config['demand']['min_time'])
     max_horizon = timedelta(hours=1)
 
-    horizon = min(exp_time_horizon, max_horizon)
+    horizon = max_horizon
     dataset_str = get_dataset_string(config)
     srid = int(config['map']['SRID_plane'])
 
