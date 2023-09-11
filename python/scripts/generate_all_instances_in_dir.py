@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import darpinstances.log
 import darpinstances.instance_generation.instance_generation
@@ -12,12 +13,12 @@ once if they does not exist.
 # root_path = r'C:\Google Drive/AIC Experiment Data\DARP\Real Demand and speeds/Chicago/experiments/final_experiments-more_vehicles'
 # root_path = r'C:\AIC Experiment Data\DARP\Real Demand and speeds/Chicago'
 
-root_path = r'C:\Google Drive\AIC Experiment Data\DARP\ITSC_instance_paper\Instances'
+root_path = r'C:\Google Drive\AIC Experiment Data\DARP\ITSC_instance_paper\Instances\Chicago\instances\start_07-00'
 
 
 for root, dir, files in os.walk(root_path):
     for file in files:
         filename = os.fsdecode(file)
         if filename == "config.yaml":
-            filepath = os.path.join(root, filename)
+            filepath = Path(root) / filename
             darpinstances.instance_generation.instance_generation.generate_instance(filepath)

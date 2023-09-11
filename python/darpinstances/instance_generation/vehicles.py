@@ -39,66 +39,45 @@ def _load_vehicle_positions_from_db(config: dict, nn_provider: NearestNodeProvid
     # desired_count = config['vehicles']['vehicle_count']
 
     exp_time_horizon = _load_datetime(config['demand']['max_time']) - _load_datetime(config['demand']['min_time'])
-    max_horizon = timedelta(hours=1)
 
-    horizon = min(exp_time_horizon, max_horizon)
+    horizon = exp_time_horizon
     dataset_str = get_dataset_string(config)
     srid = int(config['map']['SRID_plane'])
 
-    while count < desired_count and horizon < 2 * max_horizon:
-        veh_start = _load_datetime(config['vehicles']['start_time'])
+    veh_start = _load_datetime(config['vehicles']['start_time'])
 
-        # sql = f"""
-        # WITH vehicle_seed AS (SELECT setseed({vehicle_seed})),
-        # area AS (SELECT geom FROM areas WHERE id = {config['area_id']})
-        # SELECT
-        #     trip_locations.origin,
-        #     ST_X(nodes.geom) as x,
-        #     ST_X(st_transform(nodes.geom, {srid})) as x_utm,
-        #     ST_Y(nodes.geom) as y,
-        #     ST_Y(st_transform(nodes.geom, {srid})) as y_utm
-        # FROM demand
-        # JOIN trip_locations ON dataset IN({dataset_str})
-        #     AND origin_time BETWEEN '{veh_start - horizon / 2}' AND '{veh_start + horizon / 2}'
-        #     AND trip_locations.request_id = demand.id
-        # JOIN nodes on trip_locations.origin = nodes.id
-        # JOIN area ON st_within(nodes.geom, area.geom)
-        # ORDER BY random()
-        # LIMIT {desired_count}
-        # """
+    sql = f"""
+    WITH
+        area AS (SELECT geom FROM areas WHERE id = {config['area_id']}),
+        vd AS (
+        SELECT setseed({vehicle_ordering_seed}) AS seed, null AS origin, null AS x, null AS x_utm, null AS y, null AS y_utm
+        UNION ALL
+        SELECT
+            null AS seed,
+            trip_locations.origin,
+            ST_X(nodes.geom)                      as x,
+            ST_X(st_transform(nodes.geom, {srid})) as x_utm,
+            ST_Y(nodes.geom)                      as y,
+            ST_Y(st_transform(nodes.geom, {srid})) as y_utm
+        FROM demand
+              JOIN trip_locations ON dataset IN ({dataset_str})
+                 AND origin_time BETWEEN '{veh_start}' AND '{veh_start + horizon}'
+                 AND trip_locations.request_id = demand.id
+              JOIN nodes on trip_locations.destination = nodes.id
+              JOIN area ON st_within(nodes.geom, area.geom)
+        offset 1
+        )
+    
+    SELECT origin, x, x_utm, y, y_utm
+    FROM vd
+    ORDER BY random()
+    LIMIT {desired_count};
+    """
 
-        sql = f"""
-        WITH
-            area AS (SELECT geom FROM areas WHERE id = {config['area_id']}),
-            vd AS (
-            SELECT setseed({vehicle_ordering_seed}) AS seed, null AS origin, null AS x, null AS x_utm, null AS y, null AS y_utm
-            UNION ALL
-            SELECT
-                null AS seed,
-                trip_locations.origin,
-                ST_X(nodes.geom)                      as x,
-                ST_X(st_transform(nodes.geom, {srid})) as x_utm,
-                ST_Y(nodes.geom)                      as y,
-                ST_Y(st_transform(nodes.geom, {srid})) as y_utm
-            FROM demand
-                  JOIN trip_locations ON dataset IN ({dataset_str})
-                     AND origin_time BETWEEN '{veh_start - horizon / 2}' AND '{veh_start + horizon / 2}'
-                     AND trip_locations.request_id = demand.id
-                  JOIN nodes on trip_locations.origin = nodes.id
-                  JOIN area ON st_within(nodes.geom, area.geom)
-            offset 1
-            )
-        
-        SELECT origin, x, x_utm, y, y_utm
-        FROM vd
-        ORDER BY random()
-        LIMIT {desired_count};
-        """
-
-        positions = db.execute_query_to_pandas(sql)
-        count = len(positions)
-        if count < desired_count:
-            horizon *= 1.2
+    positions = db.execute_query_to_pandas(sql)
+    count = len(positions)
+    if count < desired_count:
+        raise RuntimeError(f"Could not find enough vehicle positions. Found {count} but {desired_count} were requested.")
 
     final_positions = assign_nearest_nodes(nn_provider, positions.x_utm, positions.y_utm, nn_provider.nodes)
     return final_positions

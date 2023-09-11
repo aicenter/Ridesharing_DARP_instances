@@ -5,6 +5,7 @@ import subprocess
 import numpy as np
 import geopandas as gpd
 import pandas as pd
+from pathlib import Path
 
 import darpinstances.instance_generation.map
 import darpinstances.instance_generation.demand_generation
@@ -65,7 +66,7 @@ def generate_dm(config: Dict, nodes: gpd.GeoDataFrame, edges: gpd.GeoDataFrame, 
         darpbenchmark.exec.call_executable(command)
 
 
-def generate_instance(config_filepath: str):
+def generate_instance(config_filepath: Path):
     config = load_instance_config(config_filepath)
 
     # set cwd to instance dir

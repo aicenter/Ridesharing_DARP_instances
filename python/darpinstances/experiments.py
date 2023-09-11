@@ -4,7 +4,7 @@ import os
 import yaml
 import re
 import pandas as pd
-from pathlib import PurePath
+from pathlib import PurePath, Path
 
 import darpinstances.exec
 import darpinstances.log
@@ -45,24 +45,29 @@ def write_experiment_config(path: str, params: dict):
 
 
 def generate_experiment_configs_for_instance(
-        full_result_root_dir,
-        methods: Dict[str, dict],
-        instance_path: PurePath
+    full_result_root_dir: Path,
+    methods: Dict[str, dict],
+    instance_path: PurePath,
+    overwrite: bool = True
 ):
     # create root dir for all methods solving a single instance
     os.makedirs(full_result_root_dir, exist_ok=True)
 
     for method_name, method_config in methods.items():
         # create dir for method
-        method_dir_full = os.path.join(full_result_root_dir, method_name)
+        method_dir_full = full_result_root_dir / method_name
         os.makedirs(method_dir_full, exist_ok=True)
 
-        experiment_config_path = os.path.join(method_dir_full, "config.yaml")
+        experiment_config_path = method_dir_full / "config.yaml"
 
         instance_rel_path = PurePath(os.path.relpath(instance_path, method_dir_full))
 
         config = {"instance": str(instance_rel_path.as_posix()), "outdir": '.'} | method_config
-        darpinstances.experiments.write_experiment_config(experiment_config_path, config)
+
+        if overwrite or not experiment_config_path.exists():
+            darpinstances.experiments.write_experiment_config(experiment_config_path, config)
+        else:
+            logging.info(f"Skipping config generation for {experiment_config_path} as it already exists")
 
 
 def generate_experiments_config_for_instance_series(

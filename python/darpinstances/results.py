@@ -383,7 +383,7 @@ def load_all_data_for_result(path: Path) -> Optional[Tuple[Dict,List]]:
     data['method'] = exp_config['method']
 
     instance_config_path = path / exp_config['instance']
-    instance_config = darpinstances.instance.load_instance_config(str(instance_config_path))
+    instance_config = darpinstances.instance.load_instance_config(instance_config_path)
     data['max_delay'] = int(instance_config['max_prolongation'])
     data['start_time'] = datetime.strptime(instance_config['demand']['min_time'], '%Y-%m-%d %H:%M:%S')
     data['end_time'] = datetime.strptime(instance_config['demand']['max_time'], '%Y-%m-%d %H:%M:%S')
@@ -407,7 +407,7 @@ def load_aggregate_stats_in_dir(path: Path, included_config_keys: Optional[List[
                 d = load_all_data_for_result(exp_config_filepath.parent)
                 if d is not None:
                     if included_config_keys is not None:
-                        config = darpinstances.experiments.load_experiment_config(str(exp_config_filepath))
+                        config = darpinstances.experiments.load_experiment_config(exp_config_filepath)
                         for key in included_config_keys:
                             if key in config:
                                 d[0][key] = config[key]

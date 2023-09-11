@@ -13,6 +13,7 @@ import logging
 from functools import singledispatchmethod
 import yaml
 import h5py
+from pathlib import Path
 
 import darpinstances.log
 from darpinstances.inout import check_file_exists
@@ -130,8 +131,8 @@ def _set_config_defaults(config: Dict, defaults: Dict):
                 config[key] = defaults[key]
 
 
-def load_instance_config(config_file_path: str) -> Dict:
-    config_file_path_abs = os.path.abspath(config_file_path)
+def load_instance_config(config_file_path: Path) -> Dict:
+    config_file_path_abs = config_file_path.absolute()
     logging.info(f"Loading instance config from {config_file_path_abs}")
     with open(config_file_path_abs, 'r') as config_file:
         try:
@@ -140,7 +141,7 @@ def load_instance_config(config_file_path: str) -> Dict:
             defaults = {
                 'instance_dir': os.path.dirname(config_file_path),
                 'map': {
-                    'path': os.path.join(config['area_dir'], 'map')
+                    'path': config_file_path.parent / 'map'
                 },
                 'demand': {
                     'type': 'generate',
@@ -178,7 +179,7 @@ def load_vehicles(vehicles_path: str) -> List[Vehicle]:
     return vehicles
 
 
-def read_instance(filepath: str) -> DARPInstance:
+def read_instance(filepath: Path) -> DARPInstance:
     instance_config = load_instance_config(filepath)
     instance_dir_path = os.path.dirname(filepath)
 
