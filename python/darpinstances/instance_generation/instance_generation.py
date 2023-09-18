@@ -90,7 +90,7 @@ def generate_instance(config_filepath: Path):
     # Generate vehicles
     logging.info("Generating vehicles")
     if 'vehicle_to_request_ratio' in config['vehicles']:
-        desired_vehicle_count = len(requests) * config['vehicles']['vehicle_to_request_ratio']
+        desired_vehicle_count = int(len(requests) * config['vehicles']['vehicle_to_request_ratio'])
     else:
         desired_vehicle_count = config['vehicles']['vehicle_count']
     darpinstances.instance_generation.vehicles.generate_vehicles(
