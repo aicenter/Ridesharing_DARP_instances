@@ -15,7 +15,9 @@ root_paths = [
     # darp_path / Path("Results/final-real_speeds/Manhattan"),
     # darp_path / Path("Results/final-real_speeds/Chicago-increased_start_time"),
     # darp_path / Path("Results/final-real_speeds/DC-more_vehicles")
-    darp_path / Path("ITSC_instance_paper/old/Results"),
+    # darp_path / Path("ITSC_instance_paper/old/Results"),
+
+    darp_path / "final/Results",
 ]
 
 logging.info('Checking solutions in the following root paths: \n%s', '\n'.join((str(path) for path in root_paths)))
@@ -45,7 +47,7 @@ last_instance = None
 for root, solution_path in zip(dir_df['root'], dir_df['solution path']):
     config_path = os.path.join(root, "config.yaml")
     experiment_config = darpinstances.experiments.load_experiment_config(config_path)
-    instance_path: str = experiment_config['instance']
+    instance_path = Path(experiment_config['instance'])
     if instance_path == last_instance_path:
         instance = last_instance
     else:
