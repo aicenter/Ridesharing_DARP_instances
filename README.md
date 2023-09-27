@@ -200,7 +200,7 @@ There are two files with meta-data for the solution, `ðŸ–º config.yaml` and `ðŸ–
 ## Instance Creation
 The methodology for the instance creation is described in the article. The process is divided into following steps:
 
-![FlowChart_v3-1.png](figures%2FFlowChart_v3-1.png)
+![FlowChart_v3-1.png](figures%2FFlowChart_v4.png)
 
 Many of the steps are implemented in the associated repository, byt some of them rely on external binaries. That is why the published dataset contains full distance matricies for every area instead of the instance-specific, smaller distance matricies.
 
