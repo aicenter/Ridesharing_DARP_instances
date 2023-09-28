@@ -9,7 +9,7 @@
 # Large-scale Ridesharing DARP Instances Based on Real Travel Demand
 
 [![arXiv link](http://img.shields.io/badge/Paper-arXiv%3A2305.18859-B31B1B.svg?style=flat)](https://arxiv.org/abs/2305.18859)
-[![Dataset DOI](https://img.shields.io/static/v1?label=Dataset&message=DOI%3A10.5281/zenodo.7986104&color=1682D4)](https://doi.org/10.5281/zenodo.7986104)
+[![Dataset DOI](https://img.shields.io/static/v1?label=Dataset&message=DOI%3A10.5281/zenodo.8383570&color=1682D4)](https://doi.org/10.5281/zenodo.8383570)
 ![Licence badge](https://img.shields.io/github/license/aicenter/Ridesharing_DARP_instances)
 
 This repository presents a set of large-scale ridesharing Dial-a-Ride Problem (DARP) instances. The instances were created as a standardized set of ridesharing DARP problems for the purpose of benchmarking and comparing different solution methods.  
@@ -28,7 +28,7 @@ The instances and results of two solution methods, the Insertion Heuristic and t
 
 ## Instances and Results download
 
-[![Dataset DOI](https://img.shields.io/static/v1?label=Dataset&message=DOI%3A10.5281/zenodo.7986104&color=1682D4)](https://doi.org/10.5281/zenodo.7986104)
+[![Dataset DOI](https://img.shields.io/static/v1?label=Dataset&message=DOI%3A10.5281/zenodo.8383570&color=1682D4)](https://doi.org/10.5281/zenodo.8383570)
 
 The dataset of instances and associated results are available through the dataset repository Zenodo. The dataset is compressed by [7zip](https://7-zip.org/) to adhere to the Zenodo dataset size limits, with some of the archives split into multiple parts. The distance matrices, instances, and results are in separate archives. However, the folder structure inside the archives follows the schema described below. Thus, unpacking the distance matrix archives places them in an appropriate directory in the `Instances` folder.  The dataset is licensed under the [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/) license.
 
