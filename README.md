@@ -208,6 +208,14 @@ Many of the steps are implemented in the associated repository, but some of them
 
 [//]: # (## Demand and Vehicle Processing)
 
+### Sizing
+The sizing of the instances is perfomed with the insertion heuristic (IH): 
+
+1. We find the lowest number of vehicles for an instance for which the IH solution drops 0 requests. 
+2. We multiply this number by 1.05, adding a buffer of 5% of vehicles. 
+
+This number is then used in all the experimental results.
+
 ### Public Datasets used in the creation of the instances
 The following data sources were used to generate demand and travel time data:
 
