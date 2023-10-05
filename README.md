@@ -16,7 +16,12 @@ This repository presents a set of large-scale ridesharing Dial-a-Ride Problem (D
 
 The instances are based on real demand and realistic travel time data from 3 different US cities, Chicago, New York City and Washington, DC. The instances consist of real travel requests from the selected period, positions of vehicles with their capacities and realistic shortest travel times between all pairs of locations in each city.
 
-The instances and results of two solution methods, the Insertion Heuristic and the optimal Vehicle-group Assignment method, can be found in the linked dataset. The dataset and methodology used to create it are described in the paper [Large-scale Ridesharing DARP Instances Based on Real Travel Demand](https://arxiv.org/abs/2305.18859).
+The instances and results of two solution methods, the Insertion Heuristic and the optimal Vehicle-group Assignment method, can be found in the linked dataset.
+
+The dataset and methodology used to create it are described in the paper [Large-scale Ridesharing DARP Instances Based on Real Travel Demand](https://arxiv.org/abs/2305.18859). This paper was accepted to the [Intelligent Transportation Systems Conference 2023](https://2023.ieee-itsc.org/) ([see the PowerPoint presentation](./presentation-final.pptx)).
+
+
+
 
 ## Table of contents
 - [Instances and Results download](#Instances-and-Results-download)
