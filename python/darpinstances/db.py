@@ -170,7 +170,11 @@ class __Database:
         # with self._psycopg2_connection as con:
         #     with con.cursor() as curs:
         #         curs.execute(query, *args)
-        self._sqlalchemy_engine.execute(query, *args)
+
+        # self._sqlalchemy_engine.execute(query, *args)
+
+        with self._sqlalchemy_engine.connect() as conn:
+            result = conn.execute(sqlalchemy.text(query), *args)
 
     @connect_db_if_required
     def execute_sql_and_fetch_all_rows(self, query, *args) -> list[Row]:

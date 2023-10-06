@@ -1,0 +1,5 @@
+Area name,Demand data source,Zone data source,Request times,req./h/km\textsuperscript{2},Avg. zone area [km\textsuperscript{2}]
+New York City,NYC Taxi and Limousine Commission,NYC taxi zones,exact,27.522584484358205,3.0130936482972017
+Manhattan,NYC Taxi and Limousine Commission,NYC taxi zones,exact,475.2113351748743,1.0380044144612723
+Chicago,City of Chicago,Census tracts and community areas,generated,1.166357686039028,1.3375124160346374
+"Washington, DC","City of Washington, DC",Master Address Repository,generated,3.645636149105084,0.013118971526678918
