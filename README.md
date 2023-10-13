@@ -38,10 +38,6 @@ The dataset and methodology used to create it are described in the paper [Large-
 The dataset of instances and associated results are available through the dataset repository Zenodo. The dataset is compressed by [7zip](https://7-zip.org/) to adhere to the Zenodo dataset size limits, with some of the archives split into multiple parts. The distance matrices, instances, and results are in separate archives. However, the folder structure inside the archives follows the schema described below. Thus, unpacking the distance matrix archives places them in an appropriate directory in the `Instances` folder.  The dataset is licensed under the [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/) license.
 
 
-[![G-drive link](https://img.shields.io/badge/Dataset-Bleeding%20Edge-%234285F4?logo=googledrive)](https://drive.google.com/drive/folders/1iTwpQUZdbSC_5kdEb5-eFw2tLPBNnTxh?usp=sharing)
-
-The latest, unversioned variant of the dataset can be downloaded from Google Drive. Note that the full distance matrix files that represent the travel time model are up to 45 GB in size. This latest version of the dataset contains additional undocumented meta-data and may contain results of additional solution methods not described in the paper.
-
 ## Instances structure
 
 The instances are organized into directories based on their parameters. That is, an instance in an *area*, with a given *_start time_*, *duration* and *max delay* $\Delta$ is in the following directory structure:
