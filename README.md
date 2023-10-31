@@ -16,7 +16,12 @@ This repository presents a set of large-scale ridesharing Dial-a-Ride Problem (D
 
 The instances are based on real demand and realistic travel time data from 3 different US cities, Chicago, New York City and Washington, DC. The instances consist of real travel requests from the selected period, positions of vehicles with their capacities and realistic shortest travel times between all pairs of locations in each city.
 
-The instances and results of two solution methods, the Insertion Heuristic and the optimal Vehicle-group Assignment method, can be found in the linked dataset. The dataset and methodology used to create it are described in the paper [Large-scale Ridesharing DARP Instances Based on Real Travel Demand](https://arxiv.org/abs/2305.18859).
+The instances and results of two solution methods, the Insertion Heuristic and the optimal Vehicle-group Assignment method, can be found in the linked dataset.
+
+The dataset and methodology used to create it are described in the paper [Large-scale Ridesharing DARP Instances Based on Real Travel Demand](https://arxiv.org/abs/2305.18859). This paper was accepted to the [Intelligent Transportation Systems Conference 2023](https://2023.ieee-itsc.org/) ([see the PowerPoint presentation](./presentation-final.pptx)).
+
+
+
 
 ## Table of contents
 - [Instances and Results download](#Instances-and-Results-download)
@@ -32,10 +37,6 @@ The instances and results of two solution methods, the Insertion Heuristic and t
 
 The dataset of instances and associated results are available through the dataset repository Zenodo. The dataset is compressed by [7zip](https://7-zip.org/) to adhere to the Zenodo dataset size limits, with some of the archives split into multiple parts. The distance matrices, instances, and results are in separate archives. However, the folder structure inside the archives follows the schema described below. Thus, unpacking the distance matrix archives places them in an appropriate directory in the `Instances` folder.  The dataset is licensed under the [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/) license.
 
-
-[![G-drive link](https://img.shields.io/badge/Dataset-Bleeding%20Edge-%234285F4?logo=googledrive)](https://drive.google.com/drive/folders/1iTwpQUZdbSC_5kdEb5-eFw2tLPBNnTxh?usp=sharing)
-
-The latest, unversioned variant of the dataset can be downloaded from Google Drive. Note that the full distance matrix files that represent the travel time model are up to 45 GB in size. This latest version of the dataset contains additional undocumented meta-data and may contain results of additional solution methods not described in the paper.
 
 ## Instances structure
 
@@ -207,6 +208,14 @@ Many of the steps are implemented in the associated repository, but some of them
 [//]: # (## Road Network Processing)
 
 [//]: # (## Demand and Vehicle Processing)
+
+### Sizing
+The sizing of the instances is perfomed with the insertion heuristic (IH): 
+
+1. We find the lowest number of vehicles for an instance for which the IH solution drops 0 requests. 
+2. We multiply this number by 1.05, adding a buffer of 5% of vehicles. 
+
+This number is then used in all the experimental results.
 
 ### Public Datasets used in the creation of the instances
 The following data sources were used to generate demand and travel time data:
