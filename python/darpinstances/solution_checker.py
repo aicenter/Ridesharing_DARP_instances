@@ -1,7 +1,7 @@
 import os.path
 from pathlib import Path
 from typing import Tuple, Set, Optional
-import sys
+import os
 
 import darpinstances.experiments
 import darpinstances.inout
@@ -14,7 +14,7 @@ from darpinstances.solution import VehiclePlan, Solution
 
 darp_folder_path = Path("C:\Google Drive/AIC Experiment Data\DARP")
 # darp_folder_path = r"D:\Google Drive/AIC Experiment Data\DARP"
-instance_path = None
+# instance_path = None
 # solution_file_path = r"C:\AIC Experiment Data\DARP\Results\Real Demand\NYC memory benchmark/config.yaml-solution.json"
 # solution_file_path = r"C:\AIC Experiment Data\DARP\Results\Real Demand\Manhattan/vga_chaining-batch_30_s/config.yaml-solution.json"
 # solution_file_path = r"C:\AIC Experiment Data\DARP\Results\Manhattan/max_delay-exp_length_SA-min_vehicles/exp_length_900_s-max_delay_5/vga_chaining-batch_length_30_s/instance-trips-max_delay_300-time_to_start_120-vehicle_capacity_4.di-solution.json"
@@ -26,11 +26,16 @@ instance_path = None
 # solution_file_path = darp_folder_path + r"\Results\final-real_speeds\NYC\05_min/ih/config.yaml-solution.json"
 # solution_file_path = darp_folder_path + r"\Results\ihtest/config.yaml-solution.json"
 # solution_file_path = darp_folder_path / r"ITSC_instance_paper\old\incorrect results\DC\start_18-00\duration_015_min\max_delay_03_min\halns/config.yaml-solution.json"
-solution_file_path = darp_folder_path / r"C:\\Google Drive/AIC Experiment Data\\DARP/Results/test/config.yaml-solution.json"
 # solution_file_path = r'C:\Google Drive\AIC Experiment Data\DARP\final\Results\DC\start_18-00\duration_01_min\max_delay_03_min\halns/config.yaml-solution.json'
 # instance_path = darp_folder_path / r'final\Instances\DC\instances\start_18-00\duration_01_min\max_delay_03_min/config.yaml'
 # instance_path = darp_folder_path / r'final\Instances\DC\instances\start_18-00\duration_01_min\max_delay_03_min/config.yaml'
-solution_file_path = darp_folder_path / r"C:\Google Drive\AIC Experiment Data\DARP\final\Results\Chicago\start_18-00\duration_05_min\max_delay_03_min\halns-ih/config.yaml-solution.json"
+# solution_file_path = darp_folder_path / r"C:\Google Drive\AIC Experiment Data\DARP\final\Results\Chicago\start_18-00\duration_05_min\max_delay_03_min\halns-ih/config.yaml-solution.json"
+
+# test HALNS instance
+# instance_path = darp_folder_path / r'final/Instances/Chicago/instances/start_18-00/duration_05_min/max_delay_03_min/config.yaml'
+instance_path = darp_folder_path / r'final/Instances/Chicago/instances/start_18-00/duration_01_min/max_delay_03_min/config.yaml'
+solution_file_path = darp_folder_path / r"C:\\Google Drive/AIC Experiment Data\\DARP/test/config.yaml-solution.json"
+
 
 
 def load_data(solution_file_path: Path, instance_path: Optional[Path]) -> Tuple[DARPInstance, Solution]:
@@ -126,8 +131,8 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
 
         # arrival time check
         if action_data.arrival_time != time:
-            print("[{}. plan, {}. Action] Arrival time mismatch (expected {}, was {}) when handling request {}".format(
-                plan_counter, action_index + 1, time, action_data.arrival_time, action_data.action.request.index))
+            print(f"[{plan_counter}. plan, {action_index + 1}. Action] Arrival time mismatch (expected {time}, "
+                  f"was {action_data.arrival_time}) when handling request {action_data.action.request.index}")
 
         # max time check
         if time > action_data.action.max_time:
@@ -254,7 +259,7 @@ if __name__ == '__main__':
         exp_config_path = solution_file_path.parent / "config.yaml"
         experiment_config = darpinstances.experiments.load_experiment_config(exp_config_path)
         instance_path: Path(experiment_config['instance'])
-        sys.chdir(solution_file_path.parent)
+        os.chdir(solution_file_path.parent)
 
     instance, solution = load_data(solution_file_path, instance_path)
     check_solution(instance, solution)
