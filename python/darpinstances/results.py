@@ -376,6 +376,8 @@ def load_all_data_for_result(path: Path) -> Optional[Tuple[Dict,List]]:
     if type(result) is list:
         if len(result) == 0:
             return None
+    elif 'plans' not in result:
+        return None
     data, occupancies = get_processed_results(result, performance, return_as_dict=True)
 
     config_path = path / 'config.yaml'
