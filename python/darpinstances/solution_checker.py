@@ -52,9 +52,9 @@ def load_data(solution_file_path: Path, instance_path: Optional[Path]) -> Tuple[
     # solution = darpbenchmark.cordeau_benchmark.load_cordeau_solution(cordeau_solution_path, vehicle_map, request_map)
 
 
-def load_instance(instance_path: Path) -> Tuple[DARPInstance, TravelTimeProvider]:
+def load_instance(instance_path: Path, travel_time_provider=None) -> Tuple[DARPInstance, TravelTimeProvider]:
     if instance_path.suffix == '.yaml':
-        instance = darpinstances.instance.read_instance(instance_path)
+        instance = darpinstances.instance.read_instance(instance_path, travel_time_provider)
         travel_time_provider = instance.travel_time_provider
     else:
         instance = load_cordeau(instance_path)

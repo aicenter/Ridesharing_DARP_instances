@@ -7,7 +7,7 @@ from darpinstances.vehicle_plan import VehiclePlan, ActionData
 
 
 class Solution:
-    def __init__(self, vehicle_plans: List[VehiclePlan], cost: int, dropped_requests=Optional[Set[int]]):
+    def __init__(self, vehicle_plans: List[VehiclePlan], cost: int, dropped_requests=Optional[Set[int]], feasible=True):
         """
         Constructor
         :param vehicle_plans: List of vehicle plans
@@ -16,10 +16,15 @@ class Solution:
         """
         self.vehicle_plans = vehicle_plans
         self.cost = cost
+        self.feasible = True
         if dropped_requests is None:
             self.dropped_requests = []
         else:
             self.dropped_requests = dropped_requests
+
+    @classmethod
+    def make_infeasible(cls):
+        return cls([], 0, None, False)
 
     def __str__(self):
         return 'solution: cost {}.\nPlans: {}.' \
@@ -28,6 +33,10 @@ class Solution:
 
 def load_solution(filepath: str, instance: DARPInstance) -> Solution:
     json_data = load_json(filepath)
+
+    # handle infesible solutions
+    if "feasible" in json_data and json_data["feasible"] == False:
+        return Solution.make_infeasible()
 
     request_map, vehicle_map = _prepare_maps(instance)
 

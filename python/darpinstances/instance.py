@@ -179,7 +179,7 @@ def load_vehicles(vehicles_path: str) -> List[Vehicle]:
     return vehicles
 
 
-def read_instance(filepath: Path) -> DARPInstance:
+def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider = None) -> DARPInstance:
     instance_config = load_instance_config(filepath)
     instance_dir_path = os.path.dirname(filepath)
 
@@ -189,18 +189,21 @@ def read_instance(filepath: Path) -> DARPInstance:
     instance_path = instance_config['demand']['filepath']
     check_file_exists(instance_path)
 
-    if 'dm_filepath' in instance_config:
-        dm_filepath = instance_config['dm_filepath']
-    # by default, the dm is located in the are folder
-    else:
-        dm_filepath = os.path.join(instance_config['area_dir'], 'dm.h5')
-    check_file_exists(dm_filepath)
-
     vehicles_path = os.path.join(instance_dir_path, 'vehicles.csv')
     check_file_exists(vehicles_path)
 
-    logging.info("Reading dm from: {}".format(os.path.realpath(dm_filepath)))
-    travel_time_provider = MatrixTravelTimeProvider.read_from_file(dm_filepath)
+    # dm loading
+    if travel_time_provider is None:
+        if 'dm_filepath' in instance_config:
+            dm_filepath = instance_config['dm_filepath']
+        # by default, the dm is located in the are folder
+        else:
+            dm_filepath = os.path.join(instance_config['area_dir'], 'dm.h5')
+        check_file_exists(dm_filepath)
+        logging.info("Reading dm from: {}".format(os.path.realpath(dm_filepath)))
+        travel_time_provider = MatrixTravelTimeProvider.read_from_file(dm_filepath)
+    else:
+        logging.info("Using provided travel time provider")
 
     logging.info("Reading DARP instance from: {}".format(os.path.realpath(instance_path)))
     with open(instance_path, "r", encoding="utf-8") as infile:

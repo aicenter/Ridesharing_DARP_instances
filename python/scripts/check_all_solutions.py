@@ -4,11 +4,12 @@ import os
 
 import pandas as pd
 
-import darpinstances.inout
+import darpinstances.solution
 import darpinstances.experiments
 import darpinstances.solution_checker
 
-darp_path = Path(r"C:\Google Drive/AIC Experiment Data\DARP")
+# darp_path = Path(r"C:\Google Drive/AIC Experiment Data\DARP")
+darp_path = Path(r"D:\Google Drive AIC/AIC Experiment Data\DARP")
 
 root_paths = [
     # darp_path / Path("Results/final-real_speeds/NYC-increased_start_time"),
@@ -38,26 +39,36 @@ for root_path in root_paths:
                 break
 
 dir_df = pd.DataFrame(dirs, columns=["root", "solution path"])
-
 logging.info("%d solutions found", len(dir_df))
+
+# sort by area
+dir_df['area'] = dir_df['root'].apply(lambda path: Path(path).parts[-5])
+dir_df.sort_values(by=['area'], inplace=True)
 
 stats = {}
 last_instance_path = None
 last_instance = None
-for root, solution_path in zip(dir_df['root'], dir_df['solution path']):
+travel_time_provider = None
+last_area = None
+for root, solution_path, area in zip(dir_df['root'], dir_df['solution path'], dir_df['area']):
     config_path = os.path.join(root, "config.yaml")
     experiment_config = darpinstances.experiments.load_experiment_config(config_path)
     instance_path = Path(experiment_config['instance'])
     if instance_path == last_instance_path:
         instance = last_instance
     else:
-        instance, _ = darpinstances.solution_checker.load_instance(instance_path)
+        if last_area == area:
+            instance, _ = darpinstances.solution_checker.load_instance(instance_path, last_instance.travel_time_provider)
+        else:
+            instance, _ = darpinstances.solution_checker.load_instance(instance_path)
 
-    solution = darpinstances.inout.load_solution(solution_path, instance)
-    stats[solution_path] = darpinstances.solution_checker.check_solution(instance, solution)
+    solution = darpinstances.solution.load_solution(solution_path, instance)
+    if solution.feasible:
+        stats[solution_path] = darpinstances.solution_checker.check_solution(instance, solution)
 
     last_instance_path = instance_path
     last_instance = instance
+    last_area = area
 
 stat_df = pd.DataFrame(stats.items())
 stat_df.columns = ['solution path', 'ok']
