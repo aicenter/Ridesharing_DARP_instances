@@ -16,7 +16,7 @@ class Solution:
         """
         self.vehicle_plans = vehicle_plans
         self.cost = cost
-        self.feasible = True
+        self.feasible = feasible
         if dropped_requests is None:
             self.dropped_requests = []
         else:
