@@ -397,29 +397,38 @@ def load_all_data_for_result(path: Path) -> Optional[Tuple[Dict,List]]:
     return data, occupancies
 
 
-def load_aggregate_stats_in_dir(path: Path, included_config_keys: Optional[List[str]] = None) -> pd.DataFrame:
+def load_aggregate_stats_in_dir(path: Path, included_config_keys: Optional[List[str]] = None, path_regex: Optional[str] = None) -> pd.DataFrame:
     logging.info(f"Loading aggregate stats in {path}")
     data = []
 
-    for root, dir, files in os.walk(path):
-        for file in files:
-            filename = os.fsdecode(file)
-            if filename == "config.yaml":
-                exp_config_filepath = Path(root) / filename
-                d = load_all_data_for_result(exp_config_filepath.parent)
-                if d is not None:
-                    if included_config_keys is not None:
-                        config = darpinstances.experiments.load_experiment_config(exp_config_filepath)
-                        for key in included_config_keys:
-                            if key in config:
-                                d[0][key] = config[key]
-                    data.append(d[0])
+    if path_regex is not None:
+        path_regex = re.compile(path_regex)
+
+    for file in path.rglob("*/config.yaml"):
+        if path_regex is not None:
+            if not path_regex.search(str(file.as_posix())):
+                continue
+        d = load_all_data_for_result(file.parent)
+        if d is not None:
+            if included_config_keys is not None:
+                config = darpinstances.experiments.load_experiment_config(str(file))
+                for key in included_config_keys:
+                    if key in config:
+                        d[0][key] = config[key]
+            data.append(d[0])
 
     df = pd.DataFrame(data)
 
     columns = ['method']
+
+    # config keys to include
+    empty_columns = []
     for key in included_config_keys:
-        columns.append(key)
+        if key not in df.columns:
+            empty_columns.append(key)
+        else:
+            columns.append(key)
+
     columns.extend([
         'cost_minutes',
         'total_time',
@@ -441,6 +450,8 @@ def load_aggregate_stats_in_dir(path: Path, included_config_keys: Optional[List[
     ])
 
     df = pd.DataFrame(df[columns])
+    for col in empty_columns:
+        df[col] = None
 
     return df
 
