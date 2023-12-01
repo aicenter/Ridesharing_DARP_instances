@@ -139,8 +139,8 @@ In addition to the main instance files, the instance and area folders contain se
 - `🖺 nodes.csv` contains information about processed road network nodes in the area. The file uses `<tab>` as a separator and contains four columns with a header:
   - `id` - node index in the distance matrix
   - `db_id` - node id in the database that was used for the  instance generation
-  - `x` - node x coordinate in the map plannar projection 
-  - `y` - node y coordinate in the map plannar projection
+  - `x` - node x coordinate in the map planar projection 
+  - `y` - node y coordinate in the map planar projection
 - `🖺 edges.csv` contains information about processed road network edges in the area, including the speed. The file uses `<tab>` as a separator and contains six columns with a header:
   - `u` - from node `id`
   - `v` - to node `id`
@@ -184,16 +184,16 @@ The solution is stored in `🗎 config.yaml-solution.json` and contains the foll
 - `dropped_requests` - list of requests that were dropped in this solution.
 - `plans` - list of vehicle plans; each plan contains a list of actions determining which requests are served by the given vehicle and in which order. The actions are "pickup" and "drop_off".
 
-All locations in the solution file are node ids from the road network. The node ids are the same as in the `🖺 nodes.csv` file in the instance folder. All times are in seconds from the start of the day.
+All locations in the solution file are node IDs from the road network. The node IDs are the same as in the `🖺 nodes.csv` file in the instance folder. All times are in seconds from the start of the day.
 
-A complete description of the solution format is given by the [json schema](solution_schema.json) in this repository.
+A complete description of the solution format is given by the [JSON schema](solution_schema.json) in this repository.
 
 ### Solution meta-data
 There are two files with meta-data for the solution, `🖺 config.yaml` and `🖺 config.yaml-performance.json`
 
-`🖺 config.yaml` file contains the experiment configuration, such as the relative path to the instance, method specific configuration and so on. 
+`🖺 config.yaml` file contains the experiment configuration, such as the relative path to the instance, method-specific configuration and so on. 
 
-`🖺 config.yaml-performance.json` file contains logged information on the run of the solver. The json has the following fields
+`🖺 config.yaml-performance.json` file contains logged information on the run of the solver. The JSON has the following fields
 - `total_time` - total time of the solver run in seconds
 - `peak_memory_KiB` - peak memory usage of the solver in KiB
 - `solver_stats`- solver-specific statistics, if available. For example, for the VGA method, `group_generation_time` and `vehicle_assignment_time` are logged separately.
@@ -210,7 +210,7 @@ Many of the steps are implemented in the associated repository, but some of them
 [//]: # (## Demand and Vehicle Processing)
 
 ### Sizing
-The sizing of the instances is perfomed with the insertion heuristic (IH): 
+The sizing of the instances is performed with the insertion heuristic (IH): 
 
 1. We find the lowest number of vehicles for an instance for which the IH solution drops 0 requests. 
 2. We multiply this number by 1.05, adding a buffer of 5% of vehicles. 
@@ -231,7 +231,7 @@ When using the instances or the code, please cite the following [paper](https://
 
 [1] D. Fiedler and J. Mrkos, “Large-scale Ridesharing DARP Instances Based on Real Travel Demand.” arXiv, May 30, 2023. doi: 10.48550/arXiv.2305.18859.
 
-Bibtext entry:
+Bibtex entry:
 ```bibtex
 @misc{fiedler2023largescale,
       title={Large-scale Ridesharing DARP Instances Based on Real Travel Demand}, 
