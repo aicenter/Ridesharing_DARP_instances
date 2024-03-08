@@ -82,7 +82,6 @@ class MatrixTravelTimeProvider(TravelTimeProvider):
             return cls.from_hdf(dm_filepath)
 
 
-
 class DARPInstanceConfiguration:
     def __init__(
         self,
@@ -179,6 +178,53 @@ def load_vehicles(vehicles_path: str) -> List[Vehicle]:
     return vehicles
 
 
+equipment_list = [
+    "NONE",
+    "STANDARD_SEAT",
+    "WHEELCHAIR",
+    "ELECTRIC_WHEELCHAIR",
+    "MEDICAL_STROLLER",
+]
+
+
+def get_equipment_int(str):
+    if str in equipment_list:
+        return equipment_list.index(str)
+    else:
+        return -1
+
+
+def load_vehicles_from_json(vehicles_path: str) -> List[Vehicle]:
+    veh_data = darpinstances.inout.load_json(vehicles_path)
+    vehicles = []
+    list = veh_data["vehicles"]
+    for index, veh in enumerate(list):
+        equipment = []
+        if "slots" in veh:
+            for item in veh["slots"]:
+                count = int(item["count"])
+                type = get_equipment_int(item["type"])
+                for n in range(count):
+                    equipment.append(type)
+        elif "configurations" in veh:
+            counters = [0] * len(equipment_list)
+            for item in veh["configurations"]:
+                logging.info("configuration: %s", item)
+                for equipment_name in equipment_list:
+                    id = get_equipment_int(equipment_name)
+                    count = int(item.get(equipment_name, 0))
+                    counters[id] = count if count > counters[id] else counters[id]
+            for n in range(len(counters)):
+                logging.info("counter: %d, value: %d", n, counters[n])
+                for i in range(counters[n]):
+                    equipment.append(n)
+        vehicles.append(
+            Vehicle(index, Node(int(veh["station_index"])), len(equipment), equipment)
+        )
+
+    return vehicles
+
+
 def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider = None) -> DARPInstance:
     instance_config = load_instance_config(filepath)
     instance_dir_path = os.path.dirname(filepath)
@@ -189,7 +235,7 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
     instance_path = instance_config['demand']['filepath']
     check_file_exists(instance_path)
 
-    vehicles_path = os.path.join(instance_dir_path, 'vehicles.csv')
+    vehicles_path = os.path.join(instance_dir_path, 'vehicles.json')
     check_file_exists(vehicles_path)
 
     # dm loading
@@ -207,25 +253,29 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
 
     logging.info("Reading DARP instance from: {}".format(os.path.realpath(instance_path)))
     with open(instance_path, "r", encoding="utf-8") as infile:
-        vehicles = load_vehicles(vehicles_path)
+        vehicles = load_vehicles_from_json(vehicles_path)
 
         requests: List[Request] = []
 
         line_string = infile.readline()
+        line_string = infile.readline()
         action_id = 0
+        index = 0
         while (line_string):
             line = line_string.split()
-            request_id: int = int(line[0])
-            request_time: int = int(line[1]) / 1000
-            start_node = Node(int(line[2]))
-            end_node = Node(int(line[3]))
+            request_id: int = int(index)
+            request_time: int = int(line[0]) / 1000
+            start_node = Node(int(line[1]))
+            end_node = Node(int(line[2]))
+            equipment = [get_equipment_int(line[4])]
             min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
             max_pickup_time = request_time + int(instance_config['max_prolongation'])
             requests.append(Request(request_id, action_id, start_node, request_time, max_pickup_time,
                                     action_id + 1, end_node, request_time + min_travel_time,  max_pickup_time + min_travel_time,
-                                    min_travel_time))
+                                    min_travel_time, 0, 0, equipment))
             line_string = infile.readline()
             action_id += 2
+            index += 1
 
         start_time = instance_config['vehicles']['start_time']
         if not isinstance(start_time, int):
@@ -243,5 +293,3 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
 @MatrixTravelTimeProvider.get_travel_time.register
 def _(self, from_node: Node, to_dode: Node):
     return self.get_travel_time(from_node.idx, to_dode.idx)
-
-

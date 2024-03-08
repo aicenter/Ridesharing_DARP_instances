@@ -247,6 +247,16 @@ def check_solution(instance: DARPInstance, solution: Solution) -> Tuple[bool, Di
                                                                                                           total_cost))
         solution_ok = False
 
+    # equipment check
+    equipment = plan.vehicle.equipment
+    for item in request.equipment:
+        if item in equipment:
+            equipment.remove(item)
+        else:
+            print("Equipment {} not in vehicle equipment list.".format(item))
+            solution_ok = False
+            break
+
     if solution_ok:
         logging.info("Solution OK")
     else:
