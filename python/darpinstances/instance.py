@@ -209,13 +209,11 @@ def load_vehicles_from_json(vehicles_path: str) -> List[Vehicle]:
         elif "configurations" in veh:
             counters = [0] * len(equipment_list)
             for item in veh["configurations"]:
-                logging.info("configuration: %s", item)
                 for equipment_name in equipment_list:
                     id = get_equipment_int(equipment_name)
                     count = int(item.get(equipment_name, 0))
                     counters[id] = count if count > counters[id] else counters[id]
             for n in range(len(counters)):
-                logging.info("counter: %d, value: %d", n, counters[n])
                 for i in range(counters[n]):
                     equipment.append(n)
         vehicles.append(
