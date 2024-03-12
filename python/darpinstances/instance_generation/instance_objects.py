@@ -35,7 +35,7 @@ class Action:
 class Request:
     def __init__ (self, index: int, pickup_id: int, pickup_node, pickup_min_time: int, pickup_max_time: int,
                   dropoff_id: int, drop_off_node, drop_off_min_time: int,
-                  drop_off_max_time: int, min_travel_time: int, pickup_service_time: int = 0, drop_off_service_time: int = 0, equipment: List[int] = []):
+                  drop_off_max_time: int, min_travel_time: int, pickup_service_time: int = 0, drop_off_service_time: int = 0, equipment: int = 0):
         self.index = index
         self.pickup_action \
             = Action(pickup_id, pickup_node, pickup_min_time, pickup_max_time,
@@ -48,11 +48,11 @@ class Request:
 
 
 class Vehicle:
-    def __init__(self, index: int, initial_position, capacity: int, equipment: List[int]):
+    def __init__(self, index: int, initial_position, capacity: int, configurations: List[List[int]]):
         self.index = index
         self.initial_position = initial_position
         self.capacity = capacity
-        self.equipment = equipment
+        self.configurations = configurations
 
 
 class VirtualVehicle(Vehicle):

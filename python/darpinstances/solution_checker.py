@@ -248,14 +248,27 @@ def check_solution(instance: DARPInstance, solution: Solution) -> Tuple[bool, Di
         solution_ok = False
 
     # equipment check
-    equipment = plan.vehicle.equipment
-    for item in request.equipment:
-        if item in equipment:
-            equipment.remove(item)
-        else:
-            print("Equipment {} not in vehicle equipment list.".format(item))
-            solution_ok = False
-            break
+    for plan in solution.vehicle_plans:
+        vehicle_configurations = plan.vehicle.configurations
+        used_equipment = []
+        for action in plan.actions:
+            matching_configurations = [config for config in vehicle_configurations if any(num in used_equipment for num in config)]
+            available_configurations = vehicle_configurations if not used_equipment else matching_configurations
+            for config in available_configurations:
+                for item in used_equipment:
+                    if item in config:
+                        config.remove(item)
+
+            equipment = action.action.request.equipment
+            # logging.info("%s Request equipment: %s, used:%s, available configs: %s",action.action.action_type, equipment, used_equipment,available_configurations)
+            if action.action.action_type == ActionType.PICKUP:
+                if not any(equipment in config for config in available_configurations):
+                    print("Equipment {} not available in vehicle equipment list.".format(equipment))
+                    solution_ok = False
+                used_equipment.append(equipment)
+            elif action.action.action_type == ActionType.DROP_OFF:
+                used_equipment.remove(equipment)
+
 
     if solution_ok:
         logging.info("Solution OK")
