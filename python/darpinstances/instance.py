@@ -82,7 +82,6 @@ class MatrixTravelTimeProvider(TravelTimeProvider):
             return cls.from_hdf(dm_filepath)
 
 
-
 class DARPInstanceConfiguration:
     def __init__(
         self,
@@ -174,7 +173,56 @@ def load_vehicles(vehicles_path: str) -> List[Vehicle]:
     veh_data = darpinstances.inout.load_csv(vehicles_path, "\t")
     vehicles = []
     for index, veh in enumerate(veh_data):
-        vehicles.append(Vehicle(index, Node(int(veh[0])), int(veh[1])))
+        vehicles.append(Vehicle(index, Node(int(veh[0])), int(veh[1]),[]))
+
+    return vehicles
+
+class EquipmentType(Enum):
+    NONE = 0
+    STANDARD_SEAT = 1
+    WHEELCHAIR = 2
+    ELECTRIC_WHEELCHAIR = 3
+    MEDICAL_STROLLER = 4
+
+
+def map_equipment_type(equipment_str: str) -> EquipmentType:
+    equipment_mapping = {
+        "NONE": EquipmentType.NONE,
+        "STANDARD_SEAT": EquipmentType.STANDARD_SEAT,
+        "WHEELCHAIR": EquipmentType.WHEELCHAIR,
+        "ELECTRIC_WHEELCHAIR": EquipmentType.ELECTRIC_WHEELCHAIR,
+        "MEDICAL_STROLLER": EquipmentType.MEDICAL_STROLLER
+    }
+    return equipment_mapping.get(equipment_str, EquipmentType.NONE)
+
+def load_vehicles_from_json(vehicles_path: str) -> List[Vehicle]:
+    veh_data = darpinstances.inout.load_json(vehicles_path)
+    vehicles = []
+    list = veh_data["vehicles"]
+    for index, veh in enumerate(list):
+        configurations = []
+        if "slots" in veh:
+            equipment = []
+            for item in veh["slots"]:
+                count = int(item["count"])
+                equipmentType = map_equipment_type(item["type"])
+                for n in range(count):
+                    equipment.append(equipmentType.value)
+            configurations.append(equipment)
+        elif "configurations" in veh:
+            equipment_list = [equipment.name for equipment in EquipmentType]
+            for item in veh["configurations"]:
+                configuration_equipment = []
+                for equipment_name in equipment_list:
+                    equipmentType = map_equipment_type(equipment_name)
+                    count = int(item.get(equipment_name, 0))
+                    for i in range(count):
+                        configuration_equipment.append(equipmentType.value)
+                configurations.append(configuration_equipment)
+        config_capacities = [len(config) for config in configurations]
+        max_capacity = max(config_capacities) if config_capacities else 0
+        capacity = veh["capacity"] if "capacity" in veh else max_capacity
+        vehicles.append(Vehicle(index, Node(int(veh["station_index"])), capacity, configurations))
 
     return vehicles
 
@@ -189,8 +237,10 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
     instance_path = instance_config['demand']['filepath']
     check_file_exists(instance_path)
 
-    vehicles_path = os.path.join(instance_dir_path, 'vehicles.csv')
-    check_file_exists(vehicles_path)
+    vehicles_path_csv = os.path.join(instance_dir_path, 'vehicles.csv')
+    vehicles_path_json = os.path.join(instance_dir_path, 'vehicles.json')
+    csv_exists = check_file_exists(vehicles_path_csv, raise_ex=False)
+    json_exists = check_file_exists(vehicles_path_json, raise_ex=False)
 
     # dm loading
     if travel_time_provider is None:
@@ -207,25 +257,36 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
 
     logging.info("Reading DARP instance from: {}".format(os.path.realpath(instance_path)))
     with open(instance_path, "r", encoding="utf-8") as infile:
-        vehicles = load_vehicles(vehicles_path)
+        if json_exists:
+            vehicles = load_vehicles_from_json(vehicles_path_json)
+        elif csv_exists:
+            vehicles = load_vehicles(vehicles_path_csv)
+        else:
+            raise ValueError("Vehicles file .json or .csv was not found")
 
         requests: List[Request] = []
 
         line_string = infile.readline()
+        line_string = infile.readline()
         action_id = 0
+        index = 0
         while (line_string):
             line = line_string.split()
-            request_id: int = int(line[0])
-            request_time: int = int(line[1]) / 1000
-            start_node = Node(int(line[2]))
-            end_node = Node(int(line[3]))
+            request_id: int = int(index)
+            request_time: int = int(line[0]) / 1000
+            start_node = Node(int(line[1]))
+            end_node = Node(int(line[2]))
+            equipment = 0
+            if(len(line) > 4):
+                equipment = map_equipment_type(line[4]).value
             min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
             max_pickup_time = request_time + int(instance_config['max_prolongation'])
             requests.append(Request(request_id, action_id, start_node, request_time, max_pickup_time,
                                     action_id + 1, end_node, request_time + min_travel_time,  max_pickup_time + min_travel_time,
-                                    min_travel_time))
+                                    min_travel_time, 0, 0, equipment))
             line_string = infile.readline()
             action_id += 2
+            index += 1
 
         start_time = instance_config['vehicles']['start_time']
         if not isinstance(start_time, int):
@@ -243,5 +304,3 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
 @MatrixTravelTimeProvider.get_travel_time.register
 def _(self, from_node: Node, to_dode: Node):
     return self.get_travel_time(from_node.idx, to_dode.idx)
-
-

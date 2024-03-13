@@ -89,6 +89,8 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
     vehicle_index = plan.vehicle.index
     travel_time_provider = instance.travel_time_provider
     served_requests = set()
+    vehicle_configurations = plan.vehicle.configurations
+    used_equipment = []
 
     if not instance.darp_instance_config.virtual_vehicles:
         if vehicle_index in used_vehicles:
@@ -136,16 +138,35 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         # break
 
         # capacity check
-        if action_data.action.action_type == ActionType.PICKUP:
-            if free_capacity == 0:
-                print(
-                    "[{}. plan] Pickup action performed when vehicle was already full when handling request {}".format(
-                        plan_counter, action_data.action.request.index))
-                plan_ok = False
-            # break
-            free_capacity -= 1
-        else:
-            free_capacity += 1
+        if not vehicle_configurations:
+            if action_data.action.action_type == ActionType.PICKUP:
+                if free_capacity == 0:
+                    print(
+                        "[{}. plan] Pickup action performed when vehicle was already full when handling request {}".format(
+                            plan_counter, action_data.action.request.index))
+                    plan_ok = False
+                # break
+                free_capacity -= 1
+            else:
+                free_capacity += 1
+
+        # equipment check
+        matching_configurations = [config for config in vehicle_configurations if any(num in used_equipment for num in config)]
+        available_configurations = vehicle_configurations if not used_equipment else matching_configurations
+        for config in available_configurations:
+            for item in used_equipment:
+                if item in config:
+                    config.remove(item)
+
+        equipment = action_data.action.request.equipment
+        if equipment != 0:
+            if action_data.action.action_type == ActionType.PICKUP:
+                if not any(equipment in config for config in available_configurations):
+                    print("Equipment {} not available in vehicle equipment list.".format(equipment))
+                    plan_ok = False
+                used_equipment.append(equipment)
+            elif action_data.action.action_type == ActionType.DROP_OFF:
+                used_equipment.remove(equipment)
 
         cost += travel_time
 
