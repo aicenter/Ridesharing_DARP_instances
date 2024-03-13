@@ -261,6 +261,8 @@ def check_solution(instance: DARPInstance, solution: Solution) -> Tuple[bool, Di
 
             equipment = action.action.request.equipment
             # logging.info("%s Request equipment: %s, used:%s, available configs: %s",action.action.action_type, equipment, used_equipment,available_configurations)
+            if equipment == 0:
+                continue
             if action.action.action_type == ActionType.PICKUP:
                 if not any(equipment in config for config in available_configurations):
                     print("Equipment {} not available in vehicle equipment list.".format(equipment))

@@ -276,7 +276,9 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
             request_time: int = int(line[0]) / 1000
             start_node = Node(int(line[1]))
             end_node = Node(int(line[2]))
-            equipment = map_equipment_type(line[4]).value
+            equipment = 0
+            if(len(line) > 4):
+                equipment = map_equipment_type(line[4]).value
             min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
             max_pickup_time = request_time + int(instance_config['max_prolongation'])
             requests.append(Request(request_id, action_id, start_node, request_time, max_pickup_time,
