@@ -91,6 +91,10 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
     served_requests = set()
     vehicle_configurations = plan.vehicle.configurations
     used_equipment = []
+    min_pause_length = instance.darp_instance_config.min_pause_length * 60
+    max_pause_interval = instance.darp_instance_config.max_pause_interval * 60
+    driving_start = time
+    pause_start = 0
 
     if not instance.darp_instance_config.virtual_vehicles:
         if vehicle_index in used_vehicles:
@@ -100,9 +104,11 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
 
     for action_index, action_data in enumerate(plan.actions):
         request = action_data.action.request
+        is_drop_off= action_data.action.action_type == ActionType.DROP_OFF
+        is_pickup = action_data.action.action_type == ActionType.PICKUP
 
         # onboard check
-        if action_data.action.action_type == ActionType.PICKUP:
+        if is_pickup:
             onboard_requests.add(request)
         else:
             if request in onboard_requests:
@@ -139,7 +145,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
 
         # capacity check
         if not vehicle_configurations:
-            if action_data.action.action_type == ActionType.PICKUP:
+            if is_pickup:
                 if free_capacity == 0:
                     print(
                         "[{}. plan] Pickup action performed when vehicle was already full when handling request {}".format(
@@ -160,15 +166,43 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
 
         equipment = action_data.action.request.equipment
         if equipment != 0:
-            if action_data.action.action_type == ActionType.PICKUP:
+            if is_pickup:
                 if not any(equipment in config for config in available_configurations):
                     print("Equipment {} not available in vehicle equipment list.".format(equipment))
                     plan_ok = False
                 used_equipment.append(equipment)
-            elif action_data.action.action_type == ActionType.DROP_OFF:
+            elif is_drop_off:
                 used_equipment.remove(equipment)
 
         cost += travel_time
+
+        # operation time check
+        start_time = plan.vehicle.operation_start
+        end_time = plan.vehicle.operation_end
+        if (start_time>0 & end_time>0 & (action_data.departure_time < start_time) | (action_data.departure_time > end_time)):
+            print("Action is served outside of operation times.".format(equipment))
+            plan_ok = False
+
+        # vehicle id check
+        if action_data.action.request.vehicle_id != 0:
+            if action_data.action.request.vehicle_id != vehicle_index:
+                print("Request {} is not for vehicle {}.".format(action_data.action.request.index, vehicle_index))
+                plan_ok = False
+
+
+        # pause check
+        is_vehicle_empty = free_capacity == plan.vehicle.capacity  if not used_equipment else False
+        driving_duration = time - driving_start
+        if is_pickup & is_vehicle_empty:
+            if (time - pause_start) >= min_pause_length:
+                driving_start = time - travel_time
+                driving_duration = travel_time
+        elif is_drop_off & is_vehicle_empty:
+            pause_start = time
+
+        if(max_pause_interval & driving_duration > max_pause_interval):
+            print("in Request {} driver is active {} min, max is {}.".format(action_data.action.request.index, driving_duration, max_pause_interval))
+            plan_ok = False
 
         # waiting to min time
         if time < action_data.action.min_time:
@@ -177,7 +211,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         max_ride_time = instance.darp_instance_config.max_ride_time
 
         #  max ride time check - dropoff
-        if max_ride_time and action_data.action.action_type == ActionType.DROP_OFF:
+        if max_ride_time and is_drop_off:
             ride_time = time - departure_times[request.index]
             if ride_time > max_ride_time:
                 print("[{}. plan] Max ride time exceeded for request {}: ride time was {} while max ride time is {}"
@@ -197,7 +231,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         time = action_data.departure_time
 
         #  max ride time check - pickup
-        if action_data.action.action_type == ActionType.PICKUP:
+        if is_pickup:
             departure_times[request.index] = time
 
         previous_action = action_data.action
