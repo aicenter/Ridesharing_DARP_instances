@@ -89,17 +89,13 @@ class DARPInstanceConfiguration:
         max_ride_time: int,
         return_to_depot: bool = True,
         virtual_vehicles: bool = False,
-        start_time: int = 0,
-        min_pause_length: int = 0,
-        max_pause_interval: int = 0,
+        start_time: int = 0
      ):
         self.max_route_duration = max_route_duration
         self.max_ride_time = max_ride_time
         self.return_to_depot = return_to_depot
         self.virtual_vehicles = virtual_vehicles
         self.start_time = start_time
-        self.min_pause_length = min_pause_length
-        self.max_pause_interval = max_pause_interval
 
 
 class DARPInstance:
@@ -280,20 +276,19 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
             request_time: int = int(line[0]) / 1000
             start_node = Node(int(line[1]))
             end_node = Node(int(line[2]))
-            equipment = map_equipment_type(line[4]).value if(len(line) > 4) else 0
+            equipment = 0
+            if(len(line) > 4):
+                equipment = map_equipment_type(line[4]).value
             min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
             max_pickup_time = request_time + int(instance_config['max_prolongation'])
-            vehicle_id = int(line[5]) if(len(line) > 5) else 0
             requests.append(Request(request_id, action_id, start_node, request_time, max_pickup_time,
                                     action_id + 1, end_node, request_time + min_travel_time,  max_pickup_time + min_travel_time,
-                                    min_travel_time, 0, 0, equipment, vehicle_id))
+                                    min_travel_time, 0, 0, equipment))
             line_string = infile.readline()
             action_id += 2
             index += 1
 
         start_time = instance_config['vehicles']['start_time']
-        min_pause_length = instance_config['vehicles'].get('min_pause_length', 0)
-        max_pause_interval = instance_config['vehicles'].get('max_pause_interval', 0)
         if not isinstance(start_time, int):
             # start_datetime = datetime.strptime(start_time)
             timeparts = start_time.split(' ')[1].split(':')
@@ -302,7 +297,7 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
             s = 0 if len(timeparts) == 2 else timeparts[2]
             start_time = int(h) * 3600 + int(m) * 60 + int(s)
 
-        config = DARPInstanceConfiguration(0, 0, False, False, start_time, min_pause_length, max_pause_interval)
+        config = DARPInstanceConfiguration(0, 0, False, False, start_time)
         return DARPInstance(requests, vehicles, travel_time_provider, config)
 
 
