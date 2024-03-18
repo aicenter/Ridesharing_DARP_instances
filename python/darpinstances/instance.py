@@ -199,6 +199,15 @@ def map_equipment_type(equipment_str: str) -> EquipmentType:
     }
     return equipment_mapping.get(equipment_str, EquipmentType.NONE)
 
+def time_str_to_seconds (date_str: str) -> int:
+    time = date_str.split(' ')[1].split(':')
+    h = time[0]
+    m = time[1]
+    s = time[2]
+    seconds = int(h) * 3600 + int(m) * 60 + int(s)
+    return seconds
+
+
 def load_vehicles_from_json(vehicles_path: str) -> List[Vehicle]:
     veh_data = darpinstances.inout.load_json(vehicles_path)
     vehicles = []
@@ -226,7 +235,9 @@ def load_vehicles_from_json(vehicles_path: str) -> List[Vehicle]:
         config_capacities = [len(config) for config in configurations]
         max_capacity = max(config_capacities) if config_capacities else 0
         capacity = veh["capacity"] if "capacity" in veh else max_capacity
-        vehicles.append(Vehicle(index, Node(int(veh["station_index"])), capacity, configurations))
+        operation_start = time_str_to_seconds(veh["operation_start"]) if "operation_start" in veh else 0
+        operation_end = time_str_to_seconds(veh["operation_end"]) if "operation_end" in veh else 0
+        vehicles.append(Vehicle(index, Node(int(veh["station_index"])), capacity, configurations, operation_start, operation_end))
 
     return vehicles
 
