@@ -106,6 +106,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         request = action_data.action.request
         is_drop_off= action_data.action.action_type == ActionType.DROP_OFF
         is_pickup = action_data.action.action_type == ActionType.PICKUP
+        was_vehicle_empty = free_capacity == plan.vehicle.capacity  if not used_equipment else False
 
         # onboard check
         if is_pickup:
@@ -193,7 +194,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         # pause check
         is_vehicle_empty = free_capacity == plan.vehicle.capacity  if not used_equipment else False
         driving_duration = time - driving_start
-        if is_pickup & is_vehicle_empty:
+        if is_pickup & was_vehicle_empty:
             if (time - pause_start) >= min_pause_length:
                 driving_start = time - travel_time
                 driving_duration = travel_time
