@@ -94,7 +94,6 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
     min_pause_length = instance.darp_instance_config.min_pause_length * 60
     max_pause_interval = instance.darp_instance_config.max_pause_interval * 60
     driving_start = time
-    pause_start = 0
 
     if not instance.darp_instance_config.virtual_vehicles:
         if vehicle_index in used_vehicles:
@@ -102,11 +101,17 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
             plan_ok = False
         used_vehicles.add(vehicle_index)
 
+    # operation time check
+    operation_start = plan.vehicle.operation_start
+    operation_end = plan.vehicle.operation_end
+    if (operation_start>0 and operation_end>0 and ((plan.departure_time < operation_start) or (plan.arrival_time > operation_end))):
+        print("{} plan is outside of operation times.".format(plan_counter))
+        plan_ok = False
+
     for action_index, action_data in enumerate(plan.actions):
         request = action_data.action.request
         is_drop_off= action_data.action.action_type == ActionType.DROP_OFF
         is_pickup = action_data.action.action_type == ActionType.PICKUP
-        was_vehicle_empty = free_capacity == plan.vehicle.capacity  if not used_equipment else False
 
         # onboard check
         if is_pickup:
@@ -177,37 +182,21 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
 
         cost += travel_time
 
-        # operation time check
-        start_time = plan.vehicle.operation_start
-        end_time = plan.vehicle.operation_end
-        if (start_time>0 & end_time>0 & (action_data.departure_time < start_time) | (action_data.departure_time > end_time)):
-            print("Action is served outside of operation times.".format(equipment))
-            plan_ok = False
-
         # vehicle id check
         if action_data.action.request.vehicle_id != 0:
             if action_data.action.request.vehicle_id != vehicle_index:
                 print("Request {} is not for vehicle {}.".format(action_data.action.request.index, vehicle_index))
                 plan_ok = False
 
-
-        # pause check
-        is_vehicle_empty = free_capacity == plan.vehicle.capacity  if not used_equipment else False
-        driving_duration = time - driving_start
-        if is_pickup & was_vehicle_empty:
-            if (time - pause_start) >= min_pause_length:
-                driving_start = time - travel_time
-                driving_duration = travel_time
-        elif is_drop_off & is_vehicle_empty:
-            pause_start = time
-
-        if(max_pause_interval & driving_duration > max_pause_interval):
-            print("in Request {} driver is active {} min, max is {}.".format(action_data.action.request.index, driving_duration, max_pause_interval))
-            plan_ok = False
-
         # waiting to min time
         if time < action_data.action.min_time:
+            pause_duration = action_data.action.min_time - time
             time = action_data.action.min_time
+            if(pause_duration > min_pause_length):
+                driving_start = time
+            elif (time - driving_start > max_pause_interval):
+                print("in Request {} driver is active {} min, max is {}.".format(action_data.action.request.index, time-driving_start, max_pause_interval))
+                plan_ok = False
 
         max_ride_time = instance.darp_instance_config.max_ride_time
 
