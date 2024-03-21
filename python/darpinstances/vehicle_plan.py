@@ -1,12 +1,13 @@
 
 from typing import List, Optional, Dict
+from datetime import datetime
 
 from darpinstances.instance import Vehicle
 from darpinstances.instance_generation.instance_objects import Action
 
 
 class ActionData:
-    def __init__(self, action: Action, arrival_time: Optional[int] = None, departure_time: Optional[int] = None):
+    def __init__(self, action: Action, arrival_time: Optional[datetime] = None, departure_time: Optional[datetime] = None):
         self.action = action
         self.arrival_time = arrival_time
         self.departure_time = departure_time
@@ -28,7 +29,7 @@ class VehiclePlan:
     def get_arrival_time(self):
         return self.arrival_time
 
-    def __init__(self, vehicle: Vehicle, cost: int, actions: List[ActionData], departure_time: int, arrival_time: int):
+    def __init__(self, vehicle: Vehicle, cost: int, actions: List[ActionData], departure_time: Optional[datetime] = None, arrival_time: Optional[datetime] = None):
         self.departure_time = departure_time
         self.arrival_time = arrival_time
         self.actions = actions

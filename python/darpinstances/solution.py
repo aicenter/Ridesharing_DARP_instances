@@ -1,4 +1,5 @@
 from typing import List, Optional, Set, Tuple, Dict
+from datetime import datetime
 
 from darpinstances.inout import load_json
 from darpinstances.instance import DARPInstance, Request, Vehicle
@@ -30,6 +31,8 @@ class Solution:
         return 'solution: cost {}.\nPlans: {}.' \
             .format(self.cost, '\n'.join([str(p) for p in self.vehicle_plans]))
 
+def _load_datetime(string: str):
+    return datetime.strptime(string, '%Y-%m-%d %H:%M:%S')
 
 def load_solution(filepath: str, instance: DARPInstance) -> Solution:
     json_data = load_json(filepath)
@@ -77,10 +80,15 @@ def _load_plan(
         vehicle = vehicle_map[json_data["vehicle"]["index"]]
     actions_data_list = []
     for action_data in json_data["actions"]:
-        arrival_time = action_data["arrival_time"]
-        departure_time = action_data["departure_time"]
+        arrival_time_val = action_data["arrival_time"]
+        departure_time_val = action_data["departure_time"]
         action = action_data["action"]
-
+        if isinstance(arrival_time_val, int):
+            arrival_time = datetime.fromtimestamp(arrival_time_val)
+            departure_time = datetime.fromtimestamp(departure_time_val)
+        else:
+            arrival_time = _load_datetime(arrival_time_val)
+            departure_time = _load_datetime(departure_time_val)
         action_inst = ""
         action_type = ActionType.PICKUP if action["type"] == "pickup" else ActionType.DROP_OFF
         if action_type == action_type.PICKUP:
@@ -90,8 +98,15 @@ def _load_plan(
 
         actions_data_list.append(ActionData(action_inst, arrival_time, departure_time))
 
+    if isinstance(json_data["departure_time"], int):
+        departure_datetime = datetime.fromtimestamp(json_data["departure_time"])
+        arrival_datetime = datetime.fromtimestamp(json_data["arrival_time"])
+    else:
+        departure_datetime = _load_datetime(json_data["departure_time"])
+        arrival_datetime = _load_datetime(json_data["arrival_time"])
+
     vh_plan = VehiclePlan(
-        vehicle, json_data["cost"], actions_data_list, int(json_data["departure_time"]), int(json_data["arrival_time"]))
+        vehicle, json_data["cost"], actions_data_list, departure_datetime, arrival_datetime)
     return vh_plan
 
 

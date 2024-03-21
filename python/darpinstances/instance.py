@@ -7,7 +7,7 @@ import os
 import numpy as np
 import pandas as pd
 from numpy import round, ceil
-from typing import Iterable, Dict, List
+from typing import Iterable, Dict, List, Optional
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 import logging
@@ -90,7 +90,7 @@ class DARPInstanceConfiguration:
         max_ride_time: int,
         return_to_depot: bool = True,
         virtual_vehicles: bool = False,
-        start_time: int = 0,
+        start_time: Optional[datetime] = None,
         min_pause_length: int = 0,
         max_pause_interval: int = 0,
      ):
@@ -178,7 +178,7 @@ def load_vehicles(vehicles_path: str) -> List[Vehicle]:
     veh_data = darpinstances.inout.load_csv(vehicles_path, "\t")
     vehicles = []
     for index, veh in enumerate(veh_data):
-        vehicles.append(Vehicle(index, Node(int(veh[0])), int(veh[1]),[]))
+        vehicles.append(Vehicle(index, Node(int(veh[0])), int(veh[1]),[], None, None))
 
     return vehicles
 
@@ -231,9 +231,9 @@ def load_vehicles_from_json(vehicles_path: str) -> List[Vehicle]:
         config_capacities = [len(config) for config in configurations]
         max_capacity = max(config_capacities) if config_capacities else 0
         capacity = veh["capacity"] if "capacity" in veh else max_capacity
-        operation_start = _load_datetime(veh["operation_start"]) if "operation_start" in veh else 0
-        operation_end = _load_datetime(veh["operation_end"]) if "operation_end" in veh else 0
-        vehicles.append(Vehicle(index, Node(int(veh["station_index"])), capacity, configurations, operation_start.timestamp(), operation_end.timestamp()))
+        operation_start = _load_datetime(veh["operation_start"]) if "operation_start" in veh else None
+        operation_end = _load_datetime(veh["operation_end"]) if "operation_end" in veh else None
+        vehicles.append(Vehicle(index, Node(int(veh["station_index"])), capacity, configurations, operation_start, operation_end))
 
     return vehicles
 
@@ -284,30 +284,34 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
         while (line_string):
             line = line_string.split()
             request_id: int = int(index)
-            request_time: int = int(line[0]) / 1000
+            request_timestamp: int = int(line[0]) / 1000
+            request_datetime = datetime.fromtimestamp(request_timestamp)
             start_node = Node(int(line[1]))
             end_node = Node(int(line[2]))
             equipment = map_equipment_type(line[4]).value if(len(line) > 4) else 0
             min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
-            max_pickup_time = request_time + int(instance_config['max_prolongation'])
+            max_pickup_timestamp = request_timestamp + int(instance_config['max_prolongation'])
+            max_pickup_datetime = datetime.fromtimestamp(max_pickup_timestamp)
+            min_drop_off_timestamp = request_timestamp + min_travel_time
+            max_drop_off_timestamp = max_pickup_timestamp + min_travel_time
+            min_drop_off_datetime = datetime.fromtimestamp(min_drop_off_timestamp)
+            max_drop_off_datetime = datetime.fromtimestamp(max_drop_off_timestamp)
             vehicle_id = int(line[5]) if(len(line) > 5) else 0
-            requests.append(Request(request_id, action_id, start_node, request_time, max_pickup_time,
-                                    action_id + 1, end_node, request_time + min_travel_time,  max_pickup_time + min_travel_time,
+            requests.append(Request(request_id, action_id, start_node, request_datetime, max_pickup_datetime,
+                                    action_id + 1, end_node, min_drop_off_datetime,  max_drop_off_datetime,
                                     min_travel_time, 0, 0, equipment, vehicle_id))
             line_string = infile.readline()
             action_id += 2
             index += 1
 
-        start_time = instance_config['vehicles']['start_time']
+        start_time_val = instance_config['vehicles']['start_time']
         min_pause_length = instance_config['vehicles'].get('min_pause_length', 0)
         max_pause_interval = instance_config['vehicles'].get('max_pause_interval', 0)
-        if not isinstance(start_time, int):
-            # start_datetime = datetime.strptime(start_time)
-            timeparts = start_time.split(' ')[1].split(':')
-            h = timeparts[0]
-            m = timeparts[1]
-            s = 0 if len(timeparts) == 2 else timeparts[2]
-            start_time = int(h) * 3600 + int(m) * 60 + int(s)
+
+        if isinstance(start_time_val, int):
+            start_time = datetime.fromtimestamp(start_time_val)
+        else:
+            start_time = _load_datetime(start_time_val)
 
         config = DARPInstanceConfiguration(0, 0, False, False, start_time, min_pause_length, max_pause_interval)
         return DARPInstance(requests, vehicles, travel_time_provider, config)
