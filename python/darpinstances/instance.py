@@ -178,7 +178,7 @@ def load_vehicles(vehicles_path: str) -> List[Vehicle]:
     veh_data = darpinstances.inout.load_csv(vehicles_path, "\t")
     vehicles = []
     for index, veh in enumerate(veh_data):
-        vehicles.append(Vehicle(index, Node(int(veh[0])), int(veh[1]),[], None, None))
+        vehicles.append(Vehicle(index, Node(int(veh[0])), int(veh[1])))
 
     return vehicles
 

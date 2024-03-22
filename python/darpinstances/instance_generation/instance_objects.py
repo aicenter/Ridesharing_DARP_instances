@@ -51,7 +51,7 @@ class Request:
 
 
 class Vehicle:
-    def __init__(self, index: int, initial_position, capacity: int, configurations: List[List[int]], operation_start: datetime, operation_end: datetime):
+    def __init__(self, index: int, initial_position, capacity: int, configurations: List[List[int]] = [], operation_start: datetime = None, operation_end: datetime = None):
         self.index = index
         self.initial_position = initial_position
         self.capacity = capacity

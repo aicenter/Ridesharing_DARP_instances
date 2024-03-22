@@ -142,9 +142,9 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         time += timedelta(seconds=int(travel_time))
 
         # arrival time check
-        if action_data.arrival_time.timestamp() != time.timestamp():
+        if action_data.arrival_time != time:
             print(f"[{plan_counter}. plan, {action_index + 1}. Action] Arrival time mismatch (expected {time}, "
-                  f"was {action_data.arrival_time.timestamp()}) when handling request {action_data.action.request.index}")
+                  f"was {action_data.arrival_time}) when handling request {action_data.action.request.index}")
 
         # max time check
         if time > action_data.action.max_time:
@@ -194,12 +194,12 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
 
         # waiting to min time
         if time < action_data.action.min_time:
-            pause_duration = action_data.action.min_time.timestamp() - time.timestamp()
+            pause_duration = action_data.action.min_time - time
             time = action_data.action.min_time
             if(pause_duration > min_pause_length):
                 driving_start = time
 
-        if (max_pause_interval and time.timestamp() - driving_start.timestamp() > max_pause_interval):
+        if (max_pause_interval and time - driving_start > max_pause_interval):
             print("in Request {} driver is active {} min, max is {}.".format(action_data.action.request.index, time-driving_start, max_pause_interval))
             plan_ok = False
 
@@ -207,7 +207,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
 
         #  max ride time check - dropoff
         if max_ride_time and is_drop_off:
-            ride_time = time.timestamp() - departure_times[request.index].timestamp()
+            ride_time = time - departure_times[request.index]
             if ride_time > max_ride_time:
                 print("[{}. plan] Max ride time exceeded for request {}: ride time was {} while max ride time is {}"
                       .format(plan_counter, request.index, ride_time, max_ride_time))
@@ -239,9 +239,9 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
 
     # max route time check
     max_route_duration = instance.darp_instance_config.max_route_duration
-    if max_route_duration and time.timestamp() - plan.departure_time.timestamp() > max_route_duration:
+    if max_route_duration and time - plan.departure_time > max_route_duration:
         print("[{}. plan] Total max route duration exceeded: Duration is {} but maximum allowed route duration is {}"
-              .format(plan_counter, time.timestamp() - plan.departure_time.timestamp(), max_route_duration))
+              .format(plan_counter, time - plan.departure_time, max_route_duration))
         plan_ok = False
 
     # cost check
