@@ -284,18 +284,19 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
         while (line_string):
             line = line_string.split()
             request_id: int = int(index)
-            if isinstance(line[0], int):
-                request_time = datetime.fromtimestamp(int(line[0]) / 1000)
-            else:
+
+            if ' ' in line[0]:
                 request_time = _load_datetime(line[0])
+            else:
+                request_time = datetime.fromtimestamp(int(line[0]) / 1000)
 
             start_node = Node(int(line[1]))
             end_node = Node(int(line[2]))
             equipment = map_equipment_type(line[4]).value if(len(line) > 4) else 0
             min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
             max_pickup_time = request_time + timedelta(seconds=int(instance_config['max_prolongation']))
-            min_drop_off_time = request_time + timedelta(seconds=min_travel_time)
-            max_drop_off_time = max_pickup_time + timedelta(seconds=min_travel_time)
+            min_drop_off_time = request_time + timedelta(seconds=int(min_travel_time))
+            max_drop_off_time = max_pickup_time + timedelta(seconds=int(min_travel_time))
 
             vehicle_id = int(line[5]) if(len(line) > 5) else 0
             requests.append(Request(request_id, action_id, start_node, request_time, max_pickup_time,
