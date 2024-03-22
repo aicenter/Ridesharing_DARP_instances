@@ -207,7 +207,7 @@ def _load_datetime(string: str):
 def load_vehicles_from_json(vehicles_path: str) -> List[Vehicle]:
     veh_data = darpinstances.inout.load_json(vehicles_path)
     vehicles = []
-    list = veh_data["vehicles"]
+    list = veh_data
     for index, veh in enumerate(list):
         configurations = []
         if "slots" in veh:
