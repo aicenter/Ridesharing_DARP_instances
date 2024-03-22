@@ -196,10 +196,10 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         if time < action_data.action.min_time:
             pause_duration = action_data.action.min_time - time
             time = action_data.action.min_time
-            if(pause_duration > min_pause_length):
+            if(pause_duration > timedelta(seconds = min_pause_length)):
                 driving_start = time
 
-        if (max_pause_interval and time - driving_start > max_pause_interval):
+        if (max_pause_interval and time - driving_start > timedelta(seconds = max_pause_interval)):
             print("in Request {} driver is active {} min, max is {}.".format(action_data.action.request.index, time-driving_start, max_pause_interval))
             plan_ok = False
 
