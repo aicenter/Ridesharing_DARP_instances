@@ -48,7 +48,7 @@ def load_solution(filepath: str, instance: DARPInstance) -> Solution:
         vehicle_plans.append(_load_plan(plan, instance.darp_instance_config.virtual_vehicles, vehicle_map, request_map))
     dropped_requests = set()
     for request in json_data["dropped_requests"]:
-        dropped_requests.add(int(request["index"]))
+        dropped_requests.add(int(request["id"]))
     return Solution(vehicle_plans, json_data["cost"], dropped_requests)
 
 
