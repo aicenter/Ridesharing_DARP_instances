@@ -3,7 +3,7 @@ import datetime
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Tuple, Dict, Optional, Union
 
@@ -370,6 +370,8 @@ def get_delays_from_solution(solution: dict, instance: pd.DataFrame) -> List[int
 
     return delays
 
+def _load_datetime(string: str, offset_hours: int = 0):
+    return datetime.strptime(string, '%Y-%m-%d %H:%M:%S') + timedelta(hours=offset_hours)
 
 def load_all_data_for_result(path: Path) -> Optional[Tuple[Dict,List]]:
     result, performance = load_results_from_folder(str(path))
@@ -387,8 +389,9 @@ def load_all_data_for_result(path: Path) -> Optional[Tuple[Dict,List]]:
     instance_config_path = path / exp_config['instance']
     instance_config = darpinstances.instance.load_instance_config(instance_config_path)
     data['max_delay'] = int(instance_config['max_prolongation'])
-    data['start_time'] = datetime.strptime(instance_config['demand']['min_time'], '%Y-%m-%d %H:%M:%S')
-    data['end_time'] = datetime.strptime(instance_config['demand']['max_time'], '%Y-%m-%d %H:%M:%S')
+    offset = instance_config.get('time_offset', 0)
+    data['start_time'] = _load_datetime(instance_config['demand']['min_time'], offset)
+    data['end_time'] = _load_datetime(instance_config['demand']['max_time'], offset)
 
     data['duration_minutes'] = (data['end_time'] - data['start_time']).total_seconds() / 60
     if data['duration_minutes'].is_integer():

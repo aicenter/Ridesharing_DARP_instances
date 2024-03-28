@@ -1,5 +1,5 @@
 from typing import List, Optional, Set, Tuple, Dict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from darpinstances.inout import load_json
 from darpinstances.instance import DARPInstance, Request, Vehicle
@@ -31,8 +31,9 @@ class Solution:
         return 'solution: cost {}.\nPlans: {}.' \
             .format(self.cost, '\n'.join([str(p) for p in self.vehicle_plans]))
 
-def _load_datetime(string: str):
-    return datetime.strptime(string, '%Y-%m-%d %H:%M:%S')
+def _load_datetime(string: str, offset_hours: int = 0):
+    return datetime.strptime(string, '%Y-%m-%d %H:%M:%S') + timedelta(hours=offset_hours)
+
 
 def load_solution(filepath: str, instance: DARPInstance) -> Solution:
     json_data = load_json(filepath)
@@ -45,7 +46,7 @@ def load_solution(filepath: str, instance: DARPInstance) -> Solution:
 
     vehicle_plans = []
     for plan in json_data["plans"]:
-        vehicle_plans.append(_load_plan(plan, instance.darp_instance_config.virtual_vehicles, vehicle_map, request_map))
+        vehicle_plans.append(_load_plan(plan, instance.darp_instance_config.virtual_vehicles, vehicle_map, request_map, instance.darp_instance_config.time_offset))
     dropped_requests = set()
     for request in json_data["dropped_requests"]:
         dropped_requests.add(int(request["id"]))
@@ -72,7 +73,8 @@ def _load_plan(
         json_data,
         use_virtual_vehicles: bool,
         vehicle_map: Dict[int, Vehicle],
-        request_map: Dict[int, Request]
+        request_map: Dict[int, Request],
+        time_offset: float = 0
 ) -> VehiclePlan:
     if use_virtual_vehicles:
         vehicle = vehicle_map[0]
@@ -87,8 +89,8 @@ def _load_plan(
             arrival_time = datetime.fromtimestamp(arrival_time_val)
             departure_time = datetime.fromtimestamp(departure_time_val)
         else:
-            arrival_time = _load_datetime(arrival_time_val)
-            departure_time = _load_datetime(departure_time_val)
+            arrival_time = _load_datetime(arrival_time_val, time_offset)
+            departure_time = _load_datetime(departure_time_val, time_offset)
         action_inst = ""
         action_type = ActionType.PICKUP if action["type"] == "pickup" else ActionType.DROP_OFF
         if action_type == action_type.PICKUP:
@@ -102,8 +104,8 @@ def _load_plan(
         departure_datetime = datetime.fromtimestamp(json_data["departure_time"])
         arrival_datetime = datetime.fromtimestamp(json_data["arrival_time"])
     else:
-        departure_datetime = _load_datetime(json_data["departure_time"])
-        arrival_datetime = _load_datetime(json_data["arrival_time"])
+        departure_datetime = _load_datetime(json_data["departure_time"], time_offset)
+        arrival_datetime = _load_datetime(json_data["arrival_time"], time_offset)
 
     vh_plan = VehiclePlan(
         vehicle, json_data["cost"], actions_data_list, departure_datetime, arrival_datetime)
@@ -115,6 +117,6 @@ def load_plan(filepath: str, instance: DARPInstance) -> VehiclePlan:
 
     request_map, vehicle_map = _prepare_maps(instance)
 
-    vp = _load_plan(json_data, instance.darp_instance_config.virtual_vehicles, vehicle_map, request_map)
+    vp = _load_plan(json_data, instance.darp_instance_config.virtual_vehicles, vehicle_map, request_map, instance.darp_instance_config.time_offset)
 
     return vp

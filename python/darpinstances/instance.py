@@ -93,6 +93,7 @@ class DARPInstanceConfiguration:
         start_time: Optional[datetime] = None,
         min_pause_length: int = 0,
         max_pause_interval: int = 0,
+        time_offset: float = 0
      ):
         self.max_route_duration = max_route_duration
         self.max_ride_time = max_ride_time
@@ -101,6 +102,7 @@ class DARPInstanceConfiguration:
         self.start_time = start_time
         self.min_pause_length = min_pause_length
         self.max_pause_interval = max_pause_interval
+        self.time_offset = time_offset
 
 
 class DARPInstance:
@@ -200,11 +202,11 @@ def map_equipment_type(equipment_str: str) -> EquipmentType:
     }
     return equipment_mapping.get(equipment_str, EquipmentType.NONE)
 
-def _load_datetime(string: str):
-    return datetime.strptime(string, '%Y-%m-%d %H:%M:%S')
+def _load_datetime(string: str, offset_hours: int = 0):
+    return datetime.strptime(string, '%Y-%m-%d %H:%M:%S') + timedelta(hours=offset_hours)
 
 
-def load_vehicles_from_json(vehicles_path: str) -> List[Vehicle]:
+def load_vehicles_from_json(vehicles_path: str, offset_hours:float) -> List[Vehicle]:
     veh_data = darpinstances.inout.load_json(vehicles_path)
     vehicles = []
     list = veh_data
@@ -231,8 +233,8 @@ def load_vehicles_from_json(vehicles_path: str) -> List[Vehicle]:
         config_capacities = [len(config) for config in configurations]
         max_capacity = max(config_capacities) if config_capacities else 0
         capacity = veh["capacity"] if "capacity" in veh else max_capacity
-        operation_start = _load_datetime(veh["operation_start"]) if "operation_start" in veh else None
-        operation_end = _load_datetime(veh["operation_end"]) if "operation_end" in veh else None
+        operation_start = _load_datetime(veh["operation_start"], offset_hours) if "operation_start" in veh else None
+        operation_end = _load_datetime(veh["operation_end"], offset_hours) if "operation_end" in veh else None
         vehicles.append(Vehicle(index, Node(int(veh["station_index"])), capacity, configurations, operation_start, operation_end))
 
     return vehicles
@@ -253,6 +255,7 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
     csv_exists = check_file_exists(vehicles_path_csv, raise_ex=False)
     json_exists = check_file_exists(vehicles_path_json, raise_ex=False)
 
+    offset = instance_config.get('time_offset', 0)
     # dm loading
     if travel_time_provider is None:
         if 'dm_filepath' in instance_config:
@@ -269,7 +272,7 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
     logging.info("Reading DARP instance from: {}".format(os.path.realpath(instance_path)))
     with open(instance_path, "r", encoding="utf-8") as infile:
         if json_exists:
-            vehicles = load_vehicles_from_json(vehicles_path_json)
+            vehicles = load_vehicles_from_json(vehicles_path_json, offset)
         elif csv_exists:
             vehicles = load_vehicles(vehicles_path_csv)
         else:
@@ -286,7 +289,7 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
             request_id: int = int(index)
 
             if ' ' in line[0]:
-                request_time = _load_datetime(line[0])
+                request_time = _load_datetime(line[0], offset)
             else:
                 request_time = datetime.fromtimestamp(int(line[0]) / 1000)
 
@@ -313,9 +316,9 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
         if isinstance(start_time_val, int):
             start_time = datetime.fromtimestamp(start_time_val)
         else:
-            start_time = _load_datetime(start_time_val)
+            start_time = _load_datetime(start_time_val, offset)
 
-        config = DARPInstanceConfiguration(0, 0, False, False, start_time, min_pause_length, max_pause_interval)
+        config = DARPInstanceConfiguration(0, 0, False, False, start_time, min_pause_length, max_pause_interval, offset)
         return DARPInstance(requests, vehicles, travel_time_provider, config)
 
 

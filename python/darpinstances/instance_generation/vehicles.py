@@ -30,21 +30,21 @@ def _save_vehicles_shapefile(vehicles: pd.DataFrame, nodes, crsg, dir: str):
     pickup.to_file(driver='ESRI Shapefile', filename=out_filepath)
 
 
-def _load_datetime(string: str):
-    return datetime.strptime(string, '%Y-%m-%d %H:%M:%S')
+def _load_datetime(string: str, offset_hours: int = 0):
+    return datetime.strptime(string, '%Y-%m-%d %H:%M:%S') + timedelta(hours=offset_hours)
 
 
 def _load_vehicle_positions_from_db(config: dict, nn_provider: NearestNodeProvider, desired_count: int, vehicle_ordering_seed:float=.123):
     count = 0
     # desired_count = config['vehicles']['vehicle_count']
-
-    exp_time_horizon = _load_datetime(config['demand']['max_time']) - _load_datetime(config['demand']['min_time'])
+    offset = config['time_offset']
+    exp_time_horizon = _load_datetime(config['demand']['max_time'], offset) - _load_datetime(config['demand']['min_time'], offset)
 
     horizon = exp_time_horizon
     dataset_str = get_dataset_string(config)
     srid = int(config['map']['SRID_plane'])
 
-    veh_start = _load_datetime(config['vehicles']['start_time'])
+    veh_start = _load_datetime(config['vehicles']['start_time'], offset)
 
     sql = f"""
     WITH
