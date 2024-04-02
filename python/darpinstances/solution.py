@@ -84,8 +84,8 @@ def _load_plan(
         departure_time_val = action_data["departure_time"]
         action = action_data["action"]
         if isinstance(arrival_time_val, int):
-            arrival_time = datetime.fromtimestamp(arrival_time_val)
-            departure_time = datetime.fromtimestamp(departure_time_val)
+            arrival_time = datetime.utcfromtimestamp(arrival_time_val)
+            departure_time = datetime.utcfromtimestamp(departure_time_val)
         else:
             arrival_time = _load_datetime(arrival_time_val)
             departure_time = _load_datetime(departure_time_val)
@@ -99,8 +99,8 @@ def _load_plan(
         actions_data_list.append(ActionData(action_inst, arrival_time, departure_time))
 
     if isinstance(json_data["departure_time"], int):
-        departure_datetime = datetime.fromtimestamp(json_data["departure_time"])
-        arrival_datetime = datetime.fromtimestamp(json_data["arrival_time"])
+        departure_datetime = datetime.utcfromtimestamp(json_data["departure_time"])
+        arrival_datetime = datetime.utcfromtimestamp(json_data["arrival_time"])
     else:
         departure_datetime = _load_datetime(json_data["departure_time"])
         arrival_datetime = _load_datetime(json_data["arrival_time"])

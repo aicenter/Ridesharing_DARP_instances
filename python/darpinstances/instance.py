@@ -93,6 +93,7 @@ class DARPInstanceConfiguration:
         start_time: Optional[datetime] = None,
         min_pause_length: int = 0,
         max_pause_interval: int = 0,
+        travel_time_divider: int = 1,
      ):
         self.max_route_duration = max_route_duration
         self.max_ride_time = max_ride_time
@@ -101,6 +102,7 @@ class DARPInstanceConfiguration:
         self.start_time = start_time
         self.min_pause_length = min_pause_length
         self.max_pause_interval = max_pause_interval
+        self.travel_time_divider = travel_time_divider
 
 
 class DARPInstance:
@@ -288,7 +290,7 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
             if ' ' in line[0]:
                 request_time = _load_datetime(line[0])
             else:
-                request_time = datetime.fromtimestamp(int(line[0]) / 1000)
+                request_time = datetime.utcfromtimestamp(int(line[0]) / 1000)
 
             start_node = Node(int(line[1]))
             end_node = Node(int(line[2]))
@@ -309,13 +311,14 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
         start_time_val = instance_config['vehicles']['start_time']
         min_pause_length = instance_config['vehicles'].get('min_pause_length', 0)
         max_pause_interval = instance_config['vehicles'].get('max_pause_interval', 0)
+        travel_time_divider = instance_config.get('travel_time_divider', 1)
 
         if isinstance(start_time_val, int):
-            start_time = datetime.fromtimestamp(start_time_val)
+            start_time = datetime.utcfromtimestamp(start_time_val)
         else:
             start_time = _load_datetime(start_time_val)
 
-        config = DARPInstanceConfiguration(0, 0, False, False, start_time, min_pause_length, max_pause_interval)
+        config = DARPInstanceConfiguration(0, 0, False, False, start_time, min_pause_length, max_pause_interval, travel_time_divider)
         return DARPInstance(requests, vehicles, travel_time_provider, config)
 
 

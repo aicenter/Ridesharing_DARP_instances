@@ -139,6 +139,8 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
                 travel_time = travel_time_provider.get_travel_time(plan.vehicle.initial_position,
                                                                    action_data.action.node)
 
+        travel_time_divider = instance.darp_instance_config.travel_time_divider
+        travel_time = travel_time/travel_time_divider
         time += timedelta(seconds=int(travel_time))
 
         # arrival time check
