@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Tuple, Set, Optional, Dict, List
 import os
 from enum import Enum, auto
+from datetime import datetime, timedelta
 
 import pandas as pd
 
@@ -104,8 +105,11 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
     # operation time check
     operation_start = plan.vehicle.operation_start
     operation_end = plan.vehicle.operation_end
-    if (operation_start>0 and operation_end>0 and ((plan.departure_time < operation_start) or (plan.arrival_time > operation_end))):
-        print("{} plan is outside of operation times.".format(plan_counter))
+    if (operation_start and (plan.departure_time < operation_start)):
+        print("{} plan starts at {}. operation starts at {}, plan should not start before operation".format(plan_counter,plan.departure_time, operation_start ))
+        plan_ok = False
+    if (operation_end and (plan.arrival_time > operation_end)):
+        print("{} plan ends at {}. operation ends at {}, plan should not end after operation".format(plan_counter,plan.arrival_time, operation_end ))
         plan_ok = False
 
     for action_index, action_data in enumerate(plan.actions):
@@ -135,7 +139,9 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
                 travel_time = travel_time_provider.get_travel_time(plan.vehicle.initial_position,
                                                                    action_data.action.node)
 
-        time += travel_time
+        travel_time_divider = instance.darp_instance_config.travel_time_divider
+        travel_time = travel_time/travel_time_divider
+        time += timedelta(seconds=int(travel_time))
 
         # arrival time check
         if action_data.arrival_time != time:
@@ -192,10 +198,10 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         if time < action_data.action.min_time:
             pause_duration = action_data.action.min_time - time
             time = action_data.action.min_time
-            if(pause_duration > min_pause_length):
+            if(pause_duration > timedelta(seconds = min_pause_length)):
                 driving_start = time
 
-        if (time - driving_start > max_pause_interval):
+        if (max_pause_interval and time - driving_start > timedelta(seconds = max_pause_interval)):
             print("in Request {} driver is active {} min, max is {}.".format(action_data.action.request.index, time-driving_start, max_pause_interval))
             plan_ok = False
 
@@ -210,7 +216,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
                 plan_ok = False
 
         # service time
-        time += action_data.action.service_time
+        time += timedelta(seconds=int(action_data.action.service_time))
 
         # departure time check
         if action_data.departure_time < time:
@@ -231,7 +237,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
     if previous_action and instance.darp_instance_config.return_to_depot:
         travel_time_to_depot = travel_time_provider.get_travel_time(previous_action.node, plan.vehicle.initial_position)
         cost += travel_time_to_depot
-        time += travel_time_to_depot
+        time += timedelta(seconds=int(travel_time_to_depot))
 
     # max route time check
     max_route_duration = instance.darp_instance_config.max_route_duration
