@@ -337,7 +337,7 @@ def compute_plan_statistics(solution: dict) -> Tuple[pd.DataFrame, pd.DataFrame]
     for dropped_request in solution["dropped_requests"]:
         dropped_requests.append([
             dropped_request['index'],
-            datetime.datetime.fromtimestamp(dropped_request['pickup']['min_time'])
+            datetime.datetime.utcfromtimestamp(dropped_request['pickup']['min_time'])
         ])
 
     return pd.DataFrame(plan_stats, columns=columns), pd.DataFrame(dropped_requests, columns=["index", 'time'])
