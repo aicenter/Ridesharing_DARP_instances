@@ -193,8 +193,7 @@ class EquipmentType(Enum):
     STANDARD_SEAT = 1
     WHEELCHAIR = 2
     ELECTRIC_WHEELCHAIR = 3
-    MEDICAL_STROLLER = 4
-    SPECIAL_NEEDS_STROLLER = 5
+    SPECIAL_NEEDS_STROLLER = 4
 
 
 def map_equipment_type(equipment_str: str) -> EquipmentType:
