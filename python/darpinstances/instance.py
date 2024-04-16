@@ -239,7 +239,6 @@ def load_vehicles_from_json(vehicles_path: str, stations_path:str) -> List[Vehic
         capacity = veh["capacity"] if "capacity" in veh else max_capacity
         operation_start = _load_datetime(veh["operation_start"]) if "operation_start" in veh else None
         operation_end = _load_datetime(veh["operation_end"]) if "operation_end" in veh else None
-        vehicles.append(Vehicle(index, Node(int(veh["station_index"])), capacity, configurations, operation_start, operation_end))
         initial_position = Node(stations[int(veh["station_index"])])
         vehicles.append(Vehicle(int(veh["id"]), initial_position, capacity, configurations, operation_start, operation_end))
 
