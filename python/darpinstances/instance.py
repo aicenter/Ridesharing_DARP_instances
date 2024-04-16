@@ -206,7 +206,6 @@ def _load_datetime(string: str):
     return datetime.strptime(string, '%Y-%m-%d %H:%M:%S')
 
 
-def load_vehicles_from_json(vehicles_path: str) -> List[Vehicle]:
 def load_vehicles_from_json(vehicles_path: str, stations_path:str) -> List[Vehicle]:
     veh_data = darpinstances.inout.load_json(vehicles_path)
     station_data = darpinstances.inout.load_csv(stations_path, "\t")
