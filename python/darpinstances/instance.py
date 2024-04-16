@@ -277,8 +277,6 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
 
     logging.info("Reading DARP instance from: {}".format(os.path.realpath(instance_path)))
     with open(instance_path, "r", encoding="utf-8") as infile:
-        if json_exists:
-            vehicles = load_vehicles_from_json(vehicles_path_json)
         if json_exists and stations_csv_exists:
             vehicles = load_vehicles_from_json(vehicles_path_json, stations_path_csv)
         elif csv_exists:
