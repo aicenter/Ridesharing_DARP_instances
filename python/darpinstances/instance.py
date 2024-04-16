@@ -207,7 +207,12 @@ def _load_datetime(string: str):
 
 
 def load_vehicles_from_json(vehicles_path: str) -> List[Vehicle]:
+def load_vehicles_from_json(vehicles_path: str, stations_path:str) -> List[Vehicle]:
     veh_data = darpinstances.inout.load_json(vehicles_path)
+    station_data = darpinstances.inout.load_csv(stations_path, "\t")
+    stations = []
+    for index, station in enumerate(station_data):
+        stations.append(int(station[0]))
     vehicles = []
     list = veh_data
     for index, veh in enumerate(list):
@@ -236,6 +241,8 @@ def load_vehicles_from_json(vehicles_path: str) -> List[Vehicle]:
         operation_start = _load_datetime(veh["operation_start"]) if "operation_start" in veh else None
         operation_end = _load_datetime(veh["operation_end"]) if "operation_end" in veh else None
         vehicles.append(Vehicle(index, Node(int(veh["station_index"])), capacity, configurations, operation_start, operation_end))
+        initial_position = Node(stations[int(veh["station_index"])])
+        vehicles.append(Vehicle(int(veh["id"]), initial_position, capacity, configurations, operation_start, operation_end))
 
     return vehicles
 
@@ -252,8 +259,10 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
 
     vehicles_path_csv = os.path.join(instance_dir_path, 'vehicles.csv')
     vehicles_path_json = os.path.join(instance_dir_path, 'vehicles.json')
+    stations_path_csv = os.path.join(instance_dir_path, 'station_positions.csv')
     csv_exists = check_file_exists(vehicles_path_csv, raise_ex=False)
     json_exists = check_file_exists(vehicles_path_json, raise_ex=False)
+    stations_csv_exists = check_file_exists(vehicles_path_json, raise_ex=False)
 
     # dm loading
     if travel_time_provider is None:
@@ -272,6 +281,8 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
     with open(instance_path, "r", encoding="utf-8") as infile:
         if json_exists:
             vehicles = load_vehicles_from_json(vehicles_path_json)
+        if json_exists and stations_csv_exists:
+            vehicles = load_vehicles_from_json(vehicles_path_json, stations_path_csv)
         elif csv_exists:
             vehicles = load_vehicles(vehicles_path_csv)
         else:
