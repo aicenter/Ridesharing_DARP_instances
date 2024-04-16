@@ -7,6 +7,7 @@ from enum import Enum, auto
 from datetime import datetime, timedelta
 
 import pandas as pd
+import copy
 
 import darpinstances.experiments
 import darpinstances.inout
@@ -90,7 +91,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
     vehicle_index = plan.vehicle.index
     travel_time_provider = instance.travel_time_provider
     served_requests = set()
-    vehicle_configurations = plan.vehicle.configurations
+    vehicle_configurations = copy.deepcopy(plan.vehicle.configurations)
     used_equipment = []
     min_pause_length = instance.darp_instance_config.min_pause_length * 60
     max_pause_interval = instance.darp_instance_config.max_pause_interval * 60
@@ -218,9 +219,10 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
 
         # service time
         time += timedelta(seconds=int(action_data.action.service_time))
+        max_departure_time = action_data.departure_time + timedelta(seconds= instance.darp_instance_config.max_pickup_delay)
 
         # departure time check
-        if action_data.departure_time < time:
+        if max_departure_time < time:
             print(
                 "[{}. plan, {}. action] Departure time mismatch (was {}, must be higher than {}) when handling request {}"
                 .format(plan_counter, action_index + 1, action_data.departure_time, time,
