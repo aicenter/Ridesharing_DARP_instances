@@ -149,7 +149,8 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
                   f"was {action_data.arrival_time}) when handling request {action_data.action.request.index}")
 
         # max time check
-        if time > action_data.action.max_time:
+        max_time =  action_data.action.max_time + timedelta(seconds= instance.darp_instance_config.max_pickup_delay)
+        if time > max_time:
             print("[{}. plan, {}. Action] Action max time exceeded ({} > {}) when handling request {}.".format(
                 plan_counter, action_index, time, action_data.action.max_time, action_data.action.request.index))
             plan_ok = False

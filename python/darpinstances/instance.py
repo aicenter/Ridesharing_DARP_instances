@@ -94,6 +94,8 @@ class DARPInstanceConfiguration:
         min_pause_length: int = 0,
         max_pause_interval: int = 0,
         travel_time_divider: int = 1,
+        max_pickup_delay: int = 0,
+        enable_negative_delay: bool = False
      ):
         self.max_route_duration = max_route_duration
         self.max_ride_time = max_ride_time
@@ -103,6 +105,8 @@ class DARPInstanceConfiguration:
         self.min_pause_length = min_pause_length
         self.max_pause_interval = max_pause_interval
         self.travel_time_divider = travel_time_divider
+        self.max_pickup_delay = max_pickup_delay
+        self.enable_negative_delay = enable_negative_delay
 
 
 class DARPInstance:
@@ -322,14 +326,15 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
         start_time_val = instance_config['vehicles']['start_time']
         min_pause_length = instance_config['vehicles'].get('min_pause_length', 0)
         max_pause_interval = instance_config['vehicles'].get('max_pause_interval', 0)
-        travel_time_divider = instance_config.get('travel_time_divider', 1)
+        max_pickup_delay = instance_config.get('max_pickup_delay', 0)
+        enable_negative_delay = instance_config.get('enable_negative_delay', False)
 
         if isinstance(start_time_val, int):
             start_time = datetime.utcfromtimestamp(start_time_val)
         else:
             start_time = _load_datetime(start_time_val)
 
-        config = DARPInstanceConfiguration(0, 0, False, False, start_time, min_pause_length, max_pause_interval, travel_time_divider)
+        config = DARPInstanceConfiguration(0, 0, False, False, start_time, min_pause_length, max_pause_interval, travel_time_divider, max_pickup_delay, enable_negative_delay)
         return DARPInstance(requests, vehicles, travel_time_provider, config)
 
 
