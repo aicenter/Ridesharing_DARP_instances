@@ -202,7 +202,6 @@ def map_equipment_type(equipment_str: str) -> EquipmentType:
         "STANDARD_SEAT": EquipmentType.STANDARD_SEAT,
         "WHEELCHAIR": EquipmentType.WHEELCHAIR,
         "ELECTRIC_WHEELCHAIR": EquipmentType.ELECTRIC_WHEELCHAIR,
-        "MEDICAL_STROLLER": EquipmentType.MEDICAL_STROLLER,
         "SPECIAL_NEEDS_STROLLER": EquipmentType.SPECIAL_NEEDS_STROLLER,
     }
     return equipment_mapping.get(equipment_str, EquipmentType.NONE)
