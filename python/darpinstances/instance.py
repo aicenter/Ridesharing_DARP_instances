@@ -94,6 +94,8 @@ class DARPInstanceConfiguration:
         min_pause_length: int = 0,
         max_pause_interval: int = 0,
         travel_time_divider: int = 1,
+        max_pickup_delay: int = 0,
+        enable_negative_delay: bool = False
      ):
         self.max_route_duration = max_route_duration
         self.max_ride_time = max_ride_time
@@ -103,6 +105,8 @@ class DARPInstanceConfiguration:
         self.min_pause_length = min_pause_length
         self.max_pause_interval = max_pause_interval
         self.travel_time_divider = travel_time_divider
+        self.max_pickup_delay = max_pickup_delay
+        self.enable_negative_delay = enable_negative_delay
 
 
 class DARPInstance:
@@ -189,7 +193,7 @@ class EquipmentType(Enum):
     STANDARD_SEAT = 1
     WHEELCHAIR = 2
     ELECTRIC_WHEELCHAIR = 3
-    MEDICAL_STROLLER = 4
+    SPECIAL_NEEDS_STROLLER = 4
 
 
 def map_equipment_type(equipment_str: str) -> EquipmentType:
@@ -198,7 +202,7 @@ def map_equipment_type(equipment_str: str) -> EquipmentType:
         "STANDARD_SEAT": EquipmentType.STANDARD_SEAT,
         "WHEELCHAIR": EquipmentType.WHEELCHAIR,
         "ELECTRIC_WHEELCHAIR": EquipmentType.ELECTRIC_WHEELCHAIR,
-        "MEDICAL_STROLLER": EquipmentType.MEDICAL_STROLLER
+        "SPECIAL_NEEDS_STROLLER": EquipmentType.SPECIAL_NEEDS_STROLLER,
     }
     return equipment_mapping.get(equipment_str, EquipmentType.NONE)
 
@@ -206,8 +210,12 @@ def _load_datetime(string: str):
     return datetime.strptime(string, '%Y-%m-%d %H:%M:%S')
 
 
-def load_vehicles_from_json(vehicles_path: str) -> List[Vehicle]:
+def load_vehicles_from_json(vehicles_path: str, stations_path:str) -> List[Vehicle]:
     veh_data = darpinstances.inout.load_json(vehicles_path)
+    station_data = darpinstances.inout.load_csv(stations_path, "\t")
+    stations = []
+    for index, station in enumerate(station_data):
+        stations.append(int(station[0]))
     vehicles = []
     list = veh_data
     for index, veh in enumerate(list):
@@ -235,7 +243,8 @@ def load_vehicles_from_json(vehicles_path: str) -> List[Vehicle]:
         capacity = veh["capacity"] if "capacity" in veh else max_capacity
         operation_start = _load_datetime(veh["operation_start"]) if "operation_start" in veh else None
         operation_end = _load_datetime(veh["operation_end"]) if "operation_end" in veh else None
-        vehicles.append(Vehicle(index, Node(int(veh["station_index"])), capacity, configurations, operation_start, operation_end))
+        initial_position = Node(stations[int(veh["station_index"])])
+        vehicles.append(Vehicle(int(veh["id"]), initial_position, capacity, configurations, operation_start, operation_end))
 
     return vehicles
 
@@ -252,8 +261,10 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
 
     vehicles_path_csv = os.path.join(instance_dir_path, 'vehicles.csv')
     vehicles_path_json = os.path.join(instance_dir_path, 'vehicles.json')
+    stations_path_csv = os.path.join(instance_dir_path, 'station_positions.csv')
     csv_exists = check_file_exists(vehicles_path_csv, raise_ex=False)
     json_exists = check_file_exists(vehicles_path_json, raise_ex=False)
+    stations_csv_exists = check_file_exists(vehicles_path_json, raise_ex=False)
 
     # dm loading
     if travel_time_provider is None:
@@ -270,8 +281,8 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
 
     logging.info("Reading DARP instance from: {}".format(os.path.realpath(instance_path)))
     with open(instance_path, "r", encoding="utf-8") as infile:
-        if json_exists:
-            vehicles = load_vehicles_from_json(vehicles_path_json)
+        if json_exists and stations_csv_exists:
+            vehicles = load_vehicles_from_json(vehicles_path_json, stations_path_csv)
         elif csv_exists:
             vehicles = load_vehicles(vehicles_path_csv)
         else:
@@ -283,6 +294,7 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
         line_string = infile.readline()
         action_id = 0
         index = 0
+        travel_time_divider = instance_config.get('travel_time_divider', 1)
         while (line_string):
             line = line_string.split()
             request_id: int = int(index)
@@ -296,6 +308,7 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
             end_node = Node(int(line[2]))
             equipment = map_equipment_type(line[4]).value if(len(line) > 4) else 0
             min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
+            min_travel_time = min_travel_time//travel_time_divider
             max_pickup_time = request_time + timedelta(seconds=int(instance_config['max_prolongation']))
             min_drop_off_time = request_time + timedelta(seconds=int(min_travel_time))
             max_drop_off_time = max_pickup_time + timedelta(seconds=int(min_travel_time))
@@ -311,14 +324,15 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
         start_time_val = instance_config['vehicles']['start_time']
         min_pause_length = instance_config['vehicles'].get('min_pause_length', 0)
         max_pause_interval = instance_config['vehicles'].get('max_pause_interval', 0)
-        travel_time_divider = instance_config.get('travel_time_divider', 1)
+        max_pickup_delay = instance_config.get('max_pickup_delay', 0)
+        enable_negative_delay = instance_config.get('enable_negative_delay', False)
 
         if isinstance(start_time_val, int):
             start_time = datetime.utcfromtimestamp(start_time_val)
         else:
             start_time = _load_datetime(start_time_val)
 
-        config = DARPInstanceConfiguration(0, 0, False, False, start_time, min_pause_length, max_pause_interval, travel_time_divider)
+        config = DARPInstanceConfiguration(0, 0, False, False, start_time, min_pause_length, max_pause_interval, travel_time_divider, max_pickup_delay, enable_negative_delay)
         return DARPInstance(requests, vehicles, travel_time_provider, config)
 
 
