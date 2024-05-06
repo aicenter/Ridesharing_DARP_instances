@@ -173,7 +173,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
 
         # equipment check
         matching_configurations = [config for config in vehicle_configurations if any(num in used_equipment for num in config)]
-        available_configurations = vehicle_configurations if not used_equipment else matching_configurations
+        available_configurations = copy.deepcopy(vehicle_configurations) if not used_equipment else copy.deepcopy(matching_configurations)
         for config in available_configurations:
             for item in used_equipment:
                 if item in config:
@@ -183,7 +183,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         if equipment != 0:
             if is_pickup:
                 if not any(equipment in config for config in available_configurations):
-                    print("Equipment {} not available in vehicle equipment list.".format(equipment))
+                    print("Request {}, Equipment {} not available in vehicle equipment list. Vehicle: {}".format(action_data.action.request.index, equipment, vehicle_index))
                     plan_ok = False
                 used_equipment.append(equipment)
             elif is_drop_off:
