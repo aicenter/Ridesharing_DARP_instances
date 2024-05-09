@@ -142,7 +142,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
 
         travel_time_divider = instance.darp_instance_config.travel_time_divider
         travel_time = travel_time/travel_time_divider
-        time += timedelta(milliseconds=int(travel_time * 1000))
+        time += timedelta(seconds=int(travel_time))
 
         # arrival time check
         diff = action_data.arrival_time - time
@@ -242,7 +242,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         travel_time_to_depot = travel_time_provider.get_travel_time(previous_action.node, plan.vehicle.initial_position)
         travel_time_to_depot = travel_time_to_depot / travel_time_divider
         cost += travel_time_to_depot
-        time += timedelta(milliseconds=int(travel_time_to_depot*1000))
+        time += timedelta(seconds=int(travel_time_to_depot))
 
     # max route time check
     max_route_duration = instance.darp_instance_config.max_route_duration
