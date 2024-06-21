@@ -16,15 +16,15 @@ from darpinstances.instance import DARPInstance, TravelTimeProvider
 from darpinstances.instance_generation.instance_objects import Request, Action, ActionType
 from darpinstances.solution import VehiclePlan, Solution
 
-darp_folder_path = Path("C:\Google Drive/AIC Experiment Data\DARP")
-# darp_folder_path = r"D:\Google Drive/AIC Experiment Data\DARP"
+# darp_folder_path = Path("C:\Google Drive/AIC Experiment Data\DARP")
+darp_folder_path = Path(r"D:\Google Drive AIC/AIC Experiment Data\DARP")
 instance_path = None
-solution_file_path = darp_folder_path / r"final\Results\DC\start_18-00\duration_30_s\max_delay_03_min\vga/config.yaml-solution.json"
+solution_file_path = darp_folder_path / r"final\Results\DC\start_18-00\duration_15_min\max_delay_10_min\halns-vga/config.yaml-solution.json"
 
 # test HALNS instance
 # instance_path = darp_folder_path / r'final/Instances/Chicago/instances/start_18-00/duration_05_min/max_delay_03_min/config.yaml'
-# instance_path = darp_folder_path / r'final/Instances/DC/instances/start_18-00/duration_30_s/max_delay_03_min/config.yaml'
-# solution_file_path = darp_folder_path / r"C:\\Google Drive/AIC Experiment Data\\DARP/test/config.yaml-solution.json"
+# instance_path = darp_folder_path / r'final/Instances/DC/instances/start_18-00/duration_15_min/max_delay_10_min/config.yaml'
+# solution_file_path = darp_folder_path / r"test/config.yaml-solution.json"
 
 
 class Failure(Enum):
