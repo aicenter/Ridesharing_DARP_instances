@@ -5,12 +5,13 @@ from pathlib import Path
 import numpy as np
 import osmnx as ox
 import networkx as nx
-from os import path
 from typing import Dict, Tuple, Union
 import geopandas as gpd
 import pandas as pd
 from os import path, mkdir, makedirs
 from scipy.spatial import KDTree
+
+from roadgraphtool.export import get_map_nodes_from_db
 
 from darpinstances.db import db
 
@@ -43,33 +44,6 @@ def add_node_highway_tags(nodes, G):
             nodes.loc[nodes.index[[v]], 'highway'] = tag
 
 
-def _get_map_nodes_from_db(config: dict) -> gpd.GeoDataFrame:
-    logging.info("Fetching nodes from db")
-    sql = f"""
-    DROP TABLE IF EXISTS demand_nodes;
-    
-    CREATE TEMP TABLE demand_nodes(
-        id int,
-        db_id bigint,
-        x float,
-        y float,
-        geom geometry
-    );
-    
-    INSERT INTO demand_nodes
-    SELECT * FROM select_network_nodes_in_area({config['area_id']}::smallint);
-        
-    SELECT
-        id,
-        db_id,
-        x,
-        y,
-        geom
-    FROM demand_nodes
-    """
-    return db.execute_query_to_geopandas(sql)
-
-
 def _get_map_edges_from_db(config: dict) -> gpd.GeoDataFrame:
     logging.info("Fetching edges from db")
     sql = f"""
@@ -100,7 +74,7 @@ def _get_map_edges_from_db(config: dict) -> gpd.GeoDataFrame:
 
 
 def _get_map_from_db(config: dict) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
-    nodes = _get_map_nodes_from_db(config)
+    nodes = get_map_nodes_from_db(config['area_id'])
     logging.info(f"{len(nodes)} nodes fetched from db")
     edges = _get_map_edges_from_db(config)
     logging.info(f"{len(edges)} edges fetched from db")
