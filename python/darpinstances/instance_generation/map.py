@@ -11,7 +11,7 @@ import pandas as pd
 from os import path, mkdir, makedirs
 from scipy.spatial import KDTree
 
-from roadgraphtool.export import get_map_nodes_from_db
+from roadgraphtool.export import get_map_nodes_from_db, get_map_edges_from_db
 
 from darpinstances.db import db
 
@@ -44,39 +44,10 @@ def add_node_highway_tags(nodes, G):
             nodes.loc[nodes.index[[v]], 'highway'] = tag
 
 
-def _get_map_edges_from_db(config: dict) -> gpd.GeoDataFrame:
-    logging.info("Fetching edges from db")
-    sql = f"""
-        SELECT
-            from_nodes.id AS u,
-            to_nodes.id AS v,
-            "from" AS db_id_from,
-            "to" AS db_id_to,
-            edges.geom as geom,
-            st_length(st_transform(edges.geom, {config['map']['SRID_plane']})) as length,
-            speed
-        FROM edges
-            JOIN demand_nodes from_nodes ON edges."from" = from_nodes.db_id
-            JOIN demand_nodes to_nodes ON edges."to" = to_nodes.db_id
-        WHERE
-            edges.area = {config['area_id']}::smallint -- This is to support overlapping areas. For using anohther 
-                                                        --area for edges (like for Manhattan), new edge_are_id param 
-                                                        -- should be added to congig.yaml
-    """
-    edges = db.execute_query_to_geopandas(sql)
-
-    if len(edges) == 0:
-        logging.error("No edges selected")
-        logging.info(sql)
-        raise Exception("No edges selected")
-
-    return edges
-
-
 def _get_map_from_db(config: dict) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     nodes = get_map_nodes_from_db(config['area_id'])
     logging.info(f"{len(nodes)} nodes fetched from db")
-    edges = _get_map_edges_from_db(config)
+    edges = get_map_edges_from_db(config)
     logging.info(f"{len(edges)} edges fetched from db")
     return nodes, edges
 
