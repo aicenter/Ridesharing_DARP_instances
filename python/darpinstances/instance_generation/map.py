@@ -13,7 +13,7 @@ from scipy.spatial import KDTree
 
 from roadgraphtool.export import get_map_nodes_from_db, get_map_edges_from_db
 
-from darpinstances.db import db
+from roadgraphtool.db import db
 
 
 class NearestNodeProvider:
