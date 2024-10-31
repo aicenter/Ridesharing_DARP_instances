@@ -54,6 +54,7 @@ class __Database:
         self.db_server_port = self.config.db_server_port
         self.ssh_tunnel_local_port = 1113
         self.ssh_server = None
+        self.DBNAME = self.config.db_name
 
         self._psycopg2_connection = None
         self._sqlalchemy_engine = None
