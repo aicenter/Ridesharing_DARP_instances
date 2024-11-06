@@ -25,7 +25,8 @@ setup(
 		'geoalchemy2',
 		'sshtunnel',
 		'scikit-learn',
-		'roadgraphtool'
+		'roadgraphtool',
+        'geopy'
 	],
 	python_requires='>=3.8'
 )
