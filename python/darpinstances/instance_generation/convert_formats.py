@@ -163,106 +163,6 @@ def generate_trip_counts(od_flow: float, n: int = 24) -> int:
     trip_count = np.sum(rng.poisson(od_flow, n))
     return trip_count
 
-def calculate_distance(p1: Point, p2: Point) -> float:
-    """Calculates the distance between two points.
-    
-    :param p1: First point in form of (lon, lat).
-    :param p2: Second point in form of (lon, lat).
-    :return: Distance between two points in kilometers."""
-    # convert to lat, lon format
-    pt1 = (p1.y, p1.x)
-    pt2 = (p2.y, p2.x)
-    try:
-        return geodesic(pt1, pt2).km
-    except ValueError as e:
-        raise ValueError(f"Error calculating distance between {pt1} and {pt2}.") from e
-
-def convert_str_to_timestamp(time: str) -> datetime:
-    return datetime.fromisoformat(time)
-
-def is_within_coords_range(lat: float, lon: float) -> bool:
-    """Checks if coordinates are within specified bounds."""
-    return (LATITUDE_RANGE[0] <= lat <= LATITUDE_RANGE[1] and 
-            LONGITUDE_RANGE[0] <= lon <= LONGITUDE_RANGE[1])
-
-def process_record(record: str) -> dict | None:
-    """Converts record into dictionary with timestamp and Point geometry."""
-    _, time, lon, lat = record.strip().split(',')
-    if not is_within_coords_range(float(lat), float(lon)):
-        return None
-    timestamp = convert_str_to_timestamp(time)
-    point = Point(float(lon), float(lat))
-    return {"timestamp": timestamp, "geometry": point}
-
-def process_trajectory(trajectory: list[str]) -> list[dict]:
-    """Process a trajectory and extract trips from it 
-    based on: https://arxiv.org/pdf/1602.00994."""
-    trips = []
-    i = 0
-    while i < len(trajectory) - 1:
-        start_point = process_record(trajectory[i])
-        if start_point is None:  # skip invalid points
-            i += 1
-            continue
-        current_point = start_point
-        j = i + 1
-        trip_formed = False
-        # find destination
-        while j < len(trajectory):
-            next_point = process_record(trajectory[j])
-            if next_point is None:  # skip invalid points
-                j += 1
-                continue
-
-            distance = calculate_distance(current_point['geometry'], next_point['geometry'])
-            
-            if distance <= DISTANCE_THRESHOLD:
-                time_diff = next_point['timestamp'] - current_point['timestamp']
-                if time_diff >= STOP_TIME_THRESHOLD:
-                    trips.append({
-                        'origin': start_point['geometry'],
-                        'destination': next_point['geometry'],
-                        'timestamp': start_point['timestamp']
-                    })
-                    i = j
-                    trip_formed = True
-                    break
-                current_point = next_point
-            else:
-                current_point = next_point
-            j += 1
-        if trip_formed and current_point != start_point:
-            trips[-1]['destination'] = current_point['geometry']
-        if not trip_formed:
-            i += 1
-    return trips
-
-def convert_TXT(city: str) -> DataFrame:
-    input_folder = RESOURCE_PATH / f"{city}_trips_og"
-    output_folder = RESOURCE_PATH / f"{city}_trips"
-    files = list(input_folder.glob("*.txt"))
-    total_files = len(files)
-    long_files = show_files(city)
-    with tqdm(total=total_files, desc="Processing files", unit="file") as pbar:
-        for f in files:
-            if f.stem in long_files:
-                continue
-            output_file = RESOURCE_PATH / f"{f.stem}.csv"
-            if output_file.exists():
-                pbar.update(1)
-                continue
-            print("FILE: ", f)
-            with open(f, 'r') as file:
-                lines = file.readlines()
-                if not lines: 
-                    pbar.update(1)
-                    continue
-                trajectory = process_trajectory(lines)
-            output_file = output_folder / f"{f.stem}.csv"
-            pd.DataFrame(trajectory).to_csv(output_file, index=False)
-            pbar.update(1)
-    return pd.DataFrame(trajectory) if trajectory else pd.DataFrame()
-
 def show_files(city: str) -> list:
     input_folder = RESOURCE_PATH / f"{city}_trips_og"
     files = list(input_folder.glob("*.txt"))
@@ -294,16 +194,10 @@ def generate_and_save_csv(city: str):
             df = convert_TNTP_format(city)
         case "Porto":
             df = convert_CSV_format(city)
-        case "Beijing":
-            df = convert_TXT(city)
     
     df.to_csv(tripsfile, index=False)
 
 if __name__ == '__main__':
     # generate_and_save_csv("Porto")
     # generate_and_save_csv("Sydney")
-    # convert_TXT("Beijing")
-    generate_and_save_csv("Beijing")
-    # print(show_files("Beijing"))
-    # print(count_trips("Beijing"))
-
+    pass
