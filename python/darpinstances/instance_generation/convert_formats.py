@@ -14,14 +14,59 @@ from darpinstances.instance_generation.demand_generation import generate_uniform
 PATH = Path(__file__).parent.parent.parent.parent
 RESOURCE_PATH = PATH / "resources/"
 
-# Beijing
-LONGITUDE_RANGE = (115, 118)
-LATITUDE_RANGE = (39, 42)
-
 BASETIME = datetime(2014, 1, 1)
-STOP_TIME_THRESHOLD = timedelta(minutes=5)
-DISTANCE_THRESHOLD = 0.05
-TRAJECTORY_THRESHOLD = timedelta(minutes=30)
+
+def convert_CSV_format(city: str) -> DataFrame:
+    input_file = RESOURCE_PATH / f"{city}_trips_og.csv"
+    with open(input_file) as csvfile:
+        data = list(csv.DictReader(csvfile))
+
+    trips = []
+
+    for request in data:
+        # convert from str to list of coords
+        polyline = ast.literal_eval(request["POLYLINE"])
+        
+        if len(polyline) < 2:
+            continue
+
+        geom = LineString(polyline)
+        origin = Point(polyline[0])
+        destination = Point(polyline[-1])
+
+        if not geom.is_valid:
+            continue
+
+        trip = {
+            "trip_id": request["TRIP_ID"],
+            "timestamp": request["TIMESTAMP"],
+            "geometry": geom,
+            "origin": origin,
+            "destination": destination
+        }
+        trips.append(trip)
+
+    df = pd.DataFrame(trips)
+    return df
+
+def convert_TNTP_format(city: str):
+    tripstntpfile = RESOURCE_PATH / f"{city}_trips_og.tntp"
+    nodesfile = RESOURCE_PATH / f"{city}_node.tntp"
+    tripsfile = RESOURCE_PATH / f"{city}_trips.csv"
+
+    # process trips to contain only valid OD flows
+    # flowscsvfile = RESOURCE_PATH / f"{city}_flows_no_geom.csv"
+    # flow_df = load_data_from_csv(flowscsvfile)
+    flow_df = import_trips_tntp(tripstntpfile)
+
+    # convert coordinates to proper geometry
+    nodes_df = import_nodes_tntp(nodesfile)
+
+    # add geometry coordinates to flows and generate trips
+    trips = add_geometry(flow_df, nodes_df)
+
+    # save trips to CSV
+    trips.to_csv(tripsfile, index=False)
 
 def import_nodes_tntp(file: str) -> DataFrame:
     """Loads nodes from a TNTP file and converts coordinates to Point geometry."""
@@ -79,63 +124,7 @@ def add_geometry(flow_df: DataFrame, nodes_df: DataFrame, hours: int = 24) -> Da
 
     return pd.DataFrame(data)
 
-def load_data_from_csv(file: str) -> DataFrame:
-    """Loads the data with coordinates from a CSV file."""
-    return pd.read_csv(file)
-
-def convert_TNTP_format(city: str):
-    tripstntpfile = RESOURCE_PATH / f"{city}_trips_og.tntp"
-    nodesfile = RESOURCE_PATH / f"{city}_node.tntp"
-    tripsfile = RESOURCE_PATH / f"{city}_trips.csv"
-
-    # process trips to contain only valid OD flows
-    # flowscsvfile = RESOURCE_PATH / f"{city}_flows_no_geom.csv"
-    # flow_df = load_data_from_csv(flowscsvfile)
-    flow_df = import_trips_tntp(tripstntpfile)
-
-    # convert coordinates to proper geometry
-    nodes_df = import_nodes_tntp(nodesfile)
-
-    # add geometry coordinates to flows and generate trips
-    trips = add_geometry(flow_df, nodes_df)
-
-    # save trips to CSV
-    trips.to_csv(tripsfile, index=False)
-
-def convert_CSV_format(city: str) -> DataFrame:
-    input_file = RESOURCE_PATH / f"{city}_trips_og.csv"
-    with open(input_file) as csvfile:
-        data = list(csv.DictReader(csvfile))
-
-    trips = []
-
-    for request in data:
-        # convert from str to list of coords
-        polyline = ast.literal_eval(request["POLYLINE"])
-        
-        if len(polyline) < 2:
-            continue
-
-        geom = LineString(polyline)
-        origin = Point(polyline[0])
-        destination = Point(polyline[-1])
-
-        if not geom.is_valid:
-            continue
-
-        trip = {
-            "trip_id": request["TRIP_ID"],
-            "timestamp": request["TIMESTAMP"],
-            "geometry": geom,
-            "origin": origin,
-            "destination": destination
-        }
-        trips.append(trip)
-
-    df = pd.DataFrame(trips)
-    return df
-
-def generate_trips(city: str, n: int) -> DataFrame:
+def generate_n_trips(city: str, N: int) -> DataFrame:
     flowscsvfile = RESOURCE_PATH / f"{city}_flows_no_geom.csv"
     nodesfile = RESOURCE_PATH / f"{city}_node.tntp"
 
@@ -143,15 +132,12 @@ def generate_trips(city: str, n: int) -> DataFrame:
     nodesfile = RESOURCE_PATH / "Sydney_node.tntp"
     nodes_df = import_nodes_tntp(nodesfile)
 
-    # add geometry coordinates to trips
-    flow_df = _sample_n_instances(load_data_from_csv(flowscsvfile), n)
+    # add geometry coordinates to N randomly selected trips
+    df = load_data_from_csv(flowscsvfile)
+    flow_df = df.sample(n=N, replace=False).reset_index(drop=True)
     trips = add_geometry(flow_df, nodes_df)
 
     return trips
-
-def _sample_n_instances(df: pd.DataFrame, n: int) -> DataFrame:
-    """Randomly selects N instances from the DataFrame."""
-    return df.sample(n=n, replace=False).reset_index(drop=True)
 
 def generate_trip_counts(od_flow: float, n: int = 24) -> int:
     """Generates trip count in N-hours interval using Poisson distribution.
@@ -163,28 +149,9 @@ def generate_trip_counts(od_flow: float, n: int = 24) -> int:
     trip_count = np.sum(rng.poisson(od_flow, n))
     return trip_count
 
-def show_files(city: str) -> list:
-    input_folder = RESOURCE_PATH / f"{city}_trips_og"
-    files = list(input_folder.glob("*.txt"))
-    long_files = []
-    for f in files:
-        with open(f, 'r') as file:
-            lines = file.readlines()
-            lines_count = len(lines)
-            if lines_count > 20000:
-                long_files.append(f.stem)
-    return long_files
-
-def count_trips(city: str) -> int:
-    input_folder = RESOURCE_PATH / f"{city}_trips"
-    files = list(input_folder.glob("*.csv"))
-    s = 0
-    for f in files:
-        with open(f, 'r') as file:
-            lines = file.readlines()
-            lines_count = len(lines) - 1
-            s += lines_count
-    return s
+def load_data_from_csv(file: str) -> DataFrame:
+    """Loads the data with coordinates from a CSV file."""
+    return pd.read_csv(file)
 
 def generate_and_save_csv(city: str):
     # save trips with geometry
