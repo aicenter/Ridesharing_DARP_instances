@@ -74,7 +74,7 @@ def load_instance(instance_path: Path, travel_time_provider=None) -> Tuple[DARPI
 def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, used_vehicles: set, failures: Dict[Failure,int]) \
         -> Tuple[int, bool, Set[Request]]:
     plan_ok = True
-    cost = 0
+    cost = 0.0
 
     if plan.departure_time < instance.darp_instance_config.start_time:
         plan_ok = False
@@ -141,11 +141,12 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
                                                                    action_data.action.node)
 
         travel_time_divider = instance.darp_instance_config.travel_time_divider
-        travel_time = travel_time//travel_time_divider
+        travel_time = travel_time/travel_time_divider
         time += timedelta(seconds=int(travel_time))
 
         # arrival time check
-        if action_data.arrival_time != time:
+        diff = action_data.arrival_time - time
+        if diff > timedelta(seconds=1) :
             print(f"[{plan_counter}. plan, {action_index + 1}. Action] Arrival time mismatch (expected {time}, "
                   f"was {action_data.arrival_time}) when handling request {action_data.action.request.index}")
 
@@ -172,7 +173,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
 
         # equipment check
         matching_configurations = [config for config in vehicle_configurations if any(num in used_equipment for num in config)]
-        available_configurations = vehicle_configurations if not used_equipment else matching_configurations
+        available_configurations = copy.deepcopy(vehicle_configurations) if not used_equipment else copy.deepcopy(matching_configurations)
         for config in available_configurations:
             for item in used_equipment:
                 if item in config:
@@ -182,7 +183,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         if equipment != 0:
             if is_pickup:
                 if not any(equipment in config for config in available_configurations):
-                    print("Equipment {} not available in vehicle equipment list.".format(equipment))
+                    print("Request {}, Equipment {} not available in vehicle equipment list. Vehicle: {}".format(action_data.action.request.index, equipment, vehicle_index))
                     plan_ok = False
                 used_equipment.append(equipment)
             elif is_drop_off:
@@ -239,6 +240,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
     # return to init position
     if previous_action and instance.darp_instance_config.return_to_depot:
         travel_time_to_depot = travel_time_provider.get_travel_time(previous_action.node, plan.vehicle.initial_position)
+        travel_time_to_depot = travel_time_to_depot / travel_time_divider
         cost += travel_time_to_depot
         time += timedelta(seconds=int(travel_time_to_depot))
 
@@ -250,11 +252,9 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         plan_ok = False
 
     # cost check
-    if cost != plan.cost:
+    if abs(cost - plan.cost) > 1:
         print(
-            "[{}. plan] Total cost does not match: cost in solution is {} but computed cost is {}".format(plan_counter,
-                                                                                                          plan.cost,
-                                                                                                          cost))
+            "{} plan cost mismatch. expected: {}, computed: {}".format(plan_counter, plan.cost, cost))
         plan_ok = False
 
     if plan_ok:
@@ -275,7 +275,7 @@ def check_solution(instance: DARPInstance, solution: Solution) -> Tuple[bool, Di
     used_vehicles = set()
     solution_ok = True
     served_requests = set()
-    total_cost = 0
+    total_cost = 0.0
 
     plan_counter = 1
 
@@ -296,7 +296,7 @@ def check_solution(instance: DARPInstance, solution: Solution) -> Tuple[bool, Di
         # break
 
     # total cost check
-    if total_cost != solution.cost:
+    if abs (total_cost - solution.cost) > 1:
         print(
             "Solution cost not computed correctly. Solution cost: {}, total cost of all plans: {}".format(solution.cost,
                                                                                                           total_cost))

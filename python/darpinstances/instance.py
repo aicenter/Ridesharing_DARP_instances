@@ -308,7 +308,7 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
             end_node = Node(int(line[2]))
             equipment = map_equipment_type(line[4]).value if(len(line) > 4) else 0
             min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
-            min_travel_time = min_travel_time//travel_time_divider
+            min_travel_time = min_travel_time/travel_time_divider
             max_pickup_time = request_time + timedelta(seconds=int(instance_config['max_prolongation']))
             min_drop_off_time = request_time + timedelta(seconds=int(min_travel_time))
             max_drop_off_time = max_pickup_time + timedelta(seconds=int(min_travel_time))
