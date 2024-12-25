@@ -1,8 +1,8 @@
+from geoalchemy2 import Geometry, WKTElement
 import geopandas as gpd
 from geopandas import GeoDataFrame
-from sqlalchemy import create_engine
+from sqlalchemy import TIMESTAMP, create_engine
 from sqlalchemy.exc import SQLAlchemyError
-from shapely.wkt import loads
 
 from darpinstances.credentials_config import CREDENTIALS as config
 from darpinstances.instance_generation.convert_formats import *
@@ -26,22 +26,29 @@ def load_file() -> GeoDataFrame:
 
     return trips
 
-def load_demand_to_db(trips: DataFrame, schema: str):
+def load_demand_to_db(trips: GeoDataFrame, schema: str):
     port = config.db_server_port
-    connection_uri = f"postgresql://{config.username}@{config.db_host}:{port}/{config.db_name}"
+    connection_uri = f"postgresql://{config.username}:{config.db_password}@{config.db_host}:{port}/{config.db_name}"
     engine = create_engine(connection_uri)
 
-    trips['geometry'] = trips['geometry'].apply(lambda geom: loads(geom) if isinstance(geom, str) else geom)
+    # trips['geometry'] = trips['geometry'].apply(lambda geom: loads(geom) if isinstance(geom, str) else geom)
+    # trips['origin_wkt'] = trips['origin'].apply(lambda geom: WKTElement(geom.wkt, srid=4326))
+    # trips['destination_wkt'] = trips['destination'].apply(lambda geom: WKTElement(geom.wkt, srid=4326))
 
+    # trips_db = trips[['id', 'timestamp', 'origin_wkt', 'destination_wkt']]
     try:
-        trips.to_sql("trips", engine, if_exists="append", index=False, schema=schema)
-
+        print("Loading data into the database...")
+        # trips.to_sql("trips", engine, if_exists="replace", schema=schema, chunksize=1000, index_label='id', dtype={'origin': Geometry('POINT', srid=4326), 'destination': Geometry('POINT', srid=4326), 'timestamp': TIMESTAMP})
+        chunksize = 1000
+        for i in range(0, len(trips), chunksize):
+            chunk = trips.iloc[i:i + chunksize]
+            chunk.to_sql("trips", engine, if_exists="append", schema=schema, index_label='id', dtype={'origin': Geometry('POINT', srid=4326), 'destination': Geometry('POINT', srid=4326), 'timestamp': TIMESTAMP})
         print("Data loaded into the database successfully.")
     except SQLAlchemyError as e:
         print("Error loading data into the database:", e)
 
 def save_df_to_geojson(df: pd.DataFrame, filepath: str):
-    df['geometry'] = df['geometry'].apply(lambda geom: loads(geom) if isinstance(geom, str) else geom)
+    # df['geometry'] = df['geometry'].apply(lambda geom: loads(geom) if isinstance(geom, str) else geom)
     if not isinstance(df, gpd.GeoDataFrame):
         df = gpd.GeoDataFrame(df, geometry='geometry', crs="EPSG:4326") # WGS84 for lon-lat
 
@@ -49,15 +56,15 @@ def save_df_to_geojson(df: pd.DataFrame, filepath: str):
     df.to_file(filepath, driver='GeoJSON')
 
 if __name__ == '__main__':
-    # csvfile = PATH / 'porto-partials.csv'
-    # csvfile = RESOURCE_PATH / 'Porto_trips.csv'
-    csvfile = RESOURCE_PATH / 'Beijing_trips.csv'
-    df = load_data_from_csv(csvfile)
-    save_df_to_geojson(df, RESOURCE_PATH / 'Beijing_trips.geojson')
-    # save_df_to_geojson(df, RESOURCE_PATH / 'Porto_trips.geojson')
-    # load_demand_to_db(df, 'demand')
+    # city = 'Porto'
+    city = 'Sydney'
+    csvfile = RESOURCE_PATH / f'{city}_trips.csv'
+    gdf = load_data_from_csv(csvfile)
+    # save_df_to_geojson(df, RESOURCE_PATH / f'{city}_trips.geojson')
+    load_demand_to_db(gdf, city.lower())
+
     # csvfile = PATH / 'Porto_trips.csv'
-    # t, v = convert_CSV_format(csvfile)
-    # save_format(t, v)
-    # t, v = load_file()
-    # load_demand_to_db(t, v, 'demand')
+    # t = convert_CSV_format(csvfile)
+    # save_format(t)
+    # t = load_file()
+    # load_demand_to_db(t, 'demand')
