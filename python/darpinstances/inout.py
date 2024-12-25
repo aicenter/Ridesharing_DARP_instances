@@ -7,20 +7,20 @@ import numpy as np
 import h5py
 from pathlib import Path
 
-from typing import Tuple, Dict, Iterable
+from typing import Tuple, Dict, Iterable, Union, List
 
 import yaml
 
 import darpinstances.log
 
 
-def load_csv(filepath: str, delimiter: str = ",") -> Iterable:
+def load_csv(filepath: Union[str, Path], delimiter: str = ",") -> Iterable:
 	logging.info("Loading csv file from:  %s", os.path.realpath(filepath))
 	f = open(filepath, "r")
 	return csv.reader(f, delimiter=delimiter)
 
 
-def load_json(filepath: str):
+def load_json(filepath: Union[str, Path]) -> Union[Dict, List]:
 	logging.info("Loading json file from: {}".format(os.path.realpath(filepath)))
 	return json.load(open(filepath, encoding="utf-8"))
 
@@ -50,8 +50,11 @@ def get_resource_absolute_path(package_path: str, filename: str) -> str:
 		raise Exception(f"Package {package_path} does not exist")
 
 
-def check_file_exists(path: str, raise_ex: bool = True) -> bool:
-	if not os.path.exists(path) and not os.path.isdir(path):
+def check_file_exists(path: Union[str,Path], raise_ex: bool = True) -> bool:
+	if isinstance(path, str):
+		path = Path(path)
+
+	if not path.exists() and not path.is_dir():
 		if raise_ex:
 			abs_path = os.path.abspath(path)
 			if path == abs_path:

@@ -39,10 +39,9 @@ The dataset of instances and associated results are available through the datase
 
 
 ## Instances structure
-
-The instances are organized into directories based on their parameters. That is, an instance in an *area*, with a given *_start time_*, *duration* and *max delay* $\Delta$ is in the following directory structure:
-
-[//]: # (The tree structure generated with https://tree.nathanfriend.io/)
+Each area has its own folder in the `📁Instances directory. This direcory contains the distance matrix (travel time model) and map files.
+The instances are then organized into directories based on their parameters. 
+That is, an instance in an *area*, with a given *_start time_*, *duration* and *max delay* $\Delta$ is in the following directory structure:
 
 ```text
 📁 Instances/<area>/
@@ -50,10 +49,50 @@ The instances are organized into directories based on their parameters. That is,
 └── 📁instances/start_<start time>/duration_<duration>/max_delay_<max delay>/
     ├── 🗎 vehicles.csv
     └── 🗎 requests.csv
+    └── 🖺 config.yaml
 ```
-and consists of three files, `vehicles.csv`, `requests.csv` and `dm.h5`. The `vehicles.csv` and `requests.csv` files are the main instance files, while the `dm.h5` file is the distance matrix file that represents the travel time model $f_t(l, l')$ used in the instance. The instance files are described in detail below.
+and consists of three files, `vehicles.csv`, `requests.csv` and `config.yaml`.
 
-### Instance Requests and Vehicles files
+### Instance configuration file
+
+`📁 Instances/<area>/instances/start_<start time>/duration_<duration>/max_delay_<max delay>/config.yaml`
+
+The instance configuration file has the following structure:
+
+```yaml
+area_dir: # path to the area directory. Only used for automatic construction of paths to files shared between instances in the same area
+demand:
+- filepath: # path to the demand file. ./requests.csv if not provided 
+dm_filepath: # path to the distance matrix file. <area_dir>/dm.hd5 if not provided
+max_prolongation: # maximum delay in seconds (deprecated)
+max_pickup_delay: # maximum delay for the pickup in seconds. 
+max_travel_time_delay:
+- mode: # mode of the delay calculation. Can be 'absolute' for the absolute delay or 'relative' for the delay relative to the minimal travel time
+- relative: # proportion of the delay relative to the minimal travel time. 1.0 means the maximal delay is equal to the minimal travel time
+- seconds: # absolute delay in seconds
+```
+
+The *maximum delay* for each request should be interpreted as follows:
+
+1. if `maxing_travel_time_delay` is provided:
+    1. if `mode` is `absolute`, the maximum delay is equal to `max_travel_time_delay.seconds`
+    2. if `mode` is `relative`, the maximum delay is equal to `max_travel_time_delay.relative` * *minimal travel time*
+1. else, if `max_prolongation` is provided, the maximum delay is equal to `max_prolongation`
+1. else, the maximum delay is 0.
+
+The logic for the maximum time for each action is as follows:
+
+- **The maximum pickup time**: is equal to `max_pickup_delay` if provided, otherwise, it is equal to the *maximum delay* for the request.
+- **The maximum dropoff time**: is more compliacted. It is calculated as *desired pickup time* + *minimal travel time* + *maximum delay* + `max_pickup_delay` if provided. 
+  - The logic is as follows:
+    - If the `max_pickup_delay` is provided, we need to add it to the *maximum delay* as we consider *maximum delay* to be an extra time that can be added to the minimal travel time. Therefore, the *maximum dropoff time* is equal to the *maximum pickup time* + *minimal travel time* + *maximum delay*.
+    - If the `max_pickup_delay` is not provided, the *maximum dropoff time* is simply the *maximum pickup time* + *minimal travel time*, as the *maximum delay* is already included in the *maximum pickup time*.
+  - Finally, the *maximum dropoff time* is rounded up to the nearest second.
+
+Apart from the configuration above, there can be other fields used for the instance generation. These fields has no effect on the instance itself, and can be safely ignored when using the instances.
+
+
+### Requests and Vehicles files
 
 The instance folder contains the two main instance files:
 
@@ -175,7 +214,7 @@ The results are stored in the `📁 Results/` folder. The folder structure follo
 The `<method>` folders are `ih` for [Insertion Heuristic]() and `vga` for [Vehicle Group Assignment method](https://www.pnas.org/doi/10.1073/pnas.1611675114). 
 
 
-### Solution file 
+### Solution file
 The solution is stored in `🗎 config.yaml-solution.json` and contains the following fields:
 
 `🗎 config.yaml-solution.json`
@@ -225,6 +264,28 @@ The following data sources were used to generate demand and travel time data:
 | New York City and Manhattan | [NYC Taxi and Limousine Commission](https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page) | [NYC taxi zones]()                    | exact         |
 | Chicago                     | [City of Chicago](https://data.cityofchicago.org/Transportation/Taxi-Trips/wrvz-psew)              | [Census tracts and community areas]() | generated     |
 | Washington, DC              | [City of Washington, DC](https://opendata.dc.gov/search?q=taxi%20trips)                            | [Master Address Repository]()         | generated     |
+
+
+
+## Solution Checker
+To check the validity of the solutions, we provide a solution checker implemented in Python in file `darpinstances.solution_checker.py`. It can be used in two ways:
+
+- by running the script from the command line
+- be invoking the `check_solution` function from your code
+
+
+### Command line usage
+The script can be run from the command line with the following arguments:
+
+```bash
+python darpinstances/solution_checker.py <solution_file> [-i, --instance <instance_path>]
+```
+
+where:
+
+- `<solution_file>` is the path to the JSON solution file to be checked and 
+- `<instance_path>` is the path to the YAML instance configuration file. If the instance path is not provided, the script will use the `instance` field from the experiment configuration file named `config.yaml` located in the same directory as the solution file.
+
 
 ## Citation
 When using the instances or the code, please cite the following [paper](https://arxiv.org/abs/2305.18859): 

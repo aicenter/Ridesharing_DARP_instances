@@ -8,8 +8,9 @@ import darpinstances.solution
 import darpinstances.experiments
 import darpinstances.solution_checker
 
-darp_path = Path(r"C:\Google Drive/AIC Experiment Data\DARP")
+# darp_path = Path(r"C:\Google Drive/AIC Experiment Data\DARP")
 # darp_path = Path(r"D:\Google Drive AIC/AIC Experiment Data\DARP")
+darp_path = Path(r"D:\Google Drive AIC/AIC Experiment Data\DARP")
 
 root_paths = [
     # darp_path / Path("ITSC_instance_paper/old/Results"),
