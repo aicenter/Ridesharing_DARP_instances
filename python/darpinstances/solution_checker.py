@@ -1,5 +1,6 @@
 import logging
 import os.path
+import argparse
 from pathlib import Path
 from typing import Tuple, Set, Optional, Dict, List
 import os
@@ -18,15 +19,18 @@ from darpinstances.instance import DARPInstance, TravelTimeProvider
 from darpinstances.instance_generation.instance_objects import Request, Action, ActionType
 from darpinstances.solution import VehiclePlan, Solution
 
-darp_folder_path = Path("C:\Google Drive/AIC Experiment Data\DARP")
-# darp_folder_path = r"D:\Google Drive/AIC Experiment Data\DARP"
-instance_path = None
-solution_file_path = darp_folder_path / r"final\Results\DC\start_18-00\duration_30_s\max_delay_03_min\vga/config.yaml-solution.json"
+# darp_folder_path = Path("C:\Google Drive/AIC Experiment Data\DARP")
+# darp_folder_path = Path(r"D:\Google Drive AIC/AIC Experiment Data\DARP")
+# darp_folder_path = Path(r"D:\Google Drive Citya\Bezba")
+#
+# instance_path = None
+# # solution_file_path = darp_folder_path / r"final\Results\DC\start_18-00\duration_15_min\max_delay_10_min\halns-vga/config.yaml-solution.json"
+# solution_file_path = darp_folder_path / r"fexperiments\2023-08-17-not_canceled\solutions/solution_2023-08-17_00-00-00.json"
 
 # test HALNS instance
 # instance_path = darp_folder_path / r'final/Instances/Chicago/instances/start_18-00/duration_05_min/max_delay_03_min/config.yaml'
-# instance_path = darp_folder_path / r'final/Instances/DC/instances/start_18-00/duration_30_s/max_delay_03_min/config.yaml'
-# solution_file_path = darp_folder_path / r"C:\\Google Drive/AIC Experiment Data\\DARP/test/config.yaml-solution.json"
+# instance_path = darp_folder_path / r'final/Instances/DC/instances/start_18-00/duration_15_min/max_delay_10_min/config.yaml'
+# solution_file_path = darp_folder_path / r"test/config.yaml-solution.json"
 
 
 class Failure(Enum):
@@ -66,9 +70,9 @@ def load_instance(instance_path: Path, travel_time_provider=None) -> Tuple[DARPI
 def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, used_vehicles: set, failures: Dict[Failure,int]) \
         -> Tuple[int, bool, Set[Request]]:
     plan_ok = True
-    cost = 0
+    cost = 0.0
 
-    if plan.departure_time < instance.darp_instance_config.start_time:
+    if instance.darp_instance_config.start_time and plan.departure_time < instance.darp_instance_config.start_time:
         plan_ok = False
         failures[Failure.PLAN_DEPARTURE_TIME] += 1
         print("[{}. plan]: departure time {} is smaller then the instance start time ({})"
@@ -105,10 +109,14 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         print("{} plan ends at {}. operation ends at {}, plan should not end after operation".format(plan_counter,plan.arrival_time, operation_end ))
         plan_ok = False
 
+    travel_time_divider = instance.darp_instance_config.travel_time_divider
+
     for action_index, action_data in enumerate(plan.actions):
-        request = action_data.action.request
-        is_drop_off= action_data.action.action_type == ActionType.DROP_OFF
-        is_pickup = action_data.action.action_type == ActionType.PICKUP
+        action = action_data.action
+
+        request = action.request
+        is_drop_off = action.action_type == ActionType.DROP_OFF
+        is_pickup = action.action_type == ActionType.PICKUP
 
         # onboard check
         if is_pickup:
@@ -131,20 +139,21 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
             else:
                 travel_time = travel_time_provider.get_travel_time(plan.vehicle.initial_position,
                                                                    action_data.action.node)
+        # adjust travel time if the provider is not in seconds
+        travel_time = travel_time / travel_time_divider
 
-        travel_time_divider = instance.darp_instance_config.travel_time_divider
-        travel_time = travel_time//travel_time_divider
         time += timedelta(seconds=int(travel_time))
 
         # arrival time check
-        if action_data.arrival_time != time:
-            print(f"[{plan_counter}. plan, {action_index + 1}. Action] Arrival time mismatch (expected {time}, "
+        diff = action_data.arrival_time - time
+        if diff > timedelta(seconds=1) :
+            logging.warning(f"[{plan_counter}. plan, {action_index + 1}. Action] Arrival time mismatch (expected {time}, "
                   f"was {action_data.arrival_time}) when handling request {action_data.action.request.index}")
 
         # max time check
         max_time =  action_data.action.max_time + timedelta(seconds= instance.darp_instance_config.max_pickup_delay)
         if time > max_time:
-            print("[{}. plan, {}. Action] Action max time exceeded ({} > {}) when handling request {}.".format(
+            logging.warning("[{}. plan, {}. Action] Action max time exceeded ({} > {}) when handling request {}.".format(
                 plan_counter, action_index, time, action_data.action.max_time, action_data.action.request.index))
             plan_ok = False
         # break
@@ -164,7 +173,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
 
         # equipment check
         matching_configurations = [config for config in vehicle_configurations if any(num in used_equipment for num in config)]
-        available_configurations = vehicle_configurations if not used_equipment else matching_configurations
+        available_configurations = copy.deepcopy(vehicle_configurations) if not used_equipment else copy.deepcopy(matching_configurations)
         for config in available_configurations:
             for item in used_equipment:
                 if item in config:
@@ -174,7 +183,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         if equipment != 0:
             if is_pickup:
                 if not any(equipment in config for config in available_configurations):
-                    print("Equipment {} not available in vehicle equipment list.".format(equipment))
+                    print("Request {}, Equipment {} not available in vehicle equipment list. Vehicle: {}".format(action_data.action.request.index, equipment, vehicle_index))
                     plan_ok = False
                 used_equipment.append(equipment)
             elif is_drop_off:
@@ -189,7 +198,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
                 plan_ok = False
 
         # waiting to min time
-        if time < action_data.action.min_time:
+        if action.action_type == ActionType.PICKUP and time < action_data.action.min_time:
             pause_duration = action_data.action.min_time - time
             time = action_data.action.min_time
             if(pause_duration > timedelta(seconds = min_pause_length)):
@@ -231,6 +240,7 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
     # return to init position
     if previous_action and instance.darp_instance_config.return_to_depot:
         travel_time_to_depot = travel_time_provider.get_travel_time(previous_action.node, plan.vehicle.initial_position)
+        travel_time_to_depot = travel_time_to_depot / travel_time_divider
         cost += travel_time_to_depot
         time += timedelta(seconds=int(travel_time_to_depot))
 
@@ -242,11 +252,9 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         plan_ok = False
 
     # cost check
-    if cost != plan.cost:
-        print(
-            "[{}. plan] Total cost does not match: cost in solution is {} but computed cost is {}".format(plan_counter,
-                                                                                                          plan.cost,
-                                                                                                          cost))
+    if abs(cost - plan.cost) > 1:
+        logging.warning(
+            "{} plan cost mismatch. expected: {}, computed: {}".format(plan_counter, plan.cost, cost))
         plan_ok = False
 
     if plan_ok:
@@ -267,7 +275,7 @@ def check_solution(instance: DARPInstance, solution: Solution) -> Tuple[bool, Di
     used_vehicles = set()
     solution_ok = True
     served_requests = set()
-    total_cost = 0
+    total_cost = 0.0
 
     plan_counter = 1
 
@@ -288,7 +296,7 @@ def check_solution(instance: DARPInstance, solution: Solution) -> Tuple[bool, Di
         # break
 
     # total cost check
-    if total_cost != solution.cost:
+    if abs (total_cost - solution.cost) > 1:
         print(
             "Solution cost not computed correctly. Solution cost: {}, total cost of all plans: {}".format(solution.cost,
                                                                                                           total_cost))
@@ -373,11 +381,30 @@ def check_all_solutions(root_paths: List[Path], log_all=True) -> pd.DataFrame:
 
 
 if __name__ == '__main__':
-    if not instance_path:
+    parser = argparse.ArgumentParser(description='Scrip for checking DARP solutions')
+    parser.add_argument('solution', type=Path, help='Path to solution file (JSON)')
+    parser.add_argument('-i', '--instance', type=str, help='Path to instance config file (YAML)', required=False)
+
+    args = parser.parse_args()
+
+    solution_file_path = args.solution
+    logging.info("Checking solution: %s", solution_file_path)
+    check_file_exists(solution_file_path)
+
+    if args.instance:
+        instance_path = Path(args.instance)
+        logging.info("Instance path provided as argument: %s", instance_path)
+    else:
+        # if instance path is not provided, try to load it from the experiment config
         exp_config_path = solution_file_path.parent / "config.yaml"
+        logging.info("Instance path not provided, trying to load it from the experiment config: %s", exp_config_path)
+        check_file_exists(exp_config_path)
         experiment_config = darpinstances.experiments.load_experiment_config(exp_config_path)
-        instance_path: Path(experiment_config['instance'])
+        instance_path = Path(experiment_config['instance'])
+        logging.info("Instance path loaded from the experiment config: %s", instance_path)
         os.chdir(solution_file_path.parent)
+
+    check_file_exists(instance_path)
 
     instance, solution = load_data(solution_file_path, instance_path)
     check_solution(instance, solution)
