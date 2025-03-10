@@ -255,6 +255,13 @@ def load_vehicles_from_json(vehicles_path: Path, stations_path: Path) -> List[Ve
     return vehicles
 
 def load_vehicles(instance_dir_path: str, instance_config: Dict) -> List[Vehicle]:
+    # one option is to not define vehicles at all and let the system generate them at the pickup loactions
+    if ('vehicles' in instance_config
+        and 'origin' in instance_config['vehicles']
+        and instance_config['vehicles']['origin'] == 'on-demand'
+    ):
+        return []
+
     vehicles_path_csv = instance_dir_path / 'vehicles.csv'
     vehicles_path_json = instance_dir_path / 'vehicles.json'
     if 'vehicles' in instance_config and 'filepath' in instance_config['vehicles']:
@@ -282,7 +289,22 @@ def _compute_max_prolongation(instance_config: dict, min_travel_time: int) -> fl
         return min_travel_time * instance_config['max_travel_time_delay']['relative']
 
 
-def load_demand_legacy(demand_file, requests, instance_config, travel_time_provider):
+def load_demand_legacy(
+    demand_file: File,
+    requests: List[Request],
+    instance_config: dict,
+    travel_time_provider: TravelTimeProvider
+):
+    """
+    Old loader for demand files in the format present in the original DARP instances requests.csv files. This loader
+    should not be needed any more, as the new loader is more flexible, but it kept here for possible compatibility
+    issues with old instances. It is used only for the old space-separated format files.
+
+    @param demand_file: file object
+    @param requests: list of requests to be filled
+    @param instance_config: instance configuration
+    @param travel_time_provider: travel time provider
+    """
     action_id = 0
     index = 0
     travel_time_divider = instance_config.get('travel_time_divider', 1)
@@ -307,16 +329,31 @@ def load_demand_legacy(demand_file, requests, instance_config, travel_time_provi
         max_pickup_delay = instance_config.get('max_pickup_delay', max_prolongation)
 
         max_pickup_time = request_time + timedelta(seconds=max_pickup_delay)
-        min_drop_off_time = request_time + timedelta(seconds=int(min_travel_time))
+        # min_drop_off_time = request_time + timedelta(seconds=int(min_travel_time))
         max_drop_off_time = request_time + timedelta(seconds=int(min_travel_time)) + timedelta(
             seconds=max_prolongation) + timedelta(seconds=instance_config.get('max_pickup_delay', 0))
         if 'max_pickup_delay' in instance_config:
             max_drop_off_time += timedelta(seconds=instance_config['max_pickup_delay'])
 
         vehicle_id = int(line[5]) if len(line) > 5 else 0
-        requests.append(Request(request_id, action_id, start_node, request_time, max_pickup_time,
-                                action_id + 1, end_node, min_drop_off_time,  max_drop_off_time,
-                                min_travel_time, 0, 0, equipment, vehicle_id))
+        requests.append(
+            Request(
+                request_id,
+                action_id,
+                start_node,
+                request_time,
+                max_pickup_time,
+                action_id + 1,
+                end_node,
+                # min_drop_off_time,
+                max_drop_off_time,
+                min_travel_time,
+                0,
+                0,
+                equipment,
+                vehicle_id
+                )
+        )
         line_string = demand_file.readline()
         action_id += 2
         index += 1
@@ -339,46 +376,75 @@ def get_nearest_node(kdtree: KDTree, transformer: Transformer, latitude: str, lo
     return node
 
 
+def load_demand(
+    demand_file: File,
+    requests: List[Request],
+    instance_config: dict,
+    travel_time_provider: TravelTimeProvider
+):
+    """
+    Function that loads requests from a csv file.
 
-def load_demand(demand_file, requests, instance_config, travel_time_provider):
-    # Create a transformer object
-    transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{instance_config['srid']}", always_xy=True)
+    @param demand_file: file object
+    @param requests: list of requests to be filled
+    @param instance_config: instance configuration
+    @param travel_time_provider: travel time provider
+    """
 
-    # read the nodes
-    input_stream = open(Path(instance_config['area_dir']) / 'maps/nodes.geojson', encoding='utf8')
-    geojson_nodes = geojson.load(input_stream)
-    coord_list = []
-    for node in tqdm(geojson_nodes['features']):
-        coords = node['geometry']['coordinates']
+    # the presence of the SRID signals that the graph nodes for requests' origin and destination are not precomputed
+    if 'srid' in instance_config:
+        # Create a transformer object
+        transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{instance_config['srid']}", always_xy=True)
 
-        # transform coordinates to UTM
-        coords = transformer.transform(coords[0], coords[1])
+        # read the nodes
+        input_stream = open(Path(instance_config['area_dir']) / 'maps/nodes.geojson', encoding='utf8')
+        geojson_nodes = geojson.load(input_stream)
+        coord_list = []
+        for node in tqdm(geojson_nodes['features']):
+            coords = node['geometry']['coordinates']
 
-        coord_list.append(coords)
-    kdtree = KDTree(coord_list)
+            # transform coordinates to UTM
+            coords = transformer.transform(coords[0], coords[1])
 
-    reader = csv.DictReader(demand_file)
+            coord_list.append(coords)
+        kdtree = KDTree(coord_list)
+
+    demand_reader = csv.DictReader(demand_file)
 
     action_id = 0
     index = 0
     travel_time_divider = instance_config.get('travel_time_divider', 1)
 
-    for line in reader:
-        request_id: int = int(line['id'])
-        desired_pickup_time = _load_datetime(line['Pickup_Time'])
+    for line in demand_reader:
 
+        # request_id is either the 'id' field or the row index
+        if 'id' in line:
+            request_id: int = int(line['id'])
+        else:
+            request_id = index
+
+        # pickup times
+        desired_pickup_time = _load_datetime(line['Pickup_Time'])
         min_pickup_time = _compute_min_pickup_time(instance_config, desired_pickup_time)
 
         # nodes
-        start_node = get_nearest_node(kdtree, transformer, line['Latitude_From'], line['Longitude_From'])
-        end_node = get_nearest_node(kdtree, transformer, line['Latitude_To'], line['Longitude_To'])
-        # start_node = Node(kdtree.query([float(line['Longitude_From']), float(line['Latitude_From'])])[1])
-        # end_node = Node(kdtree.query([float(line['Longitude_To']), float(line['Latitude_To'])])[1])
+        if transformer:
+            start_node = get_nearest_node(kdtree, transformer, line['Latitude_From'], line['Longitude_From'])
+            end_node = get_nearest_node(kdtree, transformer, line['Latitude_To'], line['Longitude_To'])
+        else:
+            start_node = Node(int(line['Node_From']))
+            end_node = Node(int(line['Node_To']))
 
-        equipment = map_equipment_type(line['Slot_Type']).value
+        # equipment
+        if 'Slot_Type' in line:
+            equipment = map_equipment_type(line['Slot_Type']).value
+        else:
+            equipment = None
 
+        # minimum travel time from start to end node
         min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
         min_travel_time = min_travel_time / travel_time_divider
+
 
         max_prolongation = _compute_max_prolongation(instance_config, min_travel_time)
         max_pickup_delay = instance_config.get('max_pickup_delay', max_prolongation)
