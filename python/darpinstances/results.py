@@ -245,7 +245,7 @@ def rename_method(method_name: str) -> str:
 
 
 def get_method_value(method_name: str) -> int:
-    hardcoded_order = {'IH': 0, 'HALNS': 1, 'HALNS-IH': 10000, 'HALNS-VGA': 10001, 'VGA': 10002}
+    hardcoded_order = {'IH': 9999, 'HALNS': 1, 'HALNS-IH': 10000, 'HALNS-VGA': 10001, 'VGA': 10002}
     val = hardcoded_order[method_name] if method_name in hardcoded_order else _compute_vga_chaining_value(method_name)
     return val
 

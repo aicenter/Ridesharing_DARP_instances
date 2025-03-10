@@ -45,14 +45,6 @@ def load_data(solution_file_path: Path, instance_path: Optional[Path]) -> Tuple[
 
     instance, _ = load_instance(instance_path)
 
-    # request_map = dict()
-    # for request in instance.requests:
-    #     request_map[request.index] = request
-    #
-    # vehicle_map = dict()
-    # for vehicle in instance.vehicles:
-    #     vehicle_map[vehicle.index] = vehicle
-
     solution = darpinstances.solution.load_solution(str(solution_file_path), instance)
 
     return instance, solution

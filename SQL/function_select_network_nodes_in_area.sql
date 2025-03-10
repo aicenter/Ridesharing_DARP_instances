@@ -1,3 +1,13 @@
+------------------------------------------------------------------------------------------------------------------------
+-- This function returns road network nodes in a given area.
+-- Parameters:
+--      - area_id: The area id.
+-- Returns: network nodes in the given area.
+-- Required tables: nodes, component_data
+-- Affected tables: None
+-- Author: David Fiedler
+-- Date: 2022
+------------------------------------------------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION select_network_nodes_in_area(area_id smallint)
 RETURNS TABLE(index integer, id bigint, x float, y float, geom geometry)
 LANGUAGE sql

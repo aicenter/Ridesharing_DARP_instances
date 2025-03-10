@@ -180,7 +180,7 @@ class Node:
         return str(self.idx)
 
 
-def load_vehicles(vehicles_path: str) -> List[Vehicle]:
+def load_vehicles_csv(vehicles_path: str) -> List[Vehicle]:
     veh_data = darpinstances.inout.load_csv(vehicles_path, "\t")
     vehicles = []
     for index, veh in enumerate(veh_data):
@@ -248,6 +248,21 @@ def load_vehicles_from_json(vehicles_path: str, stations_path:str) -> List[Vehic
 
     return vehicles
 
+def load_vehicles(instance_dir_path: str, instance_config: Dict) -> List[Vehicle]:
+    vehicles_path_csv = os.path.join(instance_dir_path, 'vehicles.csv')
+    vehicles_path_json = os.path.join(instance_dir_path, 'vehicles.json')
+    stations_path_csv = os.path.join(instance_dir_path, 'station_positions.csv')
+    csv_exists = check_file_exists(vehicles_path_csv, raise_ex=False)
+    json_exists = check_file_exists(vehicles_path_json, raise_ex=False)
+    stations_csv_exists = check_file_exists(vehicles_path_json, raise_ex=False)
+
+    if json_exists and stations_csv_exists:
+        vehicles = load_vehicles_from_json(vehicles_path_json, stations_path_csv)
+    elif csv_exists:
+        vehicles = load_vehicles_csv(vehicles_path_csv)
+    else:
+        raise ValueError("Vehicles file .json or .csv was not found")
+
 
 def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider = None) -> DARPInstance:
     instance_config = load_instance_config(filepath)
@@ -259,12 +274,7 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
     instance_path = instance_config['demand']['filepath']
     check_file_exists(instance_path)
 
-    vehicles_path_csv = os.path.join(instance_dir_path, 'vehicles.csv')
-    vehicles_path_json = os.path.join(instance_dir_path, 'vehicles.json')
-    stations_path_csv = os.path.join(instance_dir_path, 'station_positions.csv')
-    csv_exists = check_file_exists(vehicles_path_csv, raise_ex=False)
-    json_exists = check_file_exists(vehicles_path_json, raise_ex=False)
-    stations_csv_exists = check_file_exists(vehicles_path_json, raise_ex=False)
+    vehicles = load_vehicles(instance_dir_path, instance_config)
 
     # dm loading
     if travel_time_provider is None:
@@ -281,13 +291,6 @@ def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
 
     logging.info("Reading DARP instance from: {}".format(os.path.realpath(instance_path)))
     with open(instance_path, "r", encoding="utf-8") as infile:
-        if json_exists and stations_csv_exists:
-            vehicles = load_vehicles_from_json(vehicles_path_json, stations_path_csv)
-        elif csv_exists:
-            vehicles = load_vehicles(vehicles_path_csv)
-        else:
-            raise ValueError("Vehicles file .json or .csv was not found")
-
         requests: List[Request] = []
 
         line_string = infile.readline()
