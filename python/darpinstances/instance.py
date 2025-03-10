@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 import math
 import os
+from io import TextIOWrapper
 
 import geojson
 import numpy as np
@@ -254,7 +255,7 @@ def load_vehicles_from_json(vehicles_path: Path, stations_path: Path) -> List[Ve
 
     return vehicles
 
-def load_vehicles(instance_dir_path: str, instance_config: Dict) -> List[Vehicle]:
+def load_vehicles(instance_dir_path: Path, instance_config: Dict) -> List[Vehicle]:
     # one option is to not define vehicles at all and let the system generate them at the pickup loactions
     if ('vehicles' in instance_config
         and 'origin' in instance_config['vehicles']
@@ -290,7 +291,7 @@ def _compute_max_prolongation(instance_config: dict, min_travel_time: int) -> fl
 
 
 def load_demand_legacy(
-    demand_file: File,
+    demand_file: TextIOWrapper,
     requests: List[Request],
     instance_config: dict,
     travel_time_provider: TravelTimeProvider
@@ -377,7 +378,7 @@ def get_nearest_node(kdtree: KDTree, transformer: Transformer, latitude: str, lo
 
 
 def load_demand(
-    demand_file: File,
+    demand_file: TextIOWrapper,
     requests: List[Request],
     instance_config: dict,
     travel_time_provider: TravelTimeProvider
@@ -445,16 +446,18 @@ def load_demand(
         min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
         min_travel_time = min_travel_time / travel_time_divider
 
-
-        max_prolongation = _compute_max_prolongation(instance_config, min_travel_time)
-        max_pickup_delay = instance_config.get('max_pickup_delay', max_prolongation)
+        # max time computations
+        max_delay = _compute_max_prolongation(instance_config, min_travel_time)
+        max_pickup_delay = instance_config.get('max_pickup_delay', max_delay)
 
         max_pickup_time = desired_pickup_time + timedelta(seconds=max_pickup_delay)
 
-        max_drop_off_delay = max_prolongation + instance_config.get('max_pickup_delay', 0)
+        max_drop_off_delay = max_delay + instance_config.get('max_pickup_delay', 0)
         max_drop_off_time = desired_pickup_time + timedelta(seconds=math.ceil(min_travel_time + max_drop_off_delay))
 
+        # required vehicle id, if not present, set to 0
         vehicle_id = int(line['required_vehicle_id']) if 'required_vehicle_id' in line else 0
+
         request = Request(
             request_id,
             action_id,
@@ -464,7 +467,7 @@ def load_demand(
             action_id + 1,
             end_node,
             max_drop_off_time,
-            min_travel_time,
+            math.ceil(min_travel_time),
             0,
             0,
             equipment,
@@ -475,7 +478,7 @@ def load_demand(
         index += 1
 
 
-def read_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider = None) -> DARPInstance:
+def load_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider = None) -> DARPInstance:
     instance_config = load_instance_config(filepath, set_defaults=False)
     instance_dir_path = filepath.parent
 

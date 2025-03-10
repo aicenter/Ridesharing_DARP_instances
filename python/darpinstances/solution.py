@@ -1,6 +1,9 @@
 import logging
+from pathlib import Path
 from typing import List, Optional, Set, Tuple, Dict
-from datetime import datetime
+from datetime import datetime, timedelta
+
+import pandas as pd
 
 from darpinstances.inout import load_json
 from darpinstances.instance import DARPInstance, Request, Vehicle
@@ -9,7 +12,13 @@ from darpinstances.vehicle_plan import VehiclePlan, ActionData
 
 
 class Solution:
-    def __init__(self, vehicle_plans: List[VehiclePlan], cost: int, dropped_requests=Optional[Set[int]], feasible=True):
+    def __init__(
+        self,
+        vehicle_plans: List[VehiclePlan],
+        cost: Optional[int],
+        dropped_requests=Optional[Set[int]],
+        feasible=True
+    ):
         """
         Constructor
         :param vehicle_plans: List of vehicle plans
@@ -35,19 +44,18 @@ class Solution:
 def _load_datetime(string: str):
     return datetime.strptime(string, '%Y-%m-%d %H:%M:%S')
 
-def load_solution(filepath: str, instance: DARPInstance) -> Solution:
+
+def load_json_solution(filepath, use_virtual_vehicles, request_map, vehicle_map):
     json_data = load_json(filepath)
 
     # handle infesible solutions
     if "feasible" in json_data and json_data["feasible"] == False:
         return Solution.make_infeasible()
 
-    request_map, vehicle_map = _prepare_maps(instance)
-
     vehicle_plans = []
     total_missmatch_actions = 0
     for json_plan in json_data["plans"]:
-        plan, mismatch_actions_count = _load_plan(json_plan, instance.darp_instance_config.virtual_vehicles, vehicle_map, request_map)
+        plan, mismatch_actions_count = _load_plan(json_plan, use_virtual_vehicles, vehicle_map,  request_map)
         vehicle_plans.append(plan)
         total_missmatch_actions += mismatch_actions_count
 
@@ -58,6 +66,29 @@ def load_solution(filepath: str, instance: DARPInstance) -> Solution:
     for request in json_data["dropped_requests"]:
         dropped_requests.add(int(request["id"]))
     return Solution(vehicle_plans, json_data["cost"], dropped_requests)
+
+
+def load_csv_solution(filepath, request_map, vehicle_map):
+    data = pd.read_csv(filepath)
+
+    vehicle_plans = []
+    total_missmatch_actions = 0
+    for json_plan in json_data["plans"]:
+        plan, mismatch_actions_count = _load_plan(json_plan, use_virtual_vehicles, vehicle_map,  request_map)
+        vehicle_plans.append(plan)
+
+    return Solution(vehicle_plans, None, set())
+
+
+def load_solution(filepath: Path, instance: DARPInstance) -> Solution:
+    request_map, vehicle_map = _prepare_maps(instance)
+
+    if filepath.suffix == '.json':
+        return load_json_solution(filepath, instance.darp_instance_config.virtual_vehicles, request_map, vehicle_map)
+    else:
+        return load_csv_solution(filepath, instance.darp_instance_config.virtual_vehicles, request_map, vehicle_map)
+
+
 
 
 def _prepare_maps(instance: DARPInstance) -> Tuple[Dict[int, Request], Dict[int, Vehicle]]:
@@ -134,8 +165,8 @@ def _load_plan(
         arrival_time_val = action_data["arrival_time"]
         departure_time_val = action_data["departure_time"]
         if isinstance(arrival_time_val, int):
-            arrival_time = datetime.utcfromtimestamp(arrival_time_val)
-            departure_time = datetime.utcfromtimestamp(departure_time_val)
+            arrival_time = datetime.fromtimestamp(arrival_time_val)
+            departure_time = datetime.fromtimestamp(departure_time_val)
         else:
             arrival_time = _load_datetime(arrival_time_val)
             departure_time = _load_datetime(departure_time_val)
@@ -157,8 +188,8 @@ def _load_plan(
         actions_data_list.append(ActionData(action_from_instance, arrival_time, departure_time))
 
     if isinstance(json_data["departure_time"], int):
-        departure_datetime = datetime.utcfromtimestamp(json_data["departure_time"])
-        arrival_datetime = datetime.utcfromtimestamp(json_data["arrival_time"])
+        departure_datetime = datetime.fromtimestamp(json_data["departure_time"])
+        arrival_datetime = datetime.fromtimestamp(json_data["arrival_time"])
     else:
         departure_datetime = _load_datetime(json_data["departure_time"])
         arrival_datetime = _load_datetime(json_data["arrival_time"])
@@ -176,3 +207,66 @@ def load_plan(filepath: str, instance: DARPInstance) -> VehiclePlan:
     vp = _load_plan(json_data, instance.darp_instance_config.virtual_vehicles, vehicle_map, request_map)
 
     return vp
+
+
+def _load_action_from_csv(
+    # action_index: int,
+    # time: int,
+    # action_type_str: str,
+    # node: int,
+    # request_id: int,
+    action_row: pd.Series,
+    simulation_start_time: datetime,
+    request_map: Dict[int, Request]
+) -> Optional[ActionData]:
+    action_type_str = action_row['action']
+
+    if action_type_str not in ["P", "D"]:
+        return None
+
+    request_id = action_row['request_id']
+    node = action_row['node']
+
+    # time loading
+    arrival_time = simulation_start_time + timedelta(seconds=action_row['time'])
+    departure_time = arrival_time
+
+    # mapping to request
+    request = request_map[request_id]
+
+    # get the action definition from instance data
+    action_type = ActionType.PICKUP if action_type_str == "P" else ActionType.DROP_OFF
+    if action_type == action_type.PICKUP:
+        action_from_instance = request.pickup_action
+    else:
+        action_from_instance = request.drop_off_action
+
+    if action_from_instance.node.get_idx() != node:
+        logging.warning("Node mismatch for request %, action %: Action from instance: %s, action from solution: %s",
+        request_id, action_row.index - 1, action_from_instance.node.get_idx(), node)
+
+    return ActionData(action_from_instance, arrival_time, departure_time)
+
+
+def _load_plan_from_csv(
+    plan_data: pd.DataFrame,
+    vehicle_map: Dict[int, Vehicle],
+    request_map: Dict[int, Request],
+    simulation_start_time: datetime
+) -> VehiclePlan:
+    vehicle = vehicle_map[plan_data.iloc[0]["vehicle_id"]]
+
+    # action data loading
+    actions_data_list = plan_data.apply(_load_action_from_csv, axis=1, args=(simulation_start_time, request_map)).notnull()
+
+    # actions_data_list = [_load_action_from_csv(action_index, time, action_type_str, node, request_id, simulation_start_time,
+    # request_map for action_index, time, action_type_str, node, request_id in zip
+
+
+    departure_datetime = actions_data_list[0].arrival_time
+    arrival_datetime = actions_data_list[-1].departure_time
+
+    vh_plan = VehiclePlan(
+        vehicle, None, actions_data_list, departure_datetime, arrival_datetime
+    )
+    return vh_plan
