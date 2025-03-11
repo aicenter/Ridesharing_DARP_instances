@@ -1,24 +1,22 @@
 # from __future__ import annotations
 import csv
-from datetime import datetime, timedelta
-
+import logging
 import math
 import os
+from abc import ABC, abstractmethod
+from datetime import datetime, timedelta
+from enum import Enum
+from functools import singledispatchmethod
 from io import TextIOWrapper
+from pathlib import Path
+from typing import Iterable, Dict, List, Optional, Sequence
 
 import geojson
+import h5py
 import numpy as np
 import pandas as pd
-from typing import Iterable, Dict, List, Optional
-from abc import ABC, abstractmethod
-from enum import Enum, auto
-import logging
-from functools import singledispatchmethod
 import yaml
-import h5py
-from pathlib import Path
 from pyproj import Transformer
-
 from scipy.spatial import KDTree
 from tqdm import tqdm
 
@@ -51,8 +49,12 @@ class EuclideanTravelTimeProvider(TravelTimeProvider):
         self.coordinate_resolution = coordinate_resolution
 
     def get_travel_time(self, from_position: Coordinate, to_position: Coordinate):
-        distance = math.sqrt(math.pow(from_position.get_x() - to_position.get_x(), 2)
-                             + math.pow(from_position.get_y() - to_position.get_y(), 2))
+        distance = math.sqrt(
+            math.pow(from_position.get_x() - to_position.get_x(), 2) + math.pow(
+                from_position.get_y() - to_position.get_y(),
+                2
+                )
+            )
         travel_time = round(distance * self.coordinate_resolution)
         return travel_time
 
@@ -61,6 +63,7 @@ class MatrixTravelTimeProvider(TravelTimeProvider):
     """
 
     """
+
     @classmethod
     def from_csv(cls, path_to_dm: str):
         dm = pd.read_csv(path_to_dm, header=None, dtype=np.int32)
@@ -101,8 +104,9 @@ class DARPInstanceConfiguration:
         max_pause_interval: int = 0,
         travel_time_divider: int = 1,
         max_pickup_delay: int = 0,
-        enable_negative_delay: bool = False
-     ):
+        enable_negative_delay: bool = False,
+        vehicle_capacity: Optional[int] = None
+    ):
         self.max_route_duration = max_route_duration
         self.max_ride_time = max_ride_time
         self.return_to_depot = return_to_depot
@@ -113,6 +117,7 @@ class DARPInstanceConfiguration:
         self.travel_time_divider = travel_time_divider
         self.max_pickup_delay = max_pickup_delay
         self.enable_negative_delay = enable_negative_delay
+        self.vehicle_capacity = vehicle_capacity
 
 
 class DARPInstance:
@@ -125,7 +130,7 @@ class DARPInstance:
         darp_instance_config: DARPInstanceConfiguration
     ):
         self.requests = requests
-        self.vehicles = vehicles
+        self.vehicles: Sequence[Vehicle] = vehicles
         self.travel_time_provider = travel_time_provider
         self.darp_instance_config = darp_instance_config
         self.request_map = {r.index: r for r in requests}
@@ -147,7 +152,7 @@ def _set_config_defaults(config: Dict, defaults: Dict):
                 config[key] = defaults[key]
 
 
-def load_instance_config(config_file_path: Path, set_defaults: bool =True) -> Dict:
+def load_instance_config(config_file_path: Path, set_defaults: bool = True) -> Dict:
     config_file_path_abs = config_file_path.absolute()
     logging.info(f"Loading instance config from {config_file_path_abs}")
     with open(config_file_path_abs, 'r') as config_file:
@@ -155,20 +160,10 @@ def load_instance_config(config_file_path: Path, set_defaults: bool =True) -> Di
             config = yaml.safe_load(config_file)
 
             if set_defaults:
-                defaults = {
-                    'instance_dir': os.path.dirname(config_file_path),
-                    'map': {
-                        'path': config_file_path.parent / 'map'
-                    },
-                    'demand': {
-                        'type': 'generate',
-                        'min_time': 0,
-                        'max_time': 86_400  # 24:00
-                    },
-                    'vehicles': {
-                        'start_time': config['demand']['min_time']
-                    }
-                }
+                defaults = {'instance_dir': os.path.dirname(config_file_path),
+                    'map': {'path': config_file_path.parent / 'map'},
+                    'demand': {'type': 'generate', 'min_time': 0, 'max_time': 86_400  # 24:00
+                    }, 'vehicles': {'start_time': config['demand']['min_time']}}
 
                 _set_config_defaults(config, defaults)
             return config
@@ -195,6 +190,7 @@ def load_vehicles_csv(vehicles_path: str) -> List[Vehicle]:
 
     return vehicles
 
+
 class EquipmentType(Enum):
     NONE = 0
     STANDARD_SEAT = 1
@@ -204,14 +200,11 @@ class EquipmentType(Enum):
 
 
 def map_equipment_type(equipment_str: str) -> EquipmentType:
-    equipment_mapping = {
-        "NONE": EquipmentType.NONE,
-        "STANDARD_SEAT": EquipmentType.STANDARD_SEAT,
-        "WHEELCHAIR": EquipmentType.WHEELCHAIR,
-        "ELECTRIC_WHEELCHAIR": EquipmentType.ELECTRIC_WHEELCHAIR,
-        "SPECIAL_NEEDS_STROLLER": EquipmentType.SPECIAL_NEEDS_STROLLER,
-    }
+    equipment_mapping = {"NONE": EquipmentType.NONE, "STANDARD_SEAT": EquipmentType.STANDARD_SEAT,
+        "WHEELCHAIR": EquipmentType.WHEELCHAIR, "ELECTRIC_WHEELCHAIR": EquipmentType.ELECTRIC_WHEELCHAIR,
+        "SPECIAL_NEEDS_STROLLER": EquipmentType.SPECIAL_NEEDS_STROLLER, }
     return equipment_mapping.get(equipment_str, EquipmentType.NONE)
+
 
 def _load_datetime(string: str):
     return datetime.strptime(string, '%Y-%m-%d %H:%M:%S')
@@ -251,16 +244,17 @@ def load_vehicles_from_json(vehicles_path: Path, stations_path: Path) -> List[Ve
         operation_start = _load_datetime(veh["operation_start"]) if "operation_start" in veh else None
         operation_end = _load_datetime(veh["operation_end"]) if "operation_end" in veh else None
         initial_position = Node(stations[int(veh["station_index"])])
-        vehicles.append(Vehicle(int(veh["id"]), initial_position, capacity, configurations, operation_start, operation_end))
+        vehicles.append(
+            Vehicle(int(veh["id"]), initial_position, capacity, configurations, operation_start, operation_end)
+        )
 
     return vehicles
 
+
 def load_vehicles(instance_dir_path: Path, instance_config: Dict) -> List[Vehicle]:
     # one option is to not define vehicles at all and let the system generate them at the pickup loactions
-    if ('vehicles' in instance_config
-        and 'origin' in instance_config['vehicles']
-        and instance_config['vehicles']['origin'] == 'on-demand'
-    ):
+    if ('vehicles' in instance_config and 'origin' in instance_config['vehicles'] and instance_config['vehicles'][
+        'origin'] == 'on-demand'):
         return []
 
     vehicles_path_csv = instance_dir_path / 'vehicles.csv'
@@ -291,10 +285,7 @@ def _compute_max_prolongation(instance_config: dict, min_travel_time: int) -> fl
 
 
 def load_demand_legacy(
-    demand_file: TextIOWrapper,
-    requests: List[Request],
-    instance_config: dict,
-    travel_time_provider: TravelTimeProvider
+    demand_file: TextIOWrapper, requests: List[Request], instance_config: dict, travel_time_provider: TravelTimeProvider
 ):
     """
     Old loader for demand files in the format present in the original DARP instances requests.csv files. This loader
@@ -321,10 +312,10 @@ def load_demand_legacy(
 
         start_node = Node(int(line[1]))
         end_node = Node(int(line[2]))
-        equipment = map_equipment_type(line[4]).value if(len(line) > 4) else 0
+        equipment = map_equipment_type(line[4]).value if (len(line) > 4) else 0
 
         min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
-        min_travel_time = min_travel_time/travel_time_divider
+        min_travel_time = min_travel_time / travel_time_divider
 
         max_prolongation = _compute_max_prolongation(instance_config, min_travel_time)
         max_pickup_delay = instance_config.get('max_pickup_delay', max_prolongation)
@@ -332,7 +323,8 @@ def load_demand_legacy(
         max_pickup_time = request_time + timedelta(seconds=max_pickup_delay)
         # min_drop_off_time = request_time + timedelta(seconds=int(min_travel_time))
         max_drop_off_time = request_time + timedelta(seconds=int(min_travel_time)) + timedelta(
-            seconds=max_prolongation) + timedelta(seconds=instance_config.get('max_pickup_delay', 0))
+            seconds=max_prolongation
+        ) + timedelta(seconds=instance_config.get('max_pickup_delay', 0))
         if 'max_pickup_delay' in instance_config:
             max_drop_off_time += timedelta(seconds=instance_config['max_pickup_delay'])
 
@@ -353,7 +345,7 @@ def load_demand_legacy(
                 0,
                 equipment,
                 vehicle_id
-                )
+            )
         )
         line_string = demand_file.readline()
         action_id += 2
@@ -378,10 +370,7 @@ def get_nearest_node(kdtree: KDTree, transformer: Transformer, latitude: str, lo
 
 
 def load_demand(
-    demand_file: TextIOWrapper,
-    requests: List[Request],
-    instance_config: dict,
-    travel_time_provider: TravelTimeProvider
+    demand_file: TextIOWrapper, requests: List[Request], instance_config: dict, travel_time_provider: TravelTimeProvider
 ):
     """
     Function that loads requests from a csv file.
@@ -478,14 +467,21 @@ def load_demand(
         index += 1
 
 
-def load_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider = None) -> DARPInstance:
+def load_instance(
+    filepath: Path,
+    travel_time_provider: MatrixTravelTimeProvider = None,
+    demand_file_name: Optional[str] = None
+) -> DARPInstance:
     instance_config = load_instance_config(filepath, set_defaults=False)
     instance_dir_path = filepath.parent
 
     # Here, we are completing the possibly relative paths. Therefore, we need to change the dir because dm path
     # loaded from instance config is relative to the instance dir
     os.chdir(instance_dir_path)
-    demand_path = instance_config['demand']['filepath']
+    if demand_file_name is None:
+        demand_path = instance_config['demand']['filepath']
+    else:
+        demand_path = instance_dir_path / demand_file_name
     check_file_exists(demand_path)
 
     vehicles = load_vehicles(instance_dir_path, instance_config)
@@ -521,6 +517,7 @@ def load_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
     start_time = None
     min_pause_length = 0
     max_pause_interval = 0
+    vehicle_capacity = None  # by default, each vehicle defines its own capacity
     if 'vehicles' in instance_config:
         min_pause_length = instance_config['vehicles'].get('min_pause_length', 0)
         max_pause_interval = instance_config['vehicles'].get('max_pause_interval', 0)
@@ -530,6 +527,9 @@ def load_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
                 start_time = datetime.utcfromtimestamp(start_time_val)
             else:
                 start_time = _load_datetime(start_time_val)
+
+        if 'capacity' in instance_config['vehicles']:
+            vehicle_capacity = instance_config['vehicles']['capacity']
 
     travel_time_divider = instance_config.get('travel_time_divider', 1)
 
@@ -543,7 +543,8 @@ def load_instance(filepath: Path, travel_time_provider: MatrixTravelTimeProvider
         max_pause_interval,
         travel_time_divider,
         max_pickup_delay,
-        enable_negative_delay
+        enable_negative_delay,
+        vehicle_capacity
     )
     return DARPInstance(requests, vehicles, travel_time_provider, darp_instance_config)
 

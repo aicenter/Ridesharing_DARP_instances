@@ -1,14 +1,14 @@
-import logging
-import os.path
 import argparse
+import copy
+import logging
+import os
+import os.path
+from datetime import timedelta
+from enum import Enum, auto
 from pathlib import Path
 from typing import Tuple, Set, Optional, Dict, List
-import os
-from enum import Enum, auto
-from datetime import datetime, timedelta
 
 import pandas as pd
-import copy
 
 import darpinstances.experiments
 import darpinstances.inout
@@ -18,6 +18,7 @@ from darpinstances.inout import check_file_exists
 from darpinstances.instance import DARPInstance, TravelTimeProvider
 from darpinstances.instance_generation.instance_objects import Request, Action, ActionType
 from darpinstances.solution import VehiclePlan, Solution
+
 
 # darp_folder_path = Path("C:\Google Drive/AIC Experiment Data\DARP")
 # darp_folder_path = Path(r"D:\Google Drive AIC/AIC Experiment Data\DARP")
@@ -37,29 +38,33 @@ class Failure(Enum):
     PLAN_DEPARTURE_TIME = auto()
 
 
-def load_data(solution_file_path: Path, instance_path: Optional[Path]) -> Tuple[DARPInstance, Solution]:
-    check_file_exists(str(solution_file_path))
+def load_data(solution: Path, instance_path: Optional[Path], demand_file_name: Optional[str] = None) -> Tuple[DARPInstance, Solution]:
+    check_file_exists(solution_file_path)
     solution_dir_path = solution_file_path.parent
     os.chdir(solution_dir_path)
 
     if instance_path is None:
-        config_path = os.path.join(solution_dir_path, "config.yaml")
-        experiment_config = darpinstances.experiments.load_experiment_config(config_path)
+        experiment_config_path = solution_dir_path / "config.yaml"
+        experiment_config = darpinstances.experiments.load_experiment_config(experiment_config_path)
         instance_path = Path(experiment_config['instance'])
 
-    instance, _ = load_instance(instance_path)
+    instance, _ = load_instance(instance_path, demand_file_name=demand_file_name)
+    return instance, solution_dir_path
 
-    solution = darpinstances.solution.load_solution(str(solution_file_path), instance)
+    solution = darpinstances.solution.load_solution(solution_file_path, instance)
 
     return instance, solution
 
-    # uncoment the following line to read the Cordeau & Laport solution files
-    # solution = darpbenchmark.cordeau_benchmark.load_cordeau_solution(cordeau_solution_path, vehicle_map, request_map)
+    # uncoment the following line to read the Cordeau & Laport solution files  # solution = darpbenchmark.cordeau_benchmark.load_cordeau_solution(cordeau_solution_path, vehicle_map, request_map)
 
 
-def load_instance(instance_path: Path, travel_time_provider=None) -> Tuple[DARPInstance, TravelTimeProvider]:
+def load_instance(
+    instance_path: Path,
+    travel_time_provider: Optional[TravelTimeProvider] = None,
+    demand_file_name: Optional[str] = None
+) -> Tuple[DARPInstance, TravelTimeProvider]:
     if instance_path.suffix == '.yaml':
-        instance = darpinstances.instance.load_instance(instance_path, travel_time_provider)
+        instance = darpinstances.instance.load_instance(instance_path, travel_time_provider, demand_file_name)
         travel_time_provider = instance.travel_time_provider
     else:
         instance = load_cordeau(instance_path)
@@ -67,16 +72,26 @@ def load_instance(instance_path: Path, travel_time_provider=None) -> Tuple[DARPI
     return instance, travel_time_provider
 
 
-def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, used_vehicles: set, failures: Dict[Failure,int]) \
-        -> Tuple[int, bool, Set[Request]]:
+def check_plan(
+    plan: VehiclePlan,
+    plan_counter: int,
+    instance: DARPInstance,
+    used_vehicles: set,
+    failures: Dict[Failure, int]
+) -> Tuple[int, bool, Set[Request]]:
     plan_ok = True
     cost = 0.0
 
     if instance.darp_instance_config.start_time and plan.departure_time < instance.darp_instance_config.start_time:
         plan_ok = False
         failures[Failure.PLAN_DEPARTURE_TIME] += 1
-        print("[{}. plan]: departure time {} is smaller then the instance start time ({})"
-              .format(plan_counter, plan.departure_time, instance.darp_instance_config.start_time))
+        print(
+            "[{}. plan]: departure time {} is smaller then the instance start time ({})".format(
+                plan_counter,
+                plan.departure_time,
+                instance.darp_instance_config.start_time
+            )
+                                                                                        )
 
     time = plan.departure_time
     free_capacity = plan.vehicle.capacity
@@ -103,10 +118,22 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
     operation_start = plan.vehicle.operation_start
     operation_end = plan.vehicle.operation_end
     if (operation_start and (plan.departure_time < operation_start)):
-        print("{} plan starts at {}. operation starts at {}, plan should not start before operation".format(plan_counter,plan.departure_time, operation_start ))
+        print(
+            "{} plan starts at {}. operation starts at {}, plan should not start before operation".format(
+                plan_counter,
+                plan.departure_time,
+                operation_start
+            )
+        )
         plan_ok = False
     if (operation_end and (plan.arrival_time > operation_end)):
-        print("{} plan ends at {}. operation ends at {}, plan should not end after operation".format(plan_counter,plan.arrival_time, operation_end ))
+        print(
+            "{} plan ends at {}. operation ends at {}, plan should not end after operation".format(
+                plan_counter,
+                plan.arrival_time,
+                operation_end
+            )
+        )
         plan_ok = False
 
     travel_time_divider = instance.darp_instance_config.travel_time_divider
@@ -126,8 +153,11 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
                 onboard_requests.remove(request)
                 served_requests.add(request)
             else:
-                print("[{}. plan] Request {} dropped off while not being picked up first.".format(plan_counter,
-                                                                                                  request.index))
+                print(
+                    "[{}. plan] Request {} dropped off while not being picked up first.".format(
+                        plan_counter, request.index
+                    )
+                )
                 plan_ok = False
         # break
 
@@ -137,8 +167,9 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
             if instance.darp_instance_config.virtual_vehicles:
                 travel_time = plan.vehicle.time_to_start
             else:
-                travel_time = travel_time_provider.get_travel_time(plan.vehicle.initial_position,
-                                                                   action_data.action.node)
+                travel_time = travel_time_provider.get_travel_time(
+                    plan.vehicle.initial_position, action_data.action.node
+                )
         # adjust travel time if the provider is not in seconds
         travel_time = travel_time / travel_time_divider
 
@@ -146,15 +177,20 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
 
         # arrival time check
         diff = action_data.arrival_time - time
-        if diff > timedelta(seconds=1) :
-            logging.warning(f"[{plan_counter}. plan, {action_index + 1}. Action] Arrival time mismatch (expected {time}, "
-                  f"was {action_data.arrival_time}) when handling request {action_data.action.request.index}")
+        if diff > timedelta(seconds=1):
+            logging.warning(
+                f"[{plan_counter}. plan, {action_index + 1}. Action] Arrival time mismatch (expected {time}, "
+                f"was {action_data.arrival_time}) when handling request {action_data.action.request.index}"
+            )
 
         # max time check
-        max_time =  action_data.action.max_time + timedelta(seconds= instance.darp_instance_config.max_pickup_delay)
+        max_time = action_data.action.max_time + timedelta(seconds=instance.darp_instance_config.max_pickup_delay)
         if time > max_time:
-            logging.warning("[{}. plan, {}. Action] Action max time exceeded ({} > {}) when handling request {}.".format(
-                plan_counter, action_index, time, action_data.action.max_time, action_data.action.request.index))
+            logging.warning(
+                "[{}. plan, {}. Action] Action max time exceeded ({} > {}) when handling request {}.".format(
+                    plan_counter, action_index, time, action_data.action.max_time, action_data.action.request.index
+                )
+            )
             plan_ok = False
         # break
 
@@ -164,7 +200,9 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
                 if free_capacity == 0:
                     print(
                         "[{}. plan] Pickup action performed when vehicle was already full when handling request {}".format(
-                            plan_counter, action_data.action.request.index))
+                            plan_counter, action_data.action.request.index
+                        )
+                    )
                     plan_ok = False
                 # break
                 free_capacity -= 1
@@ -172,8 +210,11 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
                 free_capacity += 1
 
         # equipment check
-        matching_configurations = [config for config in vehicle_configurations if any(num in used_equipment for num in config)]
-        available_configurations = copy.deepcopy(vehicle_configurations) if not used_equipment else copy.deepcopy(matching_configurations)
+        matching_configurations = [config for config in vehicle_configurations if
+                                   any(num in used_equipment for num in config)]
+        available_configurations = copy.deepcopy(vehicle_configurations) if not used_equipment else copy.deepcopy(
+            matching_configurations
+        )
         for config in available_configurations:
             for item in used_equipment:
                 if item in config:
@@ -183,7 +224,13 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         if equipment != 0:
             if is_pickup:
                 if not any(equipment in config for config in available_configurations):
-                    print("Request {}, Equipment {} not available in vehicle equipment list. Vehicle: {}".format(action_data.action.request.index, equipment, vehicle_index))
+                    print(
+                        "Request {}, Equipment {} not available in vehicle equipment list. Vehicle: {}".format(
+                            action_data.action.request.index,
+                            equipment,
+                            vehicle_index
+                        )
+                    )
                     plan_ok = False
                 used_equipment.append(equipment)
             elif is_drop_off:
@@ -201,11 +248,17 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         if action.action_type == ActionType.PICKUP and time < action_data.action.min_time:
             pause_duration = action_data.action.min_time - time
             time = action_data.action.min_time
-            if(pause_duration > timedelta(seconds = min_pause_length)):
+            if (pause_duration > timedelta(seconds=min_pause_length)):
                 driving_start = time
 
-        if (max_pause_interval and time - driving_start > timedelta(seconds = max_pause_interval)):
-            print("in Request {} driver is active {} min, max is {}.".format(action_data.action.request.index, time-driving_start, max_pause_interval))
+        if (max_pause_interval and time - driving_start > timedelta(seconds=max_pause_interval)):
+            print(
+                "in Request {} driver is active {} min, max is {}.".format(
+                    action_data.action.request.index,
+                    time - driving_start,
+                    max_pause_interval
+                    )
+            )
             plan_ok = False
 
         max_ride_time = instance.darp_instance_config.max_ride_time
@@ -214,20 +267,29 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
         if max_ride_time and is_drop_off:
             ride_time = time - departure_times[request.index]
             if ride_time > max_ride_time:
-                print("[{}. plan] Max ride time exceeded for request {}: ride time was {} while max ride time is {}"
-                      .format(plan_counter, request.index, ride_time, max_ride_time))
+                print(
+                    "[{}. plan] Max ride time exceeded for request {}: ride time was {} while max ride time is {}".format(
+                        plan_counter,
+                        request.index,
+                        ride_time,
+                        max_ride_time
+                    )
+                                                                                                                  )
                 plan_ok = False
 
         # service time
         time += timedelta(seconds=int(action_data.action.service_time))
-        max_departure_time = action_data.departure_time + timedelta(seconds= instance.darp_instance_config.max_pickup_delay)
+        max_departure_time = action_data.departure_time + timedelta(
+            seconds=instance.darp_instance_config.max_pickup_delay
+        )
 
         # departure time check
         if max_departure_time < time:
             print(
-                "[{}. plan, {}. action] Departure time mismatch (was {}, must be higher than {}) when handling request {}"
-                .format(plan_counter, action_index + 1, action_data.departure_time, time,
-                        action_data.action.request.index))
+                "[{}. plan, {}. action] Departure time mismatch (was {}, must be higher than {}) when handling request {}".format(
+                    plan_counter, action_index + 1, action_data.departure_time, time, action_data.action.request.index
+                                  )
+            )
 
         time = action_data.departure_time
 
@@ -247,14 +309,20 @@ def check_plan(plan: VehiclePlan, plan_counter: int, instance: DARPInstance, use
     # max route time check
     max_route_duration = instance.darp_instance_config.max_route_duration
     if max_route_duration and time - plan.departure_time > max_route_duration:
-        print("[{}. plan] Total max route duration exceeded: Duration is {} but maximum allowed route duration is {}"
-              .format(plan_counter, time - plan.departure_time, max_route_duration))
+        print(
+            "[{}. plan] Total max route duration exceeded: Duration is {} but maximum allowed route duration is {}".format(
+                plan_counter,
+                time - plan.departure_time,
+                max_route_duration
+                )
+                                                                                                                   )
         plan_ok = False
 
     # cost check
     if abs(cost - plan.cost) > 1:
         logging.warning(
-            "{} plan cost mismatch. expected: {}, computed: {}".format(plan_counter, plan.cost, cost))
+            "{} plan cost mismatch. expected: {}, computed: {}".format(plan_counter, plan.cost, cost)
+        )
         plan_ok = False
 
     if plan_ok:
@@ -292,14 +360,15 @@ def check_solution(instance: DARPInstance, solution: Solution) -> Tuple[bool, Di
     for request in instance.requests:
         if request not in served_requests and request.index not in solution.dropped_requests:
             print("Request {} not served while not being in dropped requests list.".format(request.index))
-            solution_ok = False
-        # break
+            solution_ok = False  # break
 
     # total cost check
-    if abs (total_cost - solution.cost) > 1:
+    if abs(total_cost - solution.cost) > 1:
         print(
-            "Solution cost not computed correctly. Solution cost: {}, total cost of all plans: {}".format(solution.cost,
-                                                                                                          total_cost))
+            "Solution cost not computed correctly. Solution cost: {}, total cost of all plans: {}".format(
+                solution.cost, total_cost
+            )
+        )
         solution_ok = False
 
     if solution_ok:
@@ -346,7 +415,10 @@ def check_all_solutions(root_paths: List[Path], log_all=True) -> pd.DataFrame:
             instance = last_instance
         else:
             if last_area == area:
-                instance, _ = darpinstances.solution_checker.load_instance(instance_path, last_instance.travel_time_provider)
+                instance, _ = darpinstances.solution_checker.load_instance(
+                    instance_path,
+                    last_instance.travel_time_provider
+                )
             else:
                 instance, _ = darpinstances.solution_checker.load_instance(instance_path)
 

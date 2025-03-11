@@ -1,7 +1,7 @@
 import logging
-from pathlib import Path
-from typing import List, Optional, Set, Tuple, Dict
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Optional, Set, Tuple, Dict, Iterable
 
 import pandas as pd
 
@@ -14,7 +14,7 @@ from darpinstances.vehicle_plan import VehiclePlan, ActionData
 class Solution:
     def __init__(
         self,
-        vehicle_plans: List[VehiclePlan],
+        vehicle_plans: Iterable[VehiclePlan],
         cost: Optional[int],
         dropped_requests=Optional[Set[int]],
         feasible=True
@@ -38,8 +38,8 @@ class Solution:
         return cls([], 0, None, False)
 
     def __str__(self):
-        return 'solution: cost {}.\nPlans: {}.' \
-            .format(self.cost, '\n'.join([str(p) for p in self.vehicle_plans]))
+        return 'solution: cost {}.\nPlans: {}.'.format(self.cost, '\n'.join([str(p) for p in self.vehicle_plans]))
+
 
 def _load_datetime(string: str):
     return datetime.strptime(string, '%Y-%m-%d %H:%M:%S')
@@ -55,12 +55,14 @@ def load_json_solution(filepath, use_virtual_vehicles, request_map, vehicle_map)
     vehicle_plans = []
     total_missmatch_actions = 0
     for json_plan in json_data["plans"]:
-        plan, mismatch_actions_count = _load_plan(json_plan, use_virtual_vehicles, vehicle_map,  request_map)
+        plan, mismatch_actions_count = _load_plan(json_plan, use_virtual_vehicles, vehicle_map, request_map)
         vehicle_plans.append(plan)
         total_missmatch_actions += mismatch_actions_count
 
     if total_missmatch_actions > 0:
-        raise Exception(f"Mismatch in actions found in the solution file. Total mismatch count: {total_missmatch_actions}")
+        raise Exception(
+            f"Mismatch in actions found in the solution file. Total mismatch count: {total_missmatch_actions}"
+        )
 
     dropped_requests = set()
     for request in json_data["dropped_requests"]:
@@ -68,16 +70,34 @@ def load_json_solution(filepath, use_virtual_vehicles, request_map, vehicle_map)
     return Solution(vehicle_plans, json_data["cost"], dropped_requests)
 
 
-def load_csv_solution(filepath, request_map, vehicle_map):
+def _load_vehicle_from_csv(vehicle_row: pd.Series, simulation_start_time: datetime, vehicle_capacity: int) -> Vehicle:
+    operation_start = simulation_start_time + timedelta(seconds=vehicle_row['time'])
+    return Vehicle(vehicle_row['vehicle_id'], vehicle_row['node'], vehicle_capacity, operation_start=operation_start)
+
+
+def load_csv_solution(filepath, request_map, simulation_start_time: datetime, vehicle_capacity: int) -> Tuple[
+    Solution, pd.Series[Vehicle]]:
     data = pd.read_csv(filepath)
 
-    vehicle_plans = []
-    total_missmatch_actions = 0
-    for json_plan in json_data["plans"]:
-        plan, mismatch_actions_count = _load_plan(json_plan, use_virtual_vehicles, vehicle_map,  request_map)
-        vehicle_plans.append(plan)
+    # vehicle_plans = []
 
-    return Solution(vehicle_plans, None, set())
+    vehicles = data[data['action'] == 'E']['vehicle_id', 'node', 'time'].apply(
+        _load_vehicle_from_csv, axis=1, args=(simulation_start_time, vehicle_capacity)
+    )
+
+    vehicle_map = dict()
+    for vehicle in vehicles:
+        vehicle_map[vehicle.index] = vehicle
+
+    vehicle_plans = data.groupby("vehicle_id").apply(
+        _load_plan_from_csv, axis=1, args=(request_map, vehicle_map, simulation_start_time)
+    )
+
+    # for json_plan in json_data["plans"]:
+    #     plan, mismatch_actions_count = _load_plan(json_plan, use_virtual_vehicles, vehicle_map,  request_map)
+    #     vehicle_plans.append(plan)
+
+    return Solution(vehicle_plans, None, set()), vehicles
 
 
 def load_solution(filepath: Path, instance: DARPInstance) -> Solution:
@@ -86,9 +106,14 @@ def load_solution(filepath: Path, instance: DARPInstance) -> Solution:
     if filepath.suffix == '.json':
         return load_json_solution(filepath, instance.darp_instance_config.virtual_vehicles, request_map, vehicle_map)
     else:
-        return load_csv_solution(filepath, instance.darp_instance_config.virtual_vehicles, request_map, vehicle_map)
-
-
+        solution, vehicles = load_csv_solution(
+            filepath,
+            request_map,
+            instance.darp_instance_config.start_time,
+            instance.darp_instance_config.vehicle_capacity
+        )
+        instance.vehicles = vehicles
+        return solution
 
 
 def _prepare_maps(instance: DARPInstance) -> Tuple[Dict[int, Request], Dict[int, Vehicle]]:
@@ -119,32 +144,41 @@ def _action_fields_equals(action_from_instance: Action, action: Dict) -> bool:
     if action_from_instance.action_type == ActionType.PICKUP and "min_time" in action:
         min_time_solution = _load_datetime(action["min_time"])
         if min_time_solution != action_from_instance.min_time:
-            logging.warning("%s min time mismatch: Action from instance: %s, action from solution: %s",
-                            _get_action_info_string(action), action_from_instance.min_time, action["min_time"])
+            logging.warning(
+                "%s min time mismatch: Action from instance: %s, action from solution: %s",
+                _get_action_info_string(action),
+                action_from_instance.min_time,
+                action["min_time"]
+            )
             correct = False
 
     # max time constraint
     if "max_time" in action:
         max_time_solution = _load_datetime(action["max_time"])
         if max_time_solution != action_from_instance.max_time:
-            logging.warning("%s max time mismatch: Action from instance: %s, action from solution: %s",
-                            _get_action_info_string(action), action_from_instance.max_time, action["max_time"])
+            logging.warning(
+                "%s max time mismatch: Action from instance: %s, action from solution: %s",
+                _get_action_info_string(action),
+                action_from_instance.max_time,
+                action["max_time"]
+            )
             correct = False
 
     # action position
     if "position" in action and action["position"] != action_from_instance.node.get_idx():
-        logging.warning("%s position mismatch: Action from instance: %s, action from solution: %s",
-                        _get_action_info_string(action), action_from_instance.node.get_idx(), action["position"])
+        logging.warning(
+            "%s position mismatch: Action from instance: %s, action from solution: %s",
+            _get_action_info_string(action),
+            action_from_instance.node.get_idx(),
+            action["position"]
+        )
         correct = False
 
     return correct
 
 
 def _load_plan(
-        json_data,
-        use_virtual_vehicles: bool,
-        vehicle_map: Dict[int, Vehicle],
-        request_map: Dict[int, Request]
+    json_data, use_virtual_vehicles: bool, vehicle_map: Dict[int, Vehicle], request_map: Dict[int, Request]
 ) -> Tuple[VehiclePlan, int]:
     if use_virtual_vehicles:
         vehicle = vehicle_map[0]
@@ -195,11 +229,12 @@ def _load_plan(
         arrival_datetime = _load_datetime(json_data["arrival_time"])
 
     vh_plan = VehiclePlan(
-        vehicle, json_data["cost"], actions_data_list, departure_datetime, arrival_datetime)
+        vehicle, json_data["cost"], actions_data_list, departure_datetime, arrival_datetime
+    )
     return vh_plan, mismatch_actions_count
 
 
-def load_plan(filepath: str, instance: DARPInstance) -> VehiclePlan:
+def load_plan(filepath: str, instance: DARPInstance) -> Tuple[VehiclePlan, int]:
     json_data = load_json(filepath)
 
     request_map, vehicle_map = _prepare_maps(instance)
@@ -215,9 +250,7 @@ def _load_action_from_csv(
     # action_type_str: str,
     # node: int,
     # request_id: int,
-    action_row: pd.Series,
-    simulation_start_time: datetime,
-    request_map: Dict[int, Request]
+    action_row: pd.Series, simulation_start_time: datetime, request_map: Dict[int, Request]
 ) -> Optional[ActionData]:
     action_type_str = action_row['action']
 
@@ -242,8 +275,13 @@ def _load_action_from_csv(
         action_from_instance = request.drop_off_action
 
     if action_from_instance.node.get_idx() != node:
-        logging.warning("Node mismatch for request %, action %: Action from instance: %s, action from solution: %s",
-        request_id, action_row.index - 1, action_from_instance.node.get_idx(), node)
+        logging.warning(
+            "Node mismatch for request %, action %: Action from instance: %s, action from solution: %s",
+            request_id,
+            action_row.index - 1,
+            action_from_instance.node.get_idx(),
+            node
+            )
 
     return ActionData(action_from_instance, arrival_time, departure_time)
 
@@ -257,11 +295,14 @@ def _load_plan_from_csv(
     vehicle = vehicle_map[plan_data.iloc[0]["vehicle_id"]]
 
     # action data loading
-    actions_data_list = plan_data.apply(_load_action_from_csv, axis=1, args=(simulation_start_time, request_map)).notnull()
+    actions_data_list = plan_data.apply(
+        _load_action_from_csv,
+        axis=1,
+        args=(simulation_start_time, request_map)
+    ).notnull()
 
     # actions_data_list = [_load_action_from_csv(action_index, time, action_type_str, node, request_id, simulation_start_time,
     # request_map for action_index, time, action_type_str, node, request_id in zip
-
 
     departure_datetime = actions_data_list[0].arrival_time
     arrival_datetime = actions_data_list[-1].departure_time
