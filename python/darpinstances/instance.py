@@ -405,7 +405,7 @@ def load_demand(
     index = 0
     travel_time_divider = instance_config.get('travel_time_divider', 1)
 
-    for line in demand_reader:
+    for line in tqdm(demand_reader, desc="Loading requests"):
 
         # request_id is either the 'id' field or the row index
         if 'id' in line:
@@ -418,7 +418,7 @@ def load_demand(
         min_pickup_time = _compute_min_pickup_time(instance_config, desired_pickup_time)
 
         # nodes
-        if transformer:
+        if 'transformer' in locals():
             start_node = get_nearest_node(kdtree, transformer, line['Latitude_From'], line['Longitude_From'])
             end_node = get_nearest_node(kdtree, transformer, line['Latitude_To'], line['Longitude_To'])
         else:

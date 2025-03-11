@@ -2,8 +2,8 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Set, Tuple, Dict, Iterable
-
 import pandas as pd
+from pandera.typing import Series
 
 from darpinstances.inout import load_json
 from darpinstances.instance import DARPInstance, Request, Vehicle
@@ -71,17 +71,17 @@ def load_json_solution(filepath, use_virtual_vehicles, request_map, vehicle_map)
 
 
 def _load_vehicle_from_csv(vehicle_row: pd.Series, simulation_start_time: datetime, vehicle_capacity: int) -> Vehicle:
-    operation_start = simulation_start_time + timedelta(seconds=vehicle_row['time'])
+    operation_start = simulation_start_time + timedelta(seconds=int(vehicle_row['time']))
     return Vehicle(vehicle_row['vehicle_id'], vehicle_row['node'], vehicle_capacity, operation_start=operation_start)
 
 
-def load_csv_solution(filepath, request_map, simulation_start_time: datetime, vehicle_capacity: int) -> Tuple[
-    Solution, pd.Series[Vehicle]]:
+def load_csv_solution(filepath, request_map, simulation_start_time: datetime, vehicle_capacity: int) \
+    -> Tuple[Solution, Series[Vehicle]]:
     data = pd.read_csv(filepath)
 
     # vehicle_plans = []
 
-    vehicles = data[data['action'] == 'E']['vehicle_id', 'node', 'time'].apply(
+    vehicles = data[data['action'] == 'E'][['vehicle_id', 'node_id', 'time']].apply(
         _load_vehicle_from_csv, axis=1, args=(simulation_start_time, vehicle_capacity)
     )
 
@@ -102,6 +102,8 @@ def load_csv_solution(filepath, request_map, simulation_start_time: datetime, ve
 
 def load_solution(filepath: Path, instance: DARPInstance) -> Solution:
     request_map, vehicle_map = _prepare_maps(instance)
+
+    logging.info(f"Loading solution from {filepath}")
 
     if filepath.suffix == '.json':
         return load_json_solution(filepath, instance.darp_instance_config.virtual_vehicles, request_map, vehicle_map)
@@ -261,7 +263,7 @@ def _load_action_from_csv(
     node = action_row['node']
 
     # time loading
-    arrival_time = simulation_start_time + timedelta(seconds=action_row['time'])
+    arrival_time = simulation_start_time + timedelta(seconds=int(action_row['time']))
     departure_time = arrival_time
 
     # mapping to request

@@ -1,4 +1,4 @@
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional, List, Tuple, Union
 import logging
 import os
 import yaml
@@ -13,7 +13,7 @@ from darpinstances.inout import check_file_exists
 from darpinstances.inout import check_file_exists
 
 
-def load_experiment_config(path: str):
+def load_experiment_config(path: Union[str,Path]):
     logging.info(f"Loading experiment config from {path}")
     with open(path, 'r') as config_file:
         try:

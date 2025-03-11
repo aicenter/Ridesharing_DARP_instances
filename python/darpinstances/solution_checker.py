@@ -38,7 +38,7 @@ class Failure(Enum):
     PLAN_DEPARTURE_TIME = auto()
 
 
-def load_data(solution: Path, instance_path: Optional[Path], demand_file_name: Optional[str] = None) -> Tuple[DARPInstance, Solution]:
+def load_data(solution_file_path: Path, instance_path: Optional[Path], demand_file_name: Optional[str] = None) -> Tuple[DARPInstance, Solution]:
     check_file_exists(solution_file_path)
     solution_dir_path = solution_file_path.parent
     os.chdir(solution_dir_path)
@@ -49,7 +49,6 @@ def load_data(solution: Path, instance_path: Optional[Path], demand_file_name: O
         instance_path = Path(experiment_config['instance'])
 
     instance, _ = load_instance(instance_path, demand_file_name=demand_file_name)
-    return instance, solution_dir_path
 
     solution = darpinstances.solution.load_solution(solution_file_path, instance)
 
