@@ -72,7 +72,7 @@ def load_json_solution(filepath, use_virtual_vehicles, request_map, vehicle_map)
 
 def _load_vehicle_from_csv(vehicle_row: pd.Series, simulation_start_time: datetime, vehicle_capacity: int) -> Vehicle:
     operation_start = simulation_start_time + timedelta(seconds=int(vehicle_row['time']))
-    return Vehicle(vehicle_row['vehicle_id'], vehicle_row['node'], vehicle_capacity, operation_start=operation_start)
+    return Vehicle(vehicle_row['vehicle_id'], vehicle_row['node_id'], vehicle_capacity, operation_start=operation_start)
 
 
 def load_csv_solution(filepath, request_map, simulation_start_time: datetime, vehicle_capacity: int) \
