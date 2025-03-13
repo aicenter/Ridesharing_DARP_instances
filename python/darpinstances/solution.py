@@ -90,7 +90,7 @@ def load_csv_solution(filepath, request_map, simulation_start_time: datetime, ve
         vehicle_map[vehicle.index] = vehicle
 
     vehicle_plans = data.groupby("vehicle_id").apply(
-        _load_plan_from_csv, axis=1, args=(request_map, vehicle_map, simulation_start_time)
+        _load_plan_from_csv, request_map, vehicle_map, simulation_start_time
     )
 
     # for json_plan in json_data["plans"]:
@@ -247,11 +247,6 @@ def load_plan(filepath: str, instance: DARPInstance) -> Tuple[VehiclePlan, int]:
 
 
 def _load_action_from_csv(
-    # action_index: int,
-    # time: int,
-    # action_type_str: str,
-    # node: int,
-    # request_id: int,
     action_row: pd.Series, simulation_start_time: datetime, request_map: Dict[int, Request]
 ) -> Optional[ActionData]:
     action_type_str = action_row['action']
@@ -260,7 +255,7 @@ def _load_action_from_csv(
         return None
 
     request_id = action_row['request_id']
-    node = action_row['node']
+    node = action_row['node_id']
 
     # time loading
     arrival_time = simulation_start_time + timedelta(seconds=int(action_row['time']))
@@ -276,25 +271,25 @@ def _load_action_from_csv(
     else:
         action_from_instance = request.drop_off_action
 
-    if action_from_instance.node.get_idx() != node:
+    if action_from_instance.node != node:
         logging.warning(
             "Node mismatch for request %, action %: Action from instance: %s, action from solution: %s",
             request_id,
-            action_row.index - 1,
-            action_from_instance.node.get_idx(),
+            action_row.name - 1,
+            action_from_instance.node,
             node
-            )
+        )
 
     return ActionData(action_from_instance, arrival_time, departure_time)
 
 
 def _load_plan_from_csv(
     plan_data: pd.DataFrame,
-    vehicle_map: Dict[int, Vehicle],
     request_map: Dict[int, Request],
+    vehicle_map: Dict[int, Vehicle],
     simulation_start_time: datetime
 ) -> VehiclePlan:
-    vehicle = vehicle_map[plan_data.iloc[0]["vehicle_id"]]
+    vehicle = vehicle_map[plan_data.name]
 
     # action data loading
     actions_data_list = plan_data.apply(
