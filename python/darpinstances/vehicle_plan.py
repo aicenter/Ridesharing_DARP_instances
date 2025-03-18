@@ -29,7 +29,14 @@ class VehiclePlan:
     def get_arrival_time(self):
         return self.arrival_time
 
-    def __init__(self, vehicle: Vehicle, cost: int, actions: List[ActionData], departure_time: Optional[datetime] = None, arrival_time: Optional[datetime] = None):
+    def __init__(
+        self,
+        vehicle: Vehicle,
+        cost: Optional[int],
+        actions: List[ActionData],
+        departure_time: Optional[datetime] = None,
+        arrival_time: Optional[datetime] = None
+    ):
         self.departure_time = departure_time
         self.arrival_time = arrival_time
         self.actions = actions
