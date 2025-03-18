@@ -132,6 +132,7 @@ def get_processed_results(
     tts_cost = 0
     total_delay = 0
     ocuppancies = [0, 0, 0, 0, 0]
+    trip_durations = []
 
     for plan in solution["plans"]:
         if len(plan["actions"]) > 0:
@@ -161,6 +162,7 @@ def get_processed_results(
                 else:
                     trip_duration = action['arrival_time'] - pickup_times[action['action']['request_index']]
                     # min_time = instance.request_map[action['action']['request_id']].min_time
+                    trip_durations.append(trip_duration)
                     min_time = 0
                     delay = trip_duration - min_time
                     total_delay += delay
@@ -169,7 +171,7 @@ def get_processed_results(
 
     avg_occupancy = avg_occupancy_sum / total_driving_duration
     tts_cost_per_plan = tts_cost / plan_count
-
+    # print(hourly_occupancies)
     data = {
         'cost_minutes': solution['cost_minutes'],
         'total_time': performance['total_time'] / 1000,
@@ -183,7 +185,8 @@ def get_processed_results(
         'total_waiting_duration': total_waiting_duration,
         'avg_waiting_duration': total_waiting_duration / plan_count,
         'tts_cost': tts_cost,
-        'tts_cost_per_plan': tts_cost_per_plan
+        'tts_cost_per_plan': tts_cost_per_plan,
+        'trip_durations': trip_durations
     }
 
     if return_as_dict:
@@ -422,12 +425,12 @@ def load_aggregate_stats_in_dir(path: Path, included_config_keys: Optional[List[
     columns = ['method']
 
     # config keys to include
-    empty_columns = []
-    for key in included_config_keys:
-        if key not in df.columns:
-            empty_columns.append(key)
-        else:
-            columns.append(key)
+    # empty_columns = []
+    # for key in included_config_keys:
+    #     if key not in df.columns:
+    #         empty_columns.append(key)
+    #     else:
+    #         columns.append(key)
 
     columns.extend([
         'cost_minutes',
@@ -446,12 +449,12 @@ def load_aggregate_stats_in_dir(path: Path, included_config_keys: Optional[List[
         'duration_minutes',
         'max_delay',
         'start_time',
-        'end_time'
+        'end_time',
+        'trip_durations'
     ])
-
     df = pd.DataFrame(df[columns])
-    for col in empty_columns:
-        df[col] = None
+    # for col in empty_columns:
+    #     df[col] = None
 
     return df
 
@@ -478,3 +481,5 @@ def load_occupancies_in_dir(path: Path) -> Optional[pd.DataFrame]:
         return None
 
     return pd.DataFrame(out_data)
+
+

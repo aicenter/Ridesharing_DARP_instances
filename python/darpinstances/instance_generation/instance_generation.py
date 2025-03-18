@@ -27,7 +27,8 @@ def generate_dm(config: Dict, nodes: gpd.GeoDataFrame, edges: gpd.GeoDataFrame, 
         logging.info("Skipping DM generation, the file is already generated.")
     else:
         logging.info(f"Generating distance matrix in {abs_path_with_extension}")
-        map_dir = config['map']['path']
+        map_dir = os.path.join(config['area_dir'], 'map')
+        # map_dir = config['map']['path']
         xeng_file_path = os.path.join(map_dir, "map.xeng")
         xeng_file_path = os.path.abspath(xeng_file_path)
 
@@ -53,17 +54,25 @@ def generate_dm(config: Dict, nodes: gpd.GeoDataFrame, edges: gpd.GeoDataFrame, 
 
         # call distance utils to generate dm
         command = [
-            "shortestPathsPreprocessor",
-            "create",
+            # "shortestPathsPreprocessor",
+            "/home/dominika/Desktop/deathOFbachelor/ShoDi/build/shortestPathsPreprocessor",
+            "-m",
             "dm",
+            "-f",
             "xengraph",
-            "csv",
-            "fast",
+            "--output-format",
+            "hdf",
+            "--preprocessing-mode",
+            "slow",
+            "--int-size 16",
+            "-i",
             xeng_file_path,
+            "-o",
             abs_path
         ]
+        print(" ".join(command))
 
-        darpbenchmark.exec.call_executable(command)
+        # darpbenchmark.exec.call_executable(command)
 
 
 def generate_instance(config_filepath: Path):

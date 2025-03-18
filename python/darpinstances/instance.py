@@ -61,12 +61,12 @@ class MatrixTravelTimeProvider(TravelTimeProvider):
 
     """
     @classmethod
-    def from_csv(cls, path_to_dm: str):
+    def from_csv(cls, path_to_dm: Path):
         dm = pd.read_csv(path_to_dm, header=None, dtype=np.int32)
         return cls(dm.values)
 
     @classmethod
-    def from_hdf(cls, path_to_dm: str):
+    def from_hdf(cls, path_to_dm: Path):
         # dm = pd.read_hdf(path_to_dm, dtype=np.int32)
         with h5py.File(path_to_dm, 'r') as dm_file:
             a_group_key = list(dm_file.keys())[0]
@@ -81,8 +81,8 @@ class MatrixTravelTimeProvider(TravelTimeProvider):
         return self.dm[from_index][to_index]
 
     @classmethod
-    def read_from_file(cls, dm_filepath: str):
-        if dm_filepath.endswith('csv'):
+    def read_from_file(cls, dm_filepath: Path):
+        if dm_filepath.suffix == '.csv':
             return cls.from_csv(dm_filepath)
         else:
             return cls.from_hdf(dm_filepath)

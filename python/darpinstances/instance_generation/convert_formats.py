@@ -11,11 +11,12 @@ from shapely.geometry import Point, LineString
 from shapely.wkb import dumps as bdumps, loads as bloads
 from shapely.wkt import loads as tloads
 from datetime import datetime, timedelta
+from tqdm import tqdm
 
 from darpinstances.instance_generation.demand_generation import generate_uniform_trip_times
 
 PATH = Path(__file__).parent.parent.parent.parent
-RESOURCE_PATH = PATH / "resources/"
+RESOURCE_PATH = PATH / "resources"
 
 BASETIME = datetime(2014, 1, 1)
 
@@ -71,25 +72,35 @@ def convert_TNTP_format(city: str) -> DataFrame:
     # trips = add_geometry(flow_df, nodes_df)
 
     # generate trips
-    tripsfile = RESOURCE_PATH / f"{city}_trips_geom.csv"
-    df = pd.read_csv(tripsfile)
-    trips = generate_trips(df)
+    # tripsfile = RESOURCE_PATH / f"{city}_trips_geom.csv"
+    # df = pd.read_csv(tripsfile)
+    # trips = generate_trips(df)
     # trips = generate_trips(trips)
+    chunk_trips = generate_trip_chunks(city)
+    return chunk_trips
 
-    return trips
+def generate_trip_chunks(city: str) -> DataFrame:
+    ogtripsfile = RESOURCE_PATH / f"{city}_trips1000.csv"
+    tripsfile = RESOURCE_PATH / f"{city}_trips_chunks.csv"
+    df_iter = pd.read_csv(ogtripsfile, chunksize=10000)
+    for df in tqdm(df_iter, desc="Generating trips"):
+        chunk_trips = generate_trips(df)
+        chunk_trips.to_csv(tripsfile, index=False, mode='a')
+    return chunk_trips
 
 def generate_trips(df: DataFrame, hours: int = 24) -> DataFrame:
     data = []
-    totalflow = df['flow'].sum()
     for _, row in df.iterrows():
         flow = row['flow']
-        trip_times = generate_timestamps(flow, hours, totalflow)
+        trip_times = generate_timestamps(flow, hours)
         for ttime in trip_times:
-            timestamp = (BASETIME + timedelta(milliseconds=ttime)).isoformat()
+            timestamp = (BASETIME + timedelta(milliseconds=ttime)).timestamp()
+            orig = bloads(row['origin'], hex=True)
+            dest = bloads(row['destination'], hex=True)
             data.append({
                 'timestamp': timestamp,
-                'origin': row['origin'],
-                'destination': row['destination']
+                'origin': bdumps(Point(orig.y, orig.x), hex=True),
+                'destination': bdumps(Point(dest.y, dest.x), hex=True)
             })
     return pd.DataFrame(data)
 
@@ -175,9 +186,9 @@ def generate_n_trips(city: str, N: int) -> DataFrame:
     # N randomly selected trips
     # df = load_data_from_csv(tripstntpfile)
     # df = import_trips_tntp(tripstntpfile)
-    tripsfile1 = f"{city}_trips1.csv"
-    tripsfile = f"{city}_trips.csv"
-    df = pd.read_csv(tripsfile)
+    tripsfile1 = RESOURCE_PATH / f"{city}_trips3.csv"
+    tripsfile = RESOURCE_PATH / f"{city}_trips.csv"
+    df = pd.read_csv(tripsfile1)
     trips = df.sample(n=N, replace=False).reset_index(drop=True)
 
     #  # add geometry coordinates to N randomly selected trips
@@ -186,36 +197,39 @@ def generate_n_trips(city: str, N: int) -> DataFrame:
     # save 
     trips.to_csv(tripsfile, index=False)
 
-def generate_timestamps(od_flow: float, N: int, totalflow) -> list:
+def generate_timestamps(od_flow: float, N: int) -> list:
     """Generates timestamps for N hours based on OD flow.
     
     :param od_flow: OD flow (hourly occurrence of vehicle) between two nodes.
     :param n: Number of hours to generate trips for."""
-    trip_counts = generate_trip_counts(od_flow, totalflow, N)
-    # print(trip_counts)
+    trip_counts = generate_trip_counts(od_flow, N)
     timestamps = []
-    for i, trip_count in enumerate(trip_counts):
-        start = i * 60 * 60
-        end = (i + 1) * 60 * 60
-        trip_times = generate_uniform_trip_times(start, end, trip_count)
-        timestamps.extend(trip_times)
+    if sum(trip_counts) >= 25:
+        for i, trip_count in enumerate(trip_counts):
+            start = i * 60 * 60
+            end = (i + 1) * 60 * 60
+            trip_times = generate_uniform_trip_times(start, end, trip_count)
+            timestamps.extend(trip_times)
     return timestamps
 
-def generate_trip_counts(od_flow: float, totalflow, N: int = 24) -> list[int]:
-    """Generates trip count in N-hours interval using Poisson distribution.
+def rate_func(t: int) -> float:
+    """Rate function for time-varying Poisson distribution."""
+    amplitude = 1.5
+    morning_peak = -amplitude * np.sin((np.pi / 6) * (t + 1))
+    afternoon_peak = amplitude * np.sin((np.pi / 12) * (t - 6))
+    f = 1 + morning_peak + afternoon_peak
+    return f
 
-    :param od_flow: OD flow (hourly occurrence of vehicle) between two nodes.
-    :param n: Number of hours to generate trips for.
+def generate_trip_counts(od_flow: float, N: int = 24, step: int = 1) -> list[int]:
+    """Generates trip count in N-hours interval using time-varying Poisson distribution.
+
+    :param od_flow: OD flow (hourly traffic demand) between two nodes.
+    :param N: Total hours. Default is 24 hours.
+    :param step: Time step. Default is 1 hour.
     """
     rng = np.random.default_rng()
-    scaling_factor = 400000/totalflow
-    od_flow *= scaling_factor
-    # hourly weights (we assume more trips occur during 7am-8pm)
-    hourly_weights = np.array([0.4 if h < 7 or h > 20 else 1.5 for h in range(N)])
-    # normalize weights
-    hourly_weights = hourly_weights / hourly_weights.sum() * od_flow * N
-
-    trip_counts = [rng.poisson(rate) for rate in hourly_weights]
+    trip_counts = [rng.poisson(od_flow * rate_func(t)) for t in np.arange(0, N, step)]
+    
     return trip_counts
 
 def load_data_from_csv(file: str) -> DataFrame:
@@ -229,6 +243,7 @@ def load_data_from_csv(file: str) -> DataFrame:
     df['origin'] = origin
     df['destination'] = destination
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
+    # df['timestamp'] = pd.to_datetime(df['timestamp'], format='%Y-%m-%dT%H:%M:%S')
 
     return df
 
@@ -243,8 +258,10 @@ def convert_unserialized_format(city: str):
         writer.writeheader()
 
         for row in reader:
-            origin = bdumps(tloads(row['origin']), hex=True)
-            destination = bdumps(tloads(row['destination']), hex=True)
+            orig = tloads(row['origin'])
+            origin = bdumps(Point(orig.y, orig.x), hex=True)
+            dest = tloads(row['destination'])
+            destination = bdumps(Point(dest.y, dest.x), hex=True)
             format = '%Y-%m-%d %H:%M:%S'
             timestamp = datetime.strptime(row['timestamp'], format).timestamp()
 
@@ -258,7 +275,7 @@ def convert_unserialized_format(city: str):
 
 def generate_and_save_csv(city: str):
     # save trips with geometry
-    tripsfile = RESOURCE_PATH / f"{city}_trips.csv"
+    tripsfile = RESOURCE_PATH / f"{city}_trips1000.csv"
     match city:
         case "Sydney":
             df = convert_TNTP_format(city)
@@ -269,17 +286,13 @@ def generate_and_save_csv(city: str):
 
 if __name__ == '__main__':
     s = time.perf_counter()
-    # generate_and_save_csv("Porto")
+    # # # generate_and_save_csv("Porto")
    
     # generate_and_save_csv("Sydney")
-    n = np.random.randint(400000, 500000)
+    n = np.random.randint(250000, 300000)
+    # n = 100000
     generate_n_trips("Sydney", n)
-    # tripstntpfile = RESOURCE_PATH / f"Sydney_trips_og.tntp"
+    # # # tripstntpfile = RESOURCE_PATH / f"Sydney_trips_og.tntp"
 
-    # # process trips to contain only valid OD flows
-    # flowscsvfile = RESOURCE_PATH / f"Sydney_flows_no_geom.csv"
-    # # flow_df = load_data_from_csv(flowscsvfile)
-    # flow_df = import_trips_tntp(tripstntpfile)
-    # flow_df.to_csv(flowscsvfile, index=False)
     e = time.perf_counter()
     print(f"Geometry added in: {e-s} seconds.")
