@@ -6,7 +6,7 @@ import darpinstances.instance
 from typing import List, Tuple, Dict
 
 from darpinstances.instance import DARPInstance
-from darpinstances.instance_generation.instance_objects import Request, ActionType, Vehicle
+from darpinstances.instance_objects import Request, ActionType, Vehicle
 from darpinstances.solution import Solution
 from darpinstances.vehicle_plan import VehiclePlan
 
@@ -134,7 +134,7 @@ def load_cordeau_solution(filepath: str, vehicle_map: Dict[int, Vehicle] , reque
 					total_service_time += action.service_time
 				plan_cost_with_service_time = total_plan_time - total_wait_time
 
-				vh_plan = VehiclePlan(vehicle, round(plan_cost_with_service_time * 60) - total_service_time, actions)
+				vh_plan = VehiclePlan(vehicle, actions, round(plan_cost_with_service_time * 60) - total_service_time)
 				vehicle_plans.append(vh_plan)
 			line_string = infile.readline()
 

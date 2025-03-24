@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import yaml
 from darpinstances.inout import check_file_exists
-from darpinstances.instance_generation.instance_objects import Coordinate, Request, Vehicle
+from darpinstances.instance_objects import Coordinate, Request, Vehicle
 from pyproj import Transformer
 from scipy.spatial import KDTree
 from tqdm.autonotebook import tqdm
@@ -442,7 +442,7 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
     if 'Slot_Type' in request_data.columns:
         request_data['equipment'] = [map_equipment_type(slot_type).value for slot_type in request_data['Slot_Type']]
     else:
-        request_data['equipment'] = None
+        request_data['equipment'] = 0
 
     # minimum travel time from start to end node
     request_data['min_travel_time'] = [travel_time_provider.get_travel_time(start_node, end_node) / travel_time_divider
@@ -463,9 +463,9 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
         unit='s'
     )
 
-    # required vehicle id, if not present, set to 0
+    # required vehicle id, if not present, set to -1
     if 'required_vehicle_id' not in request_data:
-        request_data['required_vehicle_id'] = 0
+        request_data['required_vehicle_id'] = None
 
     # action ids
     request_data['pickup_action_id'] = request_data.index * 2

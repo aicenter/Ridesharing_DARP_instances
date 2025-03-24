@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 
 
@@ -49,7 +49,7 @@ class Request:
         pickup_service_time: int = 0,
         drop_off_service_time: int = 0,
         equipment: int = 0,
-        vehicle_id: int = 0
+        required_vehicle_id: Optional[int] = None
     ):
         self.index = index
         self.pickup_action = Action(
@@ -66,7 +66,7 @@ class Request:
         )
         self.min_travel_time = min_travel_time
         self.equipment = equipment
-        self.vehicle_id = vehicle_id
+        self.required_vehicle_id = required_vehicle_id
 
 
 class Vehicle:

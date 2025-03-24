@@ -7,7 +7,7 @@ from pandera.typing import Series
 
 from darpinstances.inout import load_json
 from darpinstances.instance import DARPInstance, Request, Vehicle
-from darpinstances.instance_generation.instance_objects import ActionType, Action
+from darpinstances.instance_objects import ActionType, Action
 from darpinstances.vehicle_plan import VehiclePlan, ActionData
 
 
@@ -92,12 +92,17 @@ def load_csv_solution(filepath, request_map, simulation_start_time: datetime, ve
     vehicle_plans = data.groupby("vehicle_id").apply(
         _load_plan_from_csv, request_map, vehicle_map, simulation_start_time
     )
+    # remove empty plans
+    # nonempty_filter = vehicle_plans.notnull()
+    non_empty_vehicle_plans = vehicle_plans[vehicle_plans.notnull()]
+    if len(non_empty_vehicle_plans) != len(vehicle_plans):
+        logging.warning("%d empty plans were removed", len(vehicle_plans) - len(non_empty_vehicle_plans))
 
     # for json_plan in json_data["plans"]:
     #     plan, mismatch_actions_count = _load_plan(json_plan, use_virtual_vehicles, vehicle_map,  request_map)
     #     vehicle_plans.append(plan)
 
-    return Solution(vehicle_plans, None, set()), vehicles
+    return Solution(non_empty_vehicle_plans, None, set()), vehicles
 
 
 def load_solution(filepath: Path, instance: DARPInstance) -> Solution:
@@ -230,9 +235,7 @@ def _load_plan(
         departure_datetime = _load_datetime(json_data["departure_time"])
         arrival_datetime = _load_datetime(json_data["arrival_time"])
 
-    vh_plan = VehiclePlan(
-        vehicle, json_data["cost"], actions_data_list, departure_datetime, arrival_datetime
-    )
+    vh_plan = VehiclePlan(vehicle, actions_data_list, json_data["cost"], departure_datetime, arrival_datetime)
     return vh_plan, mismatch_actions_count
 
 
@@ -258,8 +261,8 @@ def _load_action_from_csv(
     node = action_row['node_id']
 
     # time loading
-    arrival_time = simulation_start_time + timedelta(seconds=int(action_row['time']))
-    departure_time = arrival_time
+    arrival_time = None
+    departure_time = simulation_start_time + timedelta(seconds=int(action_row['time']))
 
     # mapping to request
     request = request_map[request_id]
@@ -273,7 +276,7 @@ def _load_action_from_csv(
 
     if action_from_instance.node != node:
         logging.warning(
-            "Node mismatch for request %, action %: Action from instance: %s, action from solution: %s",
+            "Node mismatch for request %d, action %d: Action from instance: %d, action from solution: %d",
             request_id,
             action_row.name - 1,
             action_from_instance.node,
@@ -296,15 +299,18 @@ def _load_plan_from_csv(
         _load_action_from_csv,
         axis=1,
         args=(simulation_start_time, request_map)
-    ).notnull()
+    )
+    # remove None values
+    actions_data_list = actions_data_list[actions_data_list.notnull()]
+    if len(actions_data_list) == 0:
+        logging.debug("Empty plan for vehicle %d", vehicle.index)
+        return None
 
     # actions_data_list = [_load_action_from_csv(action_index, time, action_type_str, node, request_id, simulation_start_time,
     # request_map for action_index, time, action_type_str, node, request_id in zip
 
-    departure_datetime = actions_data_list[0].arrival_time
-    arrival_datetime = actions_data_list[-1].departure_time
+    departure_datetime = actions_data_list.iloc[0].departure_time
+    arrival_datetime = actions_data_list.iloc[-1].departure_time
 
-    vh_plan = VehiclePlan(
-        vehicle, None, actions_data_list, departure_datetime, arrival_datetime
-    )
+    vh_plan = VehiclePlan(vehicle, actions_data_list, None, departure_datetime, arrival_datetime)
     return vh_plan
