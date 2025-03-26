@@ -18,16 +18,21 @@ def load_experiment_config(path: Union[str,Path]):
     with open(path, 'r') as config_file:
         try:
             config = yaml.safe_load(config_file)
-
             # check the file locations and make them absolute
-            os.chdir(os.path.dirname(path))
+            # os.chdir(os.path.dirname(path))
+            path_new = Path(path)
+            # config['instance'] = os.path.expanduser(config['instance'])
+            # config['instance'] = os.path.abspath(config['instance'])
+            config['instance'] = config['instance'].replace('~', str(path_new.parents[7])) + '/config.yaml'
+            # config['instance'] += '/config.yaml'
             check_file_exists(config['instance'])
-            config['instance'] = os.path.abspath(config['instance'])
-
             # if outdir is set in config, check that that it is correct
             if "outdir" in config:
+                # config['outdir'] = os.path.expanduser(config['outdir'])
+                config['outdir'] = config['outdir'].replace('~', str(path_new.parents[7]))
+                print(config['outdir'])
                 check_file_exists(config['outdir'])
-                config['outdir'] = os.path.abspath(config['outdir'])
+                # config['outdir'] = os.path.abspath(config['outdir'])
             # othervise use the config file directory as outpath
             else:
                 config['outdir'] = os.path.dirname(path)
