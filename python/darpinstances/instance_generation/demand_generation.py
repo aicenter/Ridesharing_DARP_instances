@@ -24,7 +24,8 @@ def generate_demand(nodes: gpd.GeoDataFrame, config: Dict, nearest_node_provider
     :param config: instance configuration
     @param all_nodes: nodes
     """
-    instance_dir = config['instance_dir']
+    # instance_dir = config['instance_dir']
+    instance_dir = os.getcwd()
     outpath = path.join(instance_dir, 'requests.csv')
     if path.exists(outpath):
         logging.info(f"The demand file is already in {path.abspath(outpath)}, skipping demand generation.")

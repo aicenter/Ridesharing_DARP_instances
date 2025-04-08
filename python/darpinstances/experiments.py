@@ -10,8 +10,6 @@ import darpinstances.exec
 import darpinstances.log
 from darpinstances.inout import check_file_exists
 
-from darpinstances.inout import check_file_exists
-
 
 def load_experiment_config(path: Union[str,Path]):
     logging.info(f"Loading experiment config from {path}")
@@ -20,17 +18,20 @@ def load_experiment_config(path: Union[str,Path]):
             config = yaml.safe_load(config_file)
             # check the file locations and make them absolute
             # os.chdir(os.path.dirname(path))
-            path_new = Path(path)
-            # config['instance'] = os.path.expanduser(config['instance'])
+            
             # config['instance'] = os.path.abspath(config['instance'])
-            config['instance'] = config['instance'].replace('~', str(path_new.parents[7])) + '/config.yaml'
-            # config['instance'] += '/config.yaml'
+            # FOR RESULTS:
+            path_new = Path(path)
+            config['instance'] = str(path_new.parents[9]) + config['instance'] + '/config.yaml'
+
             check_file_exists(config['instance'])
             # if outdir is set in config, check that that it is correct
             if "outdir" in config:
-                # config['outdir'] = os.path.expanduser(config['outdir'])
-                config['outdir'] = config['outdir'].replace('~', str(path_new.parents[7]))
-                print(config['outdir'])
+                # config['outdir'] = os.path.abspath(config['outdir'])
+                # FOR RESULTS:
+                # config['outdir'] = str(path_new.parents[9]) + config['outdir'] # old results in top directory
+                config['outdir'] = str(path_new.parents[7]) + config['outdir'] # numbered results
+
                 check_file_exists(config['outdir'])
                 # config['outdir'] = os.path.abspath(config['outdir'])
             # othervise use the config file directory as outpath
