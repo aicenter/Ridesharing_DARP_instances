@@ -341,7 +341,15 @@ class SolutionChecker:
             if not plan_ok:
                 solution_ok = False
 
-            served_requests.update(plan_served_requests)
+            # served_requests.update(plan_served_requests)
+            for request in plan_served_requests:
+                if request in served_requests:
+                    logging.warning("Request {} served twice.".format(request.index))
+                    solution_ok = False
+                    self._increment_error()
+                else:
+                    served_requests.add(request)
+
             plan_counter += 1
 
         # all request served check

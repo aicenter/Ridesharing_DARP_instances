@@ -20,14 +20,22 @@ class ActionType(Enum):
 
 
 class Action:
-    def __init__(self, action_id, node, min_time: datetime, max_time: datetime, action_type: ActionType,
-                 request, service_time: int = 0):
+    def __init__(
+        self,
+        action_id,
+        node,
+        min_time: datetime,
+        max_time: datetime,
+        action_type: ActionType,
+        request: 'Request',
+        service_time: int = 0
+    ):
         self.id = action_id
         self.node = node
         self.min_time = min_time
         self.max_time = max_time
         self.action_type = action_type
-        self.request = request
+        self.request: Request = request
         self.service_time = service_time
 
     def __str__(self):
@@ -67,6 +75,12 @@ class Request:
         self.min_travel_time = min_travel_time
         self.equipment = equipment
         self.required_vehicle_id = required_vehicle_id
+
+    def __eq__(self, other):
+        return self.index == other.index
+
+    def __hash__(self):
+        return hash(self.index)
 
 
 class Vehicle:
