@@ -6,21 +6,21 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum
 from functools import singledispatchmethod
-from io import TextIOWrapper
 from pathlib import Path
 from typing import Iterable, Dict, List, Optional, Sequence, TextIO
 
-import darpinstances.log
 import geojson
 import h5py
 import numpy as np
 import pandas as pd
 import yaml
-from darpinstances.inout import check_file_exists
-from darpinstances.instance_objects import Coordinate, Request, Vehicle
 from pyproj import Transformer
 from scipy.spatial import KDTree
 from tqdm.autonotebook import tqdm
+
+import darpinstances.log
+from darpinstances.inout import check_file_exists
+from darpinstances.instance_objects import Coordinate, Request, Vehicle
 
 
 class TravelTimeProvider(ABC):
