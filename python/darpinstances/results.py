@@ -398,6 +398,9 @@ def load_all_data_for_result(path: Path) -> Optional[Tuple[Dict,List]]:
     data['max_delay'] = int(instance_config['max_prolongation'])
     data['start_time'] = datetime.strptime(instance_config['demand']['min_time'], '%Y-%m-%d %H:%M:%S')
     data['end_time'] = datetime.strptime(instance_config['demand']['max_time'], '%Y-%m-%d %H:%M:%S')
+    data['capacity'] = int(instance_config['vehicles']['vehicle_capacity'])
+    # print("HERE ", data['capacity'], '\n')
+    # data['max_occupancy'] = int(instance_config['vehicles']['vehicle_capacity'])
 
     data['duration_minutes'] = (data['end_time'] - data['start_time']).total_seconds() / 60
     if data['duration_minutes'].is_integer():
@@ -456,7 +459,8 @@ def load_aggregate_stats_in_dir(path: Path, included_config_keys: Optional[List[
         'max_delay',
         'start_time',
         'end_time',
-        'trip_durations'
+        'trip_durations',
+        'capacity'
     ])
     df = pd.DataFrame(df[columns])
     # for col in empty_columns:

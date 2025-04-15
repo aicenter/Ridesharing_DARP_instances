@@ -22,7 +22,9 @@ def load_experiment_config(path: Union[str,Path]):
             # config['instance'] = os.path.abspath(config['instance'])
             # FOR RESULTS:
             path_new = Path(path)
-            config['instance'] = str(path_new.parents[9]) + config['instance'] + '/config.yaml'
+            # config['instance'] = str(path_new.parents[9]) + config['instance'] + '/config.yaml'
+            # FOR 2-run RESULTS:
+            config['instance'] = str(path_new.parents[9] / Path(config['instance']))
 
             check_file_exists(config['instance'])
             # if outdir is set in config, check that that it is correct
@@ -30,7 +32,9 @@ def load_experiment_config(path: Union[str,Path]):
                 # config['outdir'] = os.path.abspath(config['outdir'])
                 # FOR RESULTS:
                 # config['outdir'] = str(path_new.parents[9]) + config['outdir'] # old results in top directory
-                config['outdir'] = str(path_new.parents[7]) + config['outdir'] # numbered results
+                # config['outdir'] = str(path_new.parents[7]) + config['outdir'] # numbered results
+                # FOR 2-run RESULTS:
+                config['outdir'] = str(path_new.parents[7] / Path(config['outdir']))
 
                 check_file_exists(config['outdir'])
                 # config['outdir'] = os.path.abspath(config['outdir'])
