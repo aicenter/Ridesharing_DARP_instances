@@ -81,9 +81,10 @@ def generate_vehicle_shapefiles(desired_vehicle_count, instance_config, instance
     generate_vehicles(map_nodes, instance_config, nearest_node_provider, desired_vehicle_count)
     os.chdir(PATH)
 
-def modify_configs(instance_config, capacity, delay):
+def modify_configs(instance_config, capacity, delay, size=100):
     instance_config['vehicles']['vehicle_capacity'] = capacity
     instance_config['demand']['filepath'] = 'requests.csv'
+    instance_config['demand']['sample'] = size
     instance_config['max_prolongation'] = delay*60
     instance_config['area_dir'] = "../../../../../"
     instance_config['vehicles'].pop('vehicle_count', None)
@@ -122,7 +123,7 @@ def generate_sampled_configs(sample_size):
                 
             # modify config values
             inst_conf_dict = load_instance_config(instance_config_path)
-            instance_config = modify_configs(inst_conf_dict, capacity, delay)
+            instance_config = modify_configs(inst_conf_dict, capacity, delay, sample_size)
             
             os.makedirs(instance_dir_new, exist_ok=True)
 
@@ -180,7 +181,7 @@ methods = ['ih', 'vga', 'halns', 'vga_chaining']
 file_copy = 'requests.csv'
 dir_copy = 'shapefiles'
 
-rci = True
+rci = False
 sizing = False
 sample_range = [i/10 for i in range(1, 10)]
 for sample_percent in sample_range:

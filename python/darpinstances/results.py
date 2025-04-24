@@ -399,8 +399,8 @@ def load_all_data_for_result(path: Path) -> Optional[Tuple[Dict,List]]:
     data['start_time'] = datetime.strptime(instance_config['demand']['min_time'], '%Y-%m-%d %H:%M:%S')
     data['end_time'] = datetime.strptime(instance_config['demand']['max_time'], '%Y-%m-%d %H:%M:%S')
     data['capacity'] = int(instance_config['vehicles']['vehicle_capacity'])
-    # print("HERE ", data['capacity'], '\n')
-    # data['max_occupancy'] = int(instance_config['vehicles']['vehicle_capacity'])
+    if 'sample' in instance_config['demand']:
+        data['sample'] = float(instance_config['demand']['sample'])
 
     data['duration_minutes'] = (data['end_time'] - data['start_time']).total_seconds() / 60
     if data['duration_minutes'].is_integer():
