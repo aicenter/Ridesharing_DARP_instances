@@ -163,8 +163,8 @@ def get_processed_results(
                     trip_duration = action['arrival_time'] - pickup_times[action['action']['request_index']]
                     # min_time = instance.request_map[action['action']['request_id']].min_time
                     trip_durations.append(trip_duration)
-                    min_time = 0
-                    delay = trip_duration - min_time
+                    min_time = action['action']['min_time']
+                    delay = action['arrival_time'] - min_time
                     total_delay += delay
                     current_occupancy -= 1
                 prev_departure = action['departure_time']
@@ -174,7 +174,6 @@ def get_processed_results(
     avg_occupancy = avg_occupancy_sum / total_driving_duration
     tts_cost_per_plan = tts_cost / plan_count
     avg_waiting_duration = total_waiting_duration / plan_count
-    # print(hourly_occupancies)
     data = {
         'cost_minutes': solution['cost_minutes'],
         'total_time': performance['total_time'] / 1000,

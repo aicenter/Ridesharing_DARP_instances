@@ -16,26 +16,16 @@ def load_experiment_config(path: Union[str,Path]):
     with open(path, 'r') as config_file:
         try:
             config = yaml.safe_load(config_file)
+
             # check the file locations and make them absolute
             # os.chdir(os.path.dirname(path))
-            
-            # config['instance'] = os.path.abspath(config['instance'])
-            # FOR RESULTS:
-            path_new = Path(path)
-            # config['instance'] = str(path_new.parents[9]) + config['instance'] + '/config.yaml'
-            # FOR 2-run RESULTS:
-            config['instance'] = str(path_new.parents[9] / Path(config['instance']))
-
+            # check_file_exists(config['instance'])
+            config['instance'] = os.path.abspath(config['instance'])
             check_file_exists(config['instance'])
+
             # if outdir is set in config, check that that it is correct
             if "outdir" in config:
-                # config['outdir'] = os.path.abspath(config['outdir'])
-                # FOR RESULTS:
-                # config['outdir'] = str(path_new.parents[9]) + config['outdir'] # old results in top directory
-                # config['outdir'] = str(path_new.parents[7]) + config['outdir'] # numbered results
-                # FOR 2-run RESULTS:
-                config['outdir'] = str(path_new.parents[7] / Path(config['outdir']))
-
+                config['outdir'] = os.path.abspath(config['outdir'])
                 check_file_exists(config['outdir'])
                 # config['outdir'] = os.path.abspath(config['outdir'])
             # othervise use the config file directory as outpath
