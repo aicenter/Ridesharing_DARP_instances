@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 
 
@@ -20,14 +20,22 @@ class ActionType(Enum):
 
 
 class Action:
-    def __init__(self, action_id, node, min_time: datetime, max_time: datetime, action_type: ActionType,
-                 request, service_time: int = 0):
+    def __init__(
+        self,
+        action_id,
+        node,
+        min_time: datetime,
+        max_time: datetime,
+        action_type: ActionType,
+        request: 'Request',
+        service_time: int = 0
+    ):
         self.id = action_id
         self.node = node
         self.min_time = min_time
         self.max_time = max_time
         self.action_type = action_type
-        self.request = request
+        self.request: Request = request
         self.service_time = service_time
 
     def __str__(self):
@@ -49,7 +57,7 @@ class Request:
         pickup_service_time: int = 0,
         drop_off_service_time: int = 0,
         equipment: int = 0,
-        vehicle_id: int = 0
+        required_vehicle_id: Optional[int] = None
     ):
         self.index = index
         self.pickup_action = Action(
@@ -66,7 +74,13 @@ class Request:
         )
         self.min_travel_time = min_travel_time
         self.equipment = equipment
-        self.vehicle_id = vehicle_id
+        self.required_vehicle_id = required_vehicle_id
+
+    def __eq__(self, other):
+        return self.index == other.index
+
+    def __hash__(self):
+        return hash(self.index)
 
 
 class Vehicle:

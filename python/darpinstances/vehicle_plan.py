@@ -3,7 +3,7 @@ from typing import List, Optional, Dict
 from datetime import datetime
 
 from darpinstances.instance import Vehicle
-from darpinstances.instance_generation.instance_objects import Action
+from darpinstances.instance_objects import Action
 
 
 class ActionData:
@@ -32,8 +32,8 @@ class VehiclePlan:
     def __init__(
         self,
         vehicle: Vehicle,
-        cost: Optional[int],
         actions: List[ActionData],
+        cost: Optional[int] = None,
         departure_time: Optional[datetime] = None,
         arrival_time: Optional[datetime] = None
     ):
