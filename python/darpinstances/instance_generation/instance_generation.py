@@ -54,25 +54,19 @@ def generate_dm(config: Dict, nodes: gpd.GeoDataFrame, edges: gpd.GeoDataFrame, 
 
         # call distance utils to generate dm
         command = [
-            # "shortestPathsPreprocessor",
-            "/home/dominika/Desktop/deathOFbachelor/ShoDi/build/shortestPathsPreprocessor",
+            "shortestPathsPreprocessor",
             "-m",
             "dm",
             "-f",
             "xengraph",
             "--output-format",
             "hdf",
-            "--preprocessing-mode",
-            "slow",
-            "--int-size 16",
-            "-i",
             xeng_file_path,
             "-o",
             abs_path
         ]
-        print(" ".join(command))
 
-        # darpbenchmark.exec.call_executable(command)
+        darpbenchmark.exec.call_executable(command)
 
 
 def generate_instance(config_filepath: Path):

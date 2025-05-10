@@ -12,7 +12,6 @@ from sklearn.cluster import KMeans
 
 import darpinstances
 from roadgraphtool.db import db
-# from darpinstances.db import db
 from darpinstances.instance_generation.demand_generation_helpers import save_requests_csv
 from darpinstances.instance_generation.map import NearestNodeProvider
 
