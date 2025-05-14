@@ -1,7 +1,6 @@
 import ast
 import csv
 from pathlib import Path
-import time
 from geoalchemy2 import WKTElement
 import pandas as pd
 import geopandas as gpd
@@ -19,6 +18,7 @@ RESOURCE_PATH = PATH / "resources"
 BASETIME = datetime(2014, 4, 1)
 
 def convert_CSV_format(city: str) -> DataFrame:
+    """Converts the trips from CSV format to a DataFrame with geometry."""
     input_file = RESOURCE_PATH / f"{city}_trips_og.csv"
     with open(input_file) as csvfile:
         data = list(csv.DictReader(csvfile))
@@ -46,6 +46,7 @@ def convert_CSV_format(city: str) -> DataFrame:
     return df
 
 def convert_TNTP_format(city: str) -> DataFrame:
+    """Converts the trips from TNTP format to a DataFrame with geometry."""
     tripstntpfile = RESOURCE_PATH / f"{city}_trips_og.tntp"
     nodesfile = RESOURCE_PATH / f"{city}_node.tntp"
 

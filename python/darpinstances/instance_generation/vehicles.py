@@ -97,8 +97,7 @@ def generate_vehicles(nodes: gpd.GeoDataFrame, config: dict, nn_provider: Neares
 
     vehicles["capacity"] = capacity
 
-    # instance_dir = config['instance_dir']
-    instance_dir = getcwd()
+    instance_dir = config['instance_dir']
     _save_vehicles_csv(vehicles, instance_dir)
 
     # save shapefiles

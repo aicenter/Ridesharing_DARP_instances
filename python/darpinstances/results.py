@@ -434,12 +434,12 @@ def load_aggregate_stats_in_dir(path: Path, included_config_keys: Optional[List[
     columns = ['method']
 
     # config keys to include
-    # empty_columns = []
-    # for key in included_config_keys:
-    #     if key not in df.columns:
-    #         empty_columns.append(key)
-    #     else:
-    #         columns.append(key)
+    empty_columns = []
+    for key in included_config_keys:
+        if key not in df.columns:
+            empty_columns.append(key)
+        else:
+            columns.append(key)
     columns.extend([
         'cost_minutes',
         'total_time',
