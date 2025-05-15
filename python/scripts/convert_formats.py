@@ -1,3 +1,7 @@
+"""
+This script served as a helper to convert the demand data from the original format (CSV for Porto, TNTP for Sydney) to a format that can be used by the DARP instance generator.
+"""
+
 import ast
 import csv
 from pathlib import Path
