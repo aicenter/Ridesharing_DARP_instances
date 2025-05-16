@@ -189,7 +189,8 @@ def get_processed_results(
         'avg_waiting_duration': avg_waiting_duration,
         'tts_cost': tts_cost,
         'tts_cost_per_plan': tts_cost_per_plan,
-        'trip_durations': trip_durations
+        'trip_durations': trip_durations,
+        'avg_trip_duration': sum(trip_durations) / len(trip_durations),
     }
 
     if return_as_dict:
@@ -400,6 +401,8 @@ def load_all_data_for_result(path: Path) -> Optional[Tuple[Dict,List]]:
     data['capacity'] = int(instance_config['vehicles']['vehicle_capacity'])
     if 'sample' in instance_config['demand']:
         data['sample'] = float(instance_config['demand']['sample'])
+    else:
+        data['sample'] = 1.0
 
     data['duration_minutes'] = (data['end_time'] - data['start_time']).total_seconds() / 60
     if data['duration_minutes'].is_integer():

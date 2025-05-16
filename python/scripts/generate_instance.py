@@ -8,10 +8,10 @@ import pandas as pd
 import geopandas as gpd
 
 from darpbenchmark.sizing import calculate_sizing_for_instance
-from darpinstances.instance_generation.demand_to_database import load_data_from_csv, load_demand_to_db
+from darpinstances.instance_generation.demand_to_database import load_demand_to_db
 from darpinstances.instance_generation.demand_generation import generate_demand
 from darpinstances.instance_generation.vehicles import generate_vehicles
-from scripts.convert_formats import RESOURCE_path, generate_and_save_csv
+from darpinstances.instance_generation.convert_formats import RESOURCE_path, load_data_from_csv
 from darpinstances.instance_generation.map import NearestNodeProvider, get_map
 from darpinstances.instance_generation.instance_generation import generate_dm
 from darpinstances.instance import load_instance_config
