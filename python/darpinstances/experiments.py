@@ -10,8 +10,6 @@ import darpinstances.exec
 import darpinstances.log
 from darpinstances.inout import check_file_exists
 
-from darpinstances.inout import check_file_exists
-
 
 def load_experiment_config(path: Union[str,Path]):
     logging.info(f"Loading experiment config from {path}")
@@ -26,8 +24,9 @@ def load_experiment_config(path: Union[str,Path]):
 
             # if outdir is set in config, check that that it is correct
             if "outdir" in config:
-                check_file_exists(config['outdir'])
                 config['outdir'] = os.path.abspath(config['outdir'])
+                check_file_exists(config['outdir'])
+                # config['outdir'] = os.path.abspath(config['outdir'])
             # othervise use the config file directory as outpath
             else:
                 config['outdir'] = os.path.dirname(path)

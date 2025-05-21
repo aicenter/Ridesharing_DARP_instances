@@ -57,10 +57,7 @@ def generate_demand(nodes: gpd.GeoDataFrame, config: Dict, nearest_node_provider
     requests_file_path = "{}/requests.csv".format(instance_dir)
 
     instance_file_path = config["demand"]["filepath"]
-    darpinstances.instance_generation.demand_generation.finish_instance_file(
-        requests_file_path,
-        instance_file_path
-    )
+    finish_instance_file(requests_file_path, instance_file_path)
 
     if save_shp:
         save_shapefiles(requests, nodes, crs_geo, instance_dir)

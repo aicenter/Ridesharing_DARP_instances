@@ -131,7 +131,8 @@ def get_processed_results(
     total_waiting_duration = 0
     tts_cost = 0
     total_delay = 0
-    ocuppancies = [0, 0, 0, 0, 0]
+    ocuppancies = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    trip_durations = []
 
     for plan in solution["plans"]:
         if len(plan["actions"]) > 0:
@@ -161,19 +162,23 @@ def get_processed_results(
                 else:
                     trip_duration = action['arrival_time'] - pickup_times[action['action']['request_index']]
                     # min_time = instance.request_map[action['action']['request_id']].min_time
-                    min_time = 0
-                    delay = trip_duration - min_time
+                    trip_durations.append(trip_duration)
+                    min_time = action['action']['min_time']
+                    delay = action['arrival_time'] - min_time
                     total_delay += delay
                     current_occupancy -= 1
                 prev_departure = action['departure_time']
+    if plan_count == 0:
+        return None, None
 
     avg_occupancy = avg_occupancy_sum / total_driving_duration
     tts_cost_per_plan = tts_cost / plan_count
-
+    avg_waiting_duration = total_waiting_duration / plan_count
     data = {
         'cost_minutes': solution['cost_minutes'],
         'total_time': performance['total_time'] / 1000,
         'dropped_requests': len(solution['dropped_requests']),
+        'solver_stats': performance['solver_stats'],
         'avg_delay': total_delay / req_count,
         'plan_count': plan_count,
         'req_count': req_count,
@@ -181,9 +186,11 @@ def get_processed_results(
         'used_connections': solution['used_connections'],
         'total_driving_duration': total_driving_duration,
         'total_waiting_duration': total_waiting_duration,
-        'avg_waiting_duration': total_waiting_duration / plan_count,
+        'avg_waiting_duration': avg_waiting_duration,
         'tts_cost': tts_cost,
-        'tts_cost_per_plan': tts_cost_per_plan
+        'tts_cost_per_plan': tts_cost_per_plan,
+        'trip_durations': trip_durations,
+        'avg_trip_duration': sum(trip_durations) / len(trip_durations),
     }
 
     if return_as_dict:
@@ -379,7 +386,9 @@ def load_all_data_for_result(path: Path) -> Optional[Tuple[Dict,List]]:
     elif 'plans' not in result:
         return None
     data, occupancies = get_processed_results(result, performance, return_as_dict=True)
-
+    if data is None:
+        return None
+    
     config_path = path / 'config.yaml'
     exp_config = darpinstances.experiments.load_experiment_config(str(config_path))
     data['method'] = exp_config['method']
@@ -389,6 +398,11 @@ def load_all_data_for_result(path: Path) -> Optional[Tuple[Dict,List]]:
     data['max_delay'] = int(instance_config['max_prolongation'])
     data['start_time'] = datetime.strptime(instance_config['demand']['min_time'], '%Y-%m-%d %H:%M:%S')
     data['end_time'] = datetime.strptime(instance_config['demand']['max_time'], '%Y-%m-%d %H:%M:%S')
+    data['capacity'] = int(instance_config['vehicles']['vehicle_capacity'])
+    if 'sample' in instance_config['demand']:
+        data['sample'] = float(instance_config['demand']['sample'])
+    else:
+        data['sample'] = 1.0
 
     data['duration_minutes'] = (data['end_time'] - data['start_time']).total_seconds() / 60
     if data['duration_minutes'].is_integer():
@@ -416,7 +430,8 @@ def load_aggregate_stats_in_dir(path: Path, included_config_keys: Optional[List[
                     if key in config:
                         d[0][key] = config[key]
             data.append(d[0])
-
+    if len(data) == 0:
+        return None
     df = pd.DataFrame(data)
 
     columns = ['method']
@@ -428,7 +443,6 @@ def load_aggregate_stats_in_dir(path: Path, included_config_keys: Optional[List[
             empty_columns.append(key)
         else:
             columns.append(key)
-
     columns.extend([
         'cost_minutes',
         'total_time',
@@ -446,12 +460,13 @@ def load_aggregate_stats_in_dir(path: Path, included_config_keys: Optional[List[
         'duration_minutes',
         'max_delay',
         'start_time',
-        'end_time'
+        'end_time',
+        'trip_durations',
+        'capacity'
     ])
-
     df = pd.DataFrame(df[columns])
-    for col in empty_columns:
-        df[col] = None
+    # for col in empty_columns:
+    #     df[col] = None
 
     return df
 
@@ -478,3 +493,5 @@ def load_occupancies_in_dir(path: Path) -> Optional[pd.DataFrame]:
         return None
 
     return pd.DataFrame(out_data)
+
+
