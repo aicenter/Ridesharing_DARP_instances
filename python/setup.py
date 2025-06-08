@@ -10,6 +10,7 @@ setup(
 	license='GNU GPLv3',
 	packages=setuptools.find_packages(),
 	install_requires=[
+		'geojson',
 		'numpy',
 		'pandas',
 		'plotly',
