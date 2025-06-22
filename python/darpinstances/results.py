@@ -94,8 +94,9 @@ def load_instance_results(instance_path: str) -> Tuple[Dict[str, List[dict]], Di
     return solutions, performances
 
 
-def load_instance_series(series_file_path: str) -> Tuple[
-    Dict[str, Dict[str, List[dict]]], Dict[str, Dict[str, List[dict]]]]:
+def load_instance_series(
+    series_file_path: str,
+) -> Tuple[Dict[str, Dict[str, List[dict]]], Dict[str, Dict[str, List[dict]]]]:
     solutions = {}
     performances = {}
 
@@ -378,7 +379,7 @@ def get_delays_from_solution(solution: dict, instance: pd.DataFrame) -> List[int
     return delays
 
 
-def load_all_data_for_result(path: Path) -> Optional[Tuple[Dict,List]]:
+def load_all_data_for_result(path: Path, included_config_keys: Optional[List[str]] = None) -> Optional[Tuple[Dict, List]]:
     result, performance = load_results_from_folder(str(path))
     if type(result) is list:
         if len(result) == 0:
@@ -392,10 +393,14 @@ def load_all_data_for_result(path: Path) -> Optional[Tuple[Dict,List]]:
     config_path = path / 'config.yaml'
     exp_config = darpinstances.experiments.load_experiment_config(str(config_path))
     data['method'] = exp_config['method']
+    if included_config_keys is not None:
+        for key in included_config_keys:
+            if key in exp_config:
+                data[key] = exp_config[key]
 
     instance_config_path = path / exp_config['instance']
     instance_config = darpinstances.instance.load_instance_config(instance_config_path)
-    data['max_delay'] = int(instance_config['max_prolongation'])
+    data['instance_max_delay'] = int(instance_config['max_prolongation'])
     data['start_time'] = datetime.strptime(instance_config['demand']['min_time'], '%Y-%m-%d %H:%M:%S')
     data['end_time'] = datetime.strptime(instance_config['demand']['max_time'], '%Y-%m-%d %H:%M:%S')
     data['capacity'] = int(instance_config['vehicles']['vehicle_capacity'])
@@ -422,76 +427,31 @@ def load_aggregate_stats_in_dir(path: Path, included_config_keys: Optional[List[
         if path_regex is not None:
             if not path_regex.search(str(file.as_posix())):
                 continue
-        d = load_all_data_for_result(file.parent)
+        d = load_all_data_for_result(file.parent, included_config_keys)
         if d is not None:
-            if included_config_keys is not None:
-                config = darpinstances.experiments.load_experiment_config(str(file))
-                for key in included_config_keys:
-                    if key in config:
-                        d[0][key] = config[key]
             data.append(d[0])
     if len(data) == 0:
         return None
     df = pd.DataFrame(data)
 
-    columns = ['method']
-
-    # config keys to include
-    empty_columns = []
-    for key in included_config_keys:
-        if key not in df.columns:
-            empty_columns.append(key)
-        else:
-            columns.append(key)
-    columns.extend([
-        'cost_minutes',
-        'total_time',
-        'avg_delay',
-        'dropped_requests',
-        'req_count',
-        'plan_count',
-        'total_driving_duration',
-        'total_waiting_duration',
-        'avg_waiting_duration',
-        'avg_occupancy',
-        'tts_cost',
-        'tts_cost_per_plan',
-        'used_connections',
-        'duration_minutes',
-        'max_delay',
-        'start_time',
-        'end_time',
-        'trip_durations',
-        'capacity'
-    ])
-    df = pd.DataFrame(df[columns])
-    # for col in empty_columns:
-    #     df[col] = None
-
     return df
 
 
-def load_occupancies_in_dir(path: Path) -> Optional[pd.DataFrame]:
+def load_occupancies_in_dir(path: Path, included_config_keys: Optional[List[str]] = None) -> Optional[pd.DataFrame]:
     logging.info(f"Loading occupancy stats in {path}")
     out_data = []
 
-    for root, dir, files in os.walk(path):
-        for file in files:
-            filename = os.fsdecode(file)
-            if filename == "config.yaml":
-                exp_config_filepath = Path(root) / filename
-                d = load_all_data_for_result(exp_config_filepath.parent)
-                if d is not None:
-                    agg_data_for_result, occupancies = d[0], d[1]
-                    for i, o in enumerate(occupancies):
-                        oc = copy.deepcopy(agg_data_for_result)
-                        oc['occupancy'] = i
-                        oc['vehicle_hours'] = o / 3600
-                        out_data.append(oc)
+    for file in path.rglob("*/config.yaml"):
+        d = load_all_data_for_result(file.parent, included_config_keys)
+        if d is not None:
+            agg_data_for_result, occupancies = d[0], d[1]
+            for i, o in enumerate(occupancies):
+                oc = copy.deepcopy(agg_data_for_result)
+                oc['occupancy'] = i
+                oc['vehicle_hours'] = o / 3600
+                out_data.append(oc)
 
     if len(out_data) == 0:
         return None
 
     return pd.DataFrame(out_data)
-
-
