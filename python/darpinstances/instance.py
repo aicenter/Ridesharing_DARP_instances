@@ -552,8 +552,8 @@ def load_instance(
     with open(demand_path, "r", encoding="utf-8") as demand_file:
         file_begin = demand_file.tell()
         header = demand_file.readline()
-        demand_file.seek(file_begin)
         if ',' in header:
+            demand_file.seek(file_begin)
             requests = load_demand(demand_file, instance_config, travel_time_provider)
         else:
             requests = load_demand_legacy(demand_file, instance_config, travel_time_provider)

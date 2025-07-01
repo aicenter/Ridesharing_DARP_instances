@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from pathlib import Path
-from typing import Optional, Set, Tuple, Dict, Iterable, List
+from typing import Optional, Set, Tuple, Dict, Iterable, List, Union
 import pandas as pd
 from pandera.typing import Series
 
@@ -62,6 +62,21 @@ class SolutionLoader:
             self.errors[error_type] += 1
         if self.error_count > self.max_error_count:
             raise RuntimeError(f"Error count ({self.error_count}) exceeded maximum allowed errors ({self.max_error_count})")
+
+    def _load_time_field(self, time_value: Union[int, str]) -> datetime:
+        """
+        Load a datetime from either a timestamp (int) or a datetime string.
+        
+        Args:
+            time_value: Either a timestamp (int) or a datetime string (str)
+            
+        Returns:
+            datetime: The parsed datetime object
+        """
+        if isinstance(time_value, int):
+            return datetime.fromtimestamp(time_value)
+        else:
+            return _load_datetime(time_value)
 
     def load_solution(self, filepath: Path, instance: DARPInstance) -> Solution:
         request_map, vehicle_map = _prepare_maps(instance)
@@ -143,14 +158,8 @@ class SolutionLoader:
             action = action_data["action"]
 
             # time loading
-            arrival_time_val = action_data["arrival_time"]
-            departure_time_val = action_data["departure_time"]
-            if isinstance(arrival_time_val, int):
-                arrival_time = datetime.fromtimestamp(arrival_time_val)
-                departure_time = datetime.fromtimestamp(departure_time_val)
-            else:
-                arrival_time = _load_datetime(arrival_time_val)
-                departure_time = _load_datetime(departure_time_val)
+            arrival_time = self._load_time_field(action_data["arrival_time"])
+            departure_time = self._load_time_field(action_data["departure_time"])
 
             # mapping to request
             request = request_map[action["request_index"]]
@@ -168,12 +177,8 @@ class SolutionLoader:
 
             actions_data_list.append(ActionData(action_from_instance, arrival_time, departure_time))
 
-        if isinstance(json_data["departure_time"], int):
-            departure_datetime = datetime.fromtimestamp(json_data["departure_time"])
-            arrival_datetime = datetime.fromtimestamp(json_data["arrival_time"])
-        else:
-            departure_datetime = _load_datetime(json_data["departure_time"])
-            arrival_datetime = _load_datetime(json_data["arrival_time"])
+        departure_datetime = self._load_time_field(json_data["departure_time"])
+        arrival_datetime = self._load_time_field(json_data["arrival_time"])
 
         vh_plan = VehiclePlan(vehicle, actions_data_list, json_data["cost"], departure_datetime, arrival_datetime)
         return vh_plan, mismatch_actions_count
@@ -183,7 +188,7 @@ class SolutionLoader:
 
         # min time constraint (has meaning only for pickup actions)
         if action_from_instance.action_type == ActionType.PICKUP and "min_time" in action:
-            min_time_solution = _load_datetime(action["min_time"])
+            min_time_solution = self._load_time_field(action["min_time"])
             if min_time_solution != action_from_instance.min_time:
                 logging.warning(
                     "%s min time mismatch: Action from instance: %s, action from solution: %s",
@@ -196,7 +201,7 @@ class SolutionLoader:
 
         # max time constraint
         if "max_time" in action:
-            max_time_solution = _load_datetime(action["max_time"])
+            max_time_solution = self._load_time_field(action["max_time"])
             if max_time_solution != action_from_instance.max_time:
                 logging.warning(
                     "%s max time mismatch: Action from instance: %s, action from solution: %s",
