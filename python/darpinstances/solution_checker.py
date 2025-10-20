@@ -18,6 +18,7 @@ from darpinstances.inout import check_file_exists
 from darpinstances.instance import DARPInstance, TravelTimeProvider
 from darpinstances.instance_objects import Request, Action, ActionType
 from darpinstances.solution import VehiclePlan, Solution
+from darpinstances.utils import TimeLoader
 
 
 # darp_folder_path = Path("C:\Google Drive/AIC Experiment Data\DARP")
@@ -412,14 +413,14 @@ class SolutionChecker:
                 instance = last_instance
             else:
                 if last_area == area:
-                    instance, _ = darpinstances.solution_checker.load_instance(
+                    instance, _, time_loader = darpinstances.solution_checker.load_instance(
                         instance_path,
                         last_instance.travel_time_provider
                     )
                 else:
-                    instance, _ = darpinstances.solution_checker.load_instance(instance_path)
+                    instance, _, time_loader = darpinstances.solution_checker.load_instance(instance_path)
 
-            solution = darpinstances.solution.load_solution(solution_path, instance)
+            solution = darpinstances.solution.load_solution(solution_path, instance, time_loader)
 
             ok, failures = self.check_solution(instance, solution)
             sol_record = [solution_path, ok]
@@ -459,9 +460,9 @@ def load_data(solution_file_path: Path, instance_path: Optional[Path], demand_fi
         experiment_config = darpinstances.experiments.load_experiment_config(experiment_config_path)
         instance_path = Path(experiment_config['instance'])
 
-    instance, _ = load_instance(instance_path, demand_file_name=demand_file_name)
+    instance, _, time_loader = load_instance(instance_path, demand_file_name=demand_file_name)
 
-    solution = darpinstances.solution.load_solution(solution_file_path, instance)
+    solution = darpinstances.solution.load_solution(solution_file_path, instance, time_loader)
 
     return instance, solution
 
@@ -472,14 +473,15 @@ def load_instance(
     instance_path: Path,
     travel_time_provider: Optional[TravelTimeProvider] = None,
     demand_file_name: Optional[str] = None
-) -> Tuple[DARPInstance, TravelTimeProvider]:
+) -> Tuple[DARPInstance, TravelTimeProvider, TimeLoader]:
     if instance_path.suffix == '.yaml':
-        instance = darpinstances.instance.load_instance(instance_path, travel_time_provider, demand_file_name)
+        instance, time_loader = darpinstances.instance.load_instance(instance_path, travel_time_provider, demand_file_name)
         travel_time_provider = instance.travel_time_provider
     else:
         instance = load_cordeau(instance_path)
         travel_time_provider = darpinstances.instance.EuclideanTravelTimeProvider(60)
-    return instance, travel_time_provider
+        time_loader = TimeLoader()  # Default TimeLoader for Cordeau instances
+    return instance, travel_time_provider, time_loader
 
 
 if __name__ == '__main__':
@@ -509,4 +511,5 @@ if __name__ == '__main__':
     check_file_exists(instance_path)
 
     instance, solution = load_data(solution_file_path, instance_path)
-    check_solution(instance, solution)
+    solution_checker = SolutionChecker()
+    solution_checker.check_solution(instance, solution)

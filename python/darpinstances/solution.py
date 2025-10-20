@@ -9,6 +9,7 @@ from pandera.typing import Series
 from darpinstances.inout import load_json
 from darpinstances.instance import DARPInstance, Request, Vehicle
 from darpinstances.instance_objects import ActionType, Action
+from darpinstances.utils import TimeLoader
 from darpinstances.vehicle_plan import VehiclePlan, ActionData
 
 
@@ -51,10 +52,11 @@ class LoadingError(Enum):
 
 
 class SolutionLoader:
-    def __init__(self, max_error_count: int = 10):
+    def __init__(self, max_error_count: int = 10, time_loader: TimeLoader = None):
         self.error_count = 0
         self.max_error_count = max_error_count
         self.errors = {error_type: 0 for error_type in LoadingError}
+        self.time_loader = time_loader
 
     def _increment_error(self, error_type: LoadingError = None):
         self.error_count += 1
@@ -63,20 +65,6 @@ class SolutionLoader:
         if self.error_count > self.max_error_count:
             raise RuntimeError(f"Error count ({self.error_count}) exceeded maximum allowed errors ({self.max_error_count})")
 
-    def _load_time_field(self, time_value: Union[int, str]) -> datetime:
-        """
-        Load a datetime from either a timestamp (int) or a datetime string.
-        
-        Args:
-            time_value: Either a timestamp (int) or a datetime string (str)
-            
-        Returns:
-            datetime: The parsed datetime object
-        """
-        if isinstance(time_value, int):
-            return datetime.fromtimestamp(time_value)
-        else:
-            return _load_datetime(time_value)
 
     def load_solution(self, filepath: Path, instance: DARPInstance) -> Solution:
         request_map, vehicle_map = _prepare_maps(instance)
@@ -155,70 +143,111 @@ class SolutionLoader:
         # action data loading
         mismatch_actions_count = 0
         for action_data in json_data["actions"]:
-            action = action_data["action"]
-
             # time loading
-            arrival_time = self._load_time_field(action_data["arrival_time"])
-            departure_time = self._load_time_field(action_data["departure_time"])
+            arrival_time = self.time_loader.load_time_field(action_data["arrival_time"])
+            departure_time = self.time_loader.load_time_field(action_data["departure_time"])
 
-            # mapping to request
-            request = request_map[action["request_index"]]
+            # Load action from dictionary
+            action_from_solution = self._load_action_from_dict(action_data["action"], request_map)
 
             # get the action definition from instance data
-            action_type = ActionType.PICKUP if action["type"] == "pickup" else ActionType.DROP_OFF
-            if action_type == ActionType.PICKUP:
+            request = action_from_solution.request
+            if action_from_solution.action_type == ActionType.PICKUP:
                 action_from_instance = request.pickup_action
             else:
                 action_from_instance = request.drop_off_action
 
-            action_field_equals = self._action_fields_equals(action_from_instance, action)
+            action_field_equals = self._action_fields_equals(action_from_instance, action_from_solution)
             if not action_field_equals:
                 mismatch_actions_count += 1
 
             actions_data_list.append(ActionData(action_from_instance, arrival_time, departure_time))
 
-        departure_datetime = self._load_time_field(json_data["departure_time"])
-        arrival_datetime = self._load_time_field(json_data["arrival_time"])
+        departure_datetime = self.time_loader.load_time_field(json_data["departure_time"])
+        arrival_datetime = self.time_loader.load_time_field(json_data["arrival_time"])
 
         vh_plan = VehiclePlan(vehicle, actions_data_list, json_data["cost"], departure_datetime, arrival_datetime)
         return vh_plan, mismatch_actions_count
 
-    def _action_fields_equals(self, action_from_instance: Action, action: Dict) -> bool:
+    def _load_action_from_dict(self, action_dict: Dict, request_map: Dict[int, Request]) -> Action:
+        """
+        Load an Action object from a dictionary representation.
+        
+        Args:
+            action_dict: Dictionary containing action data
+            request_map: Mapping from request index to Request object
+            
+        Returns:
+            Action object created from the dictionary
+        """
+        # Get the request
+        request = request_map[action_dict["request_index"]]
+        
+        # Determine action type
+        action_type = ActionType.PICKUP if action_dict["type"] == "pickup" else ActionType.DROP_OFF
+        
+        # Get the node (position)
+        node = request.pickup_action.node if action_type == ActionType.PICKUP else request.drop_off_action.node
+        
+        # Load times using TimeLoader
+        min_time = None
+        if "min_time" in action_dict:
+            min_time = self.time_loader.load_time_field(action_dict["min_time"])
+        
+        max_time = None
+        if "max_time" in action_dict:
+            max_time = self.time_loader.load_time_field(action_dict["max_time"])
+        
+        # Get service time (default to 0 if not specified)
+        service_time = action_dict.get("service_time", 0)
+        
+        # Create Action object
+        action_id = request.pickup_action.id if action_type == ActionType.PICKUP else request.drop_off_action.id
+        
+        return Action(
+            action_id=action_id,
+            node=node,
+            min_time=min_time,
+            max_time=max_time,
+            action_type=action_type,
+            request=request,
+            service_time=service_time
+        )
+
+    def _action_fields_equals(self, action_from_instance: Action, action_from_solution: Action) -> bool:
         correct = True
 
         # min time constraint (has meaning only for pickup actions)
-        if action_from_instance.action_type == ActionType.PICKUP and "min_time" in action:
-            min_time_solution = self._load_time_field(action["min_time"])
-            if min_time_solution != action_from_instance.min_time:
+        if action_from_instance.action_type == ActionType.PICKUP and action_from_solution.min_time is not None:
+            if action_from_solution.min_time != action_from_instance.min_time:
                 logging.warning(
                     "%s min time mismatch: Action from instance: %s, action from solution: %s",
-                    _get_action_info_string(action),
+                    _get_action_info_string_from_action(action_from_solution),
                     action_from_instance.min_time,
-                    action["min_time"]
+                    action_from_solution.min_time
                 )
                 self._increment_error(LoadingError.ACTION_MIN_TIME_MISMATCH)
                 correct = False
 
         # max time constraint
-        if "max_time" in action:
-            max_time_solution = self._load_time_field(action["max_time"])
-            if max_time_solution != action_from_instance.max_time:
+        if action_from_solution.max_time is not None:
+            if action_from_solution.max_time != action_from_instance.max_time:
                 logging.warning(
                     "%s max time mismatch: Action from instance: %s, action from solution: %s",
-                    _get_action_info_string(action),
+                    _get_action_info_string_from_action(action_from_solution),
                     action_from_instance.max_time,
-                    action["max_time"]
+                    action_from_solution.max_time
                 )
                 self._increment_error(LoadingError.ACTION_MAX_TIME_MISMATCH)
                 correct = False
 
         # action position
-        if "position" in action and action["position"] != action_from_instance.node.get_idx():
+        if action_from_solution.node.get_idx() != action_from_instance.node.get_idx():
             logging.warning(
                 "%s position mismatch: Action from instance: %s, action from solution: %s",
-                _get_action_info_string(action),
+                _get_action_info_string_from_action(action_from_solution),
                 action_from_instance.node.get_idx(),
-                action["position"]
+                action_from_solution.node.get_idx()
             )
             self._increment_error(LoadingError.ACTION_POSITION_MISMATCH)
             correct = False
@@ -283,8 +312,6 @@ class SolutionLoader:
         return vh_plan
 
 
-def _load_datetime(string: str):
-    return datetime.strptime(string, '%Y-%m-%d %H:%M:%S')
 
 
 # Replaced by method in SolutionLoader class
@@ -298,17 +325,18 @@ def _load_vehicle_from_csv(vehicle_row: pd.Series, simulation_start_time: dateti
 # Replaced by method in SolutionLoader class
 
 
-def load_solution(filepath: Path, instance: DARPInstance) -> Solution:
+def load_solution(filepath: Path, instance: DARPInstance, time_loader: TimeLoader) -> Solution:
     """Load a solution from a file using the SolutionLoader class
 
     Args:
         filepath: Path to the solution file
         instance: DARP instance
+        time_loader: TimeLoader instance for parsing time values
 
     Returns:
         Solution object
     """
-    solution_loader = SolutionLoader()
+    solution_loader = SolutionLoader(time_loader=time_loader)
     return solution_loader.load_solution(filepath, instance)
 
 
@@ -328,6 +356,12 @@ def _prepare_maps(instance: DARPInstance) -> Tuple[Dict[int, Request], Dict[int,
     return request_map, vehicle_map
 
 
+def _get_action_info_string_from_action(action: Action) -> str:
+    """Get a string representation of action information for logging."""
+    type_string = "Pickup" if action.action_type == ActionType.PICKUP else "Drop-off"
+    return f"{type_string} action for request {action.request.index}"
+
+
 def _get_action_info_string(action):
     type_string = "Pickup" if action["type"] == "pickup" else "Drop-off"
     return f"{type_string} action for request {action['request_index']}"
@@ -339,11 +373,11 @@ def _get_action_info_string(action):
 # Replaced by method in SolutionLoader class
 
 
-def load_plan(filepath: str, instance: DARPInstance) -> Tuple[VehiclePlan, int]:
+def load_plan(filepath: str, instance: DARPInstance, time_loader: TimeLoader) -> Tuple[VehiclePlan, int]:
     json_data = load_json(filepath)
     request_map, vehicle_map = _prepare_maps(instance)
 
-    solution_loader = SolutionLoader()
+    solution_loader = SolutionLoader(time_loader=time_loader)
     vp, mismatch_count = solution_loader._load_plan(json_data, instance.darp_instance_config.virtual_vehicles, vehicle_map, request_map)
 
     return vp, mismatch_count

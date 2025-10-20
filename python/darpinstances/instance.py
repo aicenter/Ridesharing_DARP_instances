@@ -3,11 +3,11 @@ import logging
 import math
 import os
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from enum import Enum
 from functools import singledispatchmethod
 from pathlib import Path
-from typing import Iterable, Dict, List, Optional, Sequence, TextIO
+from typing import Iterable, Dict, List, Optional, Sequence, TextIO, Tuple
 
 import geojson
 import h5py
@@ -21,6 +21,7 @@ from tqdm.autonotebook import tqdm
 import darpinstances.log
 from darpinstances.inout import check_file_exists
 from darpinstances.instance_objects import Coordinate, Request, Vehicle
+from darpinstances.utils import TimeLoader
 
 
 class TravelTimeProvider(ABC):
@@ -282,7 +283,13 @@ def _compute_max_delay(instance_config: dict, min_travel_time: int|float) -> flo
         return min_travel_time * instance_config['max_travel_time_delay']['relative']
 
 
-def load_demand_legacy(demand_file: TextIO, instance_config: dict, travel_time_provider: TravelTimeProvider):
+def load_demand_legacy(
+    demand_file: TextIO,
+    instance_config: dict,
+    travel_time_provider: TravelTimeProvider,
+    demand_file_path: Path,
+    time_loader: TimeLoader
+):
     """
     Old loader for demand files in the format present in the original DARP instances requests.csv files. This loader
     should not be needed any more, as the new loader is more flexible, but it kept here for possible compatibility
@@ -296,19 +303,25 @@ def load_demand_legacy(demand_file: TextIO, instance_config: dict, travel_time_p
     action_id = 0
     index = 0
     travel_time_divider = instance_config.get('travel_time_divider', 1)
+
+    if demand_file_path.suffix == '.di':
+        column_indices = {'time': 1, 'origin': 2, 'destination': 3}
+    else:
+        # skip header
+        demand_file.readline()
+        column_indices = {'time': 0, 'origin': 1, 'destination': 2}
+    time_column = column_indices['time']
+
     line_string = demand_file.readline()
     requests = []
     while line_string:
         line = line_string.split()
         request_id: int = int(index)
 
-        if ' ' in line[0]:
-            request_time = _load_datetime(line[0])
-        else:
-            request_time = datetime.fromtimestamp(int(line[0]) / 1000)
+        request_datetime = time_loader.load_time_field(int(line[time_column]) / 1000)
 
-        start_node = Node(int(line[1]))
-        end_node = Node(int(line[2]))
+        start_node = Node(int(line[column_indices['origin']]))
+        end_node = Node(int(line[column_indices['destination']]))
         equipment = map_equipment_type(line[4]).value if (len(line) > 4) else 0
 
         min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
@@ -317,21 +330,21 @@ def load_demand_legacy(demand_file: TextIO, instance_config: dict, travel_time_p
         max_prolongation = _compute_max_delay(instance_config, min_travel_time)
         max_pickup_delay = instance_config.get('max_pickup_delay', max_prolongation)
 
-        max_pickup_time = request_time + timedelta(seconds=max_pickup_delay)
+        max_pickup_time = request_datetime + timedelta(seconds=max_pickup_delay)
         # min_drop_off_time = request_time + timedelta(seconds=int(min_travel_time))
-        max_drop_off_time = request_time + timedelta(seconds=int(min_travel_time)) + timedelta(
+        max_drop_off_time = request_datetime + timedelta(seconds=int(min_travel_time)) + timedelta(
             seconds=max_prolongation
         ) + timedelta(seconds=instance_config.get('max_pickup_delay', 0))
         if 'max_pickup_delay' in instance_config:
             max_drop_off_time += timedelta(seconds=instance_config['max_pickup_delay'])
 
-        vehicle_id = int(line[5]) if len(line) > 5 else 0
+        vehicle_id = int(line[5]) if len(line) > 5 else None
         requests.append(
             Request(
                 request_id,
                 action_id,
                 start_node,
-                request_time,
+                request_datetime,
                 max_pickup_time,
                 action_id + 1,
                 end_node,
@@ -519,7 +532,7 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
 
 def load_instance(
     filepath: Path, travel_time_provider: MatrixTravelTimeProvider = None, demand_file_name: Optional[str] = None
-) -> DARPInstance:
+) -> Tuple[DARPInstance, TimeLoader]:
     instance_config = load_instance_config(filepath, set_defaults=False)
     instance_dir_path = filepath.parent
 
@@ -527,7 +540,7 @@ def load_instance(
     # loaded from instance config is relative to the instance dir
     os.chdir(instance_dir_path)
     if demand_file_name is None:
-        demand_path = instance_config['demand']['filepath']
+        demand_path = Path(instance_config['demand']['filepath'])
     else:
         demand_path = instance_dir_path / demand_file_name
     check_file_exists(demand_path)
@@ -552,11 +565,15 @@ def load_instance(
     with open(demand_path, "r", encoding="utf-8") as demand_file:
         file_begin = demand_file.tell()
         header = demand_file.readline()
+        demand_file.seek(file_begin)
         if ',' in header:
-            demand_file.seek(file_begin)
             requests = load_demand(demand_file, instance_config, travel_time_provider)
+            time_loader = TimeLoader()
         else:
-            requests = load_demand_legacy(demand_file, instance_config, travel_time_provider)
+            instance_start_time = _load_datetime(instance_config['demand']['min_time'])
+            instance_date = datetime.combine(instance_start_time.date(), time())
+            time_loader = TimeLoader(instance_date)
+            requests = load_demand_legacy(demand_file, instance_config, travel_time_provider, demand_path, time_loader)
 
     max_pickup_delay = instance_config.get('max_pickup_delay', 0)
     enable_negative_delay = instance_config.get('enable_negative_delay', False)
@@ -593,7 +610,10 @@ def load_instance(
         enable_negative_delay,
         vehicle_capacity
     )
-    return DARPInstance(requests, vehicles, travel_time_provider, darp_instance_config)
+        
+    darp_instance = DARPInstance(requests, vehicles, travel_time_provider, darp_instance_config)
+    
+    return darp_instance, time_loader
 
 
 @MatrixTravelTimeProvider.get_travel_time.register
