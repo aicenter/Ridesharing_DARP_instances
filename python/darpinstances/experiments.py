@@ -43,6 +43,21 @@ def write_experiment_config(path: str, params: dict):
         yaml.safe_dump(params, outfile)
 
 
+def generate_experiment_config(method_dir_full: Path, method_config: dict, instance_path: PurePath, overwrite: bool = True):
+    os.makedirs(method_dir_full, exist_ok=True)
+
+    experiment_config_path = method_dir_full / "config.yaml"
+
+    instance_rel_path = PurePath(os.path.relpath(instance_path, method_dir_full))
+
+    config = {"instance": str(instance_rel_path.as_posix()), "outdir": '.'} | method_config
+
+    if overwrite or not experiment_config_path.exists():
+        darpinstances.experiments.write_experiment_config(experiment_config_path, config)
+    else:
+        logging.info(f"Skipping config generation for {experiment_config_path} as it already exists")
+
+
 def generate_experiment_configs_for_instance(
     full_result_root_dir: Path,
     methods: Dict[str, dict],
@@ -55,18 +70,7 @@ def generate_experiment_configs_for_instance(
     for method_name, method_config in methods.items():
         # create dir for method
         method_dir_full = full_result_root_dir / method_name
-        os.makedirs(method_dir_full, exist_ok=True)
-
-        experiment_config_path = method_dir_full / "config.yaml"
-
-        instance_rel_path = PurePath(os.path.relpath(instance_path, method_dir_full))
-
-        config = {"instance": str(instance_rel_path.as_posix()), "outdir": '.'} | method_config
-
-        if overwrite or not experiment_config_path.exists():
-            darpinstances.experiments.write_experiment_config(experiment_config_path, config)
-        else:
-            logging.info(f"Skipping config generation for {experiment_config_path} as it already exists")
+        generate_experiment_config(method_dir_full, method_config, instance_path, overwrite=overwrite)
 
 
 def generate_experiments_config_for_instance_series(
