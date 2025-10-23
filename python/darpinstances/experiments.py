@@ -18,9 +18,10 @@ def load_experiment_config(path: Union[str,Path]):
             config = yaml.safe_load(config_file)
 
             # check the file locations and make them absolute
-            os.chdir(os.path.dirname(path))
-            check_file_exists(config['instance'])
-            config['instance'] = os.path.abspath(config['instance'])
+            os.chdir(os.path.dirname(path)) # go to the experiment dir
+            instance_path_resolved = (Path.cwd() / config['instance']).resolve()
+            check_file_exists(instance_path_resolved)
+            config['instance'] = instance_path_resolved
 
             # if outdir is set in config, check that that it is correct
             if "outdir" in config:
