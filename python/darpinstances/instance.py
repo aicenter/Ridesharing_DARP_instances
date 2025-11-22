@@ -89,6 +89,9 @@ class MatrixTravelTimeProvider(TravelTimeProvider):
         else:
             return cls.from_hdf(dm_filepath)
 
+    def get_node_count(self):
+        return len(self.dm)
+
 
 class DARPInstanceConfiguration:
     def __init__(

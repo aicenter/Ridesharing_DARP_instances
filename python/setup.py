@@ -15,7 +15,6 @@ setup(
 		'pandas',
 		'plotly',
 		'tqdm',
-		'typing',
 		'pyyaml',
 		'h5py',
 		'geopandas',
