@@ -5,12 +5,10 @@ import os
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, time
 from enum import Enum
-from functools import singledispatchmethod
 from pathlib import Path
-from typing import Iterable, Dict, List, Optional, Sequence, TextIO, Tuple
+from typing import Iterable, Dict, List, Optional, Sequence, TextIO, Tuple, Union
 
 import geojson
-import h5py
 import numpy as np
 import pandas as pd
 import yaml
@@ -22,75 +20,12 @@ import darpinstances.log
 from darpinstances.inout import check_file_exists
 from darpinstances.instance_objects import Coordinate, Request, Vehicle
 from darpinstances.utils import TimeLoader
-
-
-class TravelTimeProvider(ABC):
-
-    @abstractmethod
-    def get_travel_time(self, from_position, to_position) -> int:
-        """
-        Provides travel time in arbitrary units between location @param from and @param to.
-        :param from_position:
-        :param to_position:
-        :return: Travel time between location @param from and @param to in milliseconds.
-        """
-        pass
-
-
-class EuclideanTravelTimeProvider(TravelTimeProvider):
-    """
-    Attributes
-    coordinate resolution: int
-        How many milliseconds should it take to travel by 1 in the coordinate system
-    """
-
-    def __init__(self, coordinate_resolution: int):
-        self.coordinate_resolution = coordinate_resolution
-
-    def get_travel_time(self, from_position: Coordinate, to_position: Coordinate):
-        distance = math.sqrt(
-            math.pow(from_position.get_x() - to_position.get_x(), 2) + math.pow(
-                from_position.get_y() - to_position.get_y(), 2
-            )
-        )
-        travel_time = round(distance * self.coordinate_resolution)
-        return travel_time
-
-
-class MatrixTravelTimeProvider(TravelTimeProvider):
-    """
-
-    """
-
-    @classmethod
-    def from_csv(cls, path_to_dm: Path):
-        dm = pd.read_csv(path_to_dm, header=None, dtype=np.int32)
-        return cls(dm.values)
-
-    @classmethod
-    def from_hdf(cls, path_to_dm: Path):
-        # dm = pd.read_hdf(path_to_dm, dtype=np.int32)
-        with h5py.File(path_to_dm, 'r') as dm_file:
-            a_group_key = list(dm_file.keys())[0]
-            dm_arr = dm_file[a_group_key][()]
-            return cls(dm_arr)
-
-    def __init__(self, dm: np.ndarray):
-        self.dm = dm
-
-    @singledispatchmethod
-    def get_travel_time(self, from_index: int, to_index: int):
-        return self.dm[from_index][to_index]
-
-    @classmethod
-    def read_from_file(cls, dm_filepath: Path):
-        if dm_filepath.suffix == '.csv':
-            return cls.from_csv(dm_filepath)
-        else:
-            return cls.from_hdf(dm_filepath)
-
-    def get_node_count(self):
-        return len(self.dm)
+from darpinstances.travel_time_provider import (
+    TravelTimeProvider,
+    EuclideanTravelTimeProvider,
+    MatrixTravelTimeProvider,
+    GridTravelTimeProvider,
+)
 
 
 class DARPInstanceConfiguration:
@@ -100,7 +35,7 @@ class DARPInstanceConfiguration:
         max_ride_time: int,
         return_to_depot: bool = True,
         virtual_vehicles: bool = False,
-        start_time: Optional[datetime] = None,
+        start_time: datetime = datetime.fromtimestamp(0),
         min_pause_length: int = 0,
         max_pause_interval: int = 0,
         travel_time_divider: int = 1,
@@ -171,22 +106,11 @@ def load_instance_config(config_file_path: Path, set_defaults: bool = True) -> d
         return config
 
 
-class Node:
-    def get_idx(self) -> int:
-        return self.idx
-
-    def __init__(self, idx: int):
-        self.idx = idx
-
-    def __str__(self):
-        return str(self.idx)
-
-
 def load_vehicles_csv(vehicles_path: Path) -> List[Vehicle]:
     veh_data = darpinstances.inout.load_csv(vehicles_path, "\t")
     vehicles = []
     for index, veh in enumerate(veh_data):
-        vehicles.append(Vehicle(index, Node(int(veh[0])), int(veh[1])))
+        vehicles.append(Vehicle(index, int(veh[0]), int(veh[1])))
 
     return vehicles
 
@@ -245,7 +169,7 @@ def load_vehicles_from_json(vehicles_path: Path, stations_path: Path) -> List[Ve
         capacity = veh["capacity"] if "capacity" in veh else max_capacity
         operation_start = _load_datetime(veh["operation_start"]) if "operation_start" in veh else None
         operation_end = _load_datetime(veh["operation_end"]) if "operation_end" in veh else None
-        initial_position = Node(stations[int(veh["station_index"])])
+        initial_position = stations[int(veh["station_index"])]
         vehicles.append(
             Vehicle(int(veh["id"]), initial_position, capacity, configurations, operation_start, operation_end)
         )
@@ -323,8 +247,8 @@ def load_demand_legacy(
 
         request_datetime = time_loader.load_time_field(int(line[time_column]) / 1000)
 
-        start_node = Node(int(line[column_indices['origin']]))
-        end_node = Node(int(line[column_indices['destination']]))
+        start_node = int(line[column_indices['origin']])
+        end_node = int(line[column_indices['destination']])
         equipment = map_equipment_type(line[4]).value if (len(line) > 4) else 0
 
         min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
@@ -378,10 +302,9 @@ def _compute_min_pickup_time(instance_config: dict, desired_pickup_time: datetim
     return desired_pickup_time
 
 
-def get_nearest_node(kdtree: KDTree, transformer: Transformer, latitude: str, longitude: str) -> Node:
+def get_nearest_node(kdtree: KDTree, transformer: Transformer, latitude: str, longitude: str) -> int:
     transformed_coords = transformer.transform(float(longitude), float(latitude))
-    node = Node(kdtree.query([transformed_coords[0], transformed_coords[1]])[1])
-    return node
+    return int(kdtree.query([transformed_coords[0], transformed_coords[1]])[1])
 
 
 # def _load_request(row: pd.DataFrame) -> Request:
@@ -402,7 +325,7 @@ def get_nearest_node(kdtree: KDTree, transformer: Transformer, latitude: str, lo
 #     )
 
 
-def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider: TravelTimeProvider):
+def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider: TravelTimeProvider, time_loader: TimeLoader):
     """
     Function that loads requests from a csv file.
 
@@ -435,7 +358,7 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
     request_data = pd.read_csv(demand_file)
 
     # convert pickup time to datetime
-    request_data['Pickup_Time'] = pd.to_datetime(request_data['Pickup_Time'], format="%Y-%m-%d %H:%M:%S")
+    request_data['time'] = [time_loader.load_time_field(time) for time in request_data['time']]
 
     # request id
     if not 'id' in request_data.columns:
@@ -443,7 +366,7 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
 
     # min pickup time
     request_data['min_pickup_time'] = [_compute_min_pickup_time(instance_config, desired_pickup_time) for
-        desired_pickup_time in request_data['Pickup_Time']]
+        desired_pickup_time in request_data['time']]
 
     # nodes
     if 'srid' in instance_config:
@@ -452,7 +375,7 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
         request_data['end_node'] = [get_nearest_node(kdtree, transformer, lat, lon) for lat, lon in
             zip(request_data['Latitude_To'], request_data['Longitude_To'])]
     else:
-        request_data.rename(columns={'Node_From': 'start_node', 'Node_To': 'end_node'}, inplace=True)
+        request_data.rename(columns={'origin': 'start_node', 'destination': 'end_node'}, inplace=True)
 
     # equipment
     if 'Slot_Type' in request_data.columns:
@@ -472,9 +395,9 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
     else:
         request_data['max_pickup_delay'] = request_data['max_delay']
 
-    request_data['max_pickup_time'] = request_data['Pickup_Time'] + pd.to_timedelta(request_data['max_pickup_delay'], unit='s')
+    request_data['max_pickup_time'] = request_data['time'] + pd.to_timedelta(request_data['max_pickup_delay'], unit='s')
 
-    request_data['max_drop_off_time'] = request_data['Pickup_Time'] + pd.to_timedelta(
+    request_data['max_drop_off_time'] = request_data['time'] + pd.to_timedelta(
         (request_data['min_travel_time'] + request_data['max_delay'] + instance_config.get('max_pickup_delay', 0)).round(),
         unit='s'
     )
@@ -534,7 +457,10 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
 
 
 def load_instance(
-    filepath: Path, travel_time_provider: MatrixTravelTimeProvider = None, demand_file_name: Optional[str] = None
+    filepath: Path,
+    travel_time_provider: MatrixTravelTimeProvider = None,
+    demand_file_name: Optional[str] = None,
+    load_vehicles: bool = True,
 ) -> Tuple[DARPInstance, TimeLoader]:
     instance_config = load_instance_config(filepath, set_defaults=False)
     instance_dir_path = filepath.parent
@@ -548,18 +474,23 @@ def load_instance(
         demand_path = instance_dir_path / demand_file_name
     check_file_exists(demand_path)
 
-    vehicles = load_vehicles(instance_dir_path, instance_config)
+    vehicles = load_vehicles(instance_dir_path, instance_config) if load_vehicles else []
 
     # dm loading
     if travel_time_provider is None:
-        if 'dm_filepath' in instance_config:
-            dm_filepath = instance_config['dm_filepath']
-        # by default, the dm is located in folder
+        if instance_config.get('type') == 'grid':
+            size = instance_config['size']
+            distance = instance_config['distance']
+            travel_time_provider = GridTravelTimeProvider(size, distance)
+            logging.info("Using grid travel time provider (size=%s, distance=%s)", size, distance)
         else:
-            dm_filepath = Path(instance_config['area_dir']) / 'dm.h5'
-        check_file_exists(dm_filepath)
-        logging.info("Reading dm from: {}".format(os.path.realpath(dm_filepath)))
-        travel_time_provider = MatrixTravelTimeProvider.read_from_file(dm_filepath)
+            if 'dm_filepath' in instance_config:
+                dm_filepath = instance_config['dm_filepath']
+            else:
+                dm_filepath = Path(instance_config['area_dir']) / 'dm.h5'
+            check_file_exists(dm_filepath)
+            logging.info("Reading dm from: {}".format(os.path.realpath(dm_filepath)))
+            travel_time_provider = MatrixTravelTimeProvider.read_from_file(dm_filepath)
     else:
         logging.info("Using provided travel time provider")
 
@@ -570,8 +501,8 @@ def load_instance(
         header = demand_file.readline()
         demand_file.seek(file_begin)
         if ',' in header:
-            requests = load_demand(demand_file, instance_config, travel_time_provider)
             time_loader = TimeLoader()
+            requests = load_demand(demand_file, instance_config, travel_time_provider, time_loader)
         else:
             instance_start_time = _load_datetime(instance_config['demand']['min_time'])
             instance_date = datetime.combine(instance_start_time.date(), time())
@@ -581,19 +512,13 @@ def load_instance(
     max_pickup_delay = instance_config.get('max_pickup_delay', 0)
     enable_negative_delay = instance_config.get('enable_negative_delay', False)
 
-    start_time = None
+    start_time = instance_config.get('start_time', datetime.fromtimestamp(0))
     min_pause_length = 0
     max_pause_interval = 0
     vehicle_capacity = None  # by default, each vehicle defines its own capacity
     if 'vehicles' in instance_config:
         min_pause_length = instance_config['vehicles'].get('min_pause_length', 0)
         max_pause_interval = instance_config['vehicles'].get('max_pause_interval', 0)
-        if 'start_time' in instance_config['vehicles']:
-            start_time_val = instance_config['vehicles']['start_time']
-            if isinstance(start_time_val, int):
-                start_time = datetime.fromtimestamp(start_time_val)
-            else:
-                start_time = _load_datetime(start_time_val)
 
         if 'capacity' in instance_config['vehicles']:
             vehicle_capacity = instance_config['vehicles']['capacity']
@@ -617,8 +542,3 @@ def load_instance(
     darp_instance = DARPInstance(requests, vehicles, travel_time_provider, darp_instance_config)
     
     return darp_instance, time_loader
-
-
-@MatrixTravelTimeProvider.get_travel_time.register
-def _(self, from_node: Node, to_dode: Node):
-    return self.get_travel_time(from_node.idx, to_dode.idx)

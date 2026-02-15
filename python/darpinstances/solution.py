@@ -13,6 +13,24 @@ from darpinstances.utils import TimeLoader
 from darpinstances.vehicle_plan import VehiclePlan, ActionData
 
 
+def _nodes_equal(a, b) -> bool:
+    """Compare two node/position values: int (node index) or Coordinate (Cordeau)."""
+    if isinstance(a, int) and isinstance(b, int):
+        return a == b
+    if hasattr(a, 'get_x') and hasattr(b, 'get_x'):
+        return a.get_x() == b.get_x() and a.get_y() == b.get_y()
+    return a == b
+
+
+def _node_repr(n) -> str:
+    """String representation for logging: int or Coordinate."""
+    if isinstance(n, int):
+        return str(n)
+    if hasattr(n, 'get_x'):
+        return "({},{})".format(n.get_x(), n.get_y())
+    return str(n)
+
+
 class Solution:
     def __init__(
         self,
@@ -66,24 +84,37 @@ class SolutionLoader:
             raise RuntimeError(f"Error count ({self.error_count}) exceeded maximum allowed errors ({self.max_error_count})")
 
 
-    def load_solution(self, filepath: Path, instance: DARPInstance) -> Solution:
+    def load_solution(self, filepath: Path, instance: DARPInstance, fleet_sizing: bool = False) -> Solution:
         request_map, vehicle_map = _prepare_maps(instance)
 
         logging.info(f"Loading solution from {filepath}")
 
         if filepath.suffix == '.json':
-            return self.load_json_solution(filepath, instance.darp_instance_config.virtual_vehicles, request_map, vehicle_map)
-        else:
-            solution, vehicles = self.load_csv_solution(
+            return self.load_json_solution(
                 filepath,
+                instance.darp_instance_config.virtual_vehicles,
                 request_map,
-                instance.darp_instance_config.start_time,
-                instance.darp_instance_config.vehicle_capacity
+                vehicle_map,
+                fleet_sizing=fleet_sizing,
             )
-            instance.vehicles = vehicles
-            return solution
+        elif filepath.suffix.lower() == '.csv':
+            # Use simple format (plan, request) only when CSV has exactly two columns
+            peek = pd.read_csv(filepath, nrows=0)
+            if len(peek.columns) == 2:
+                return self.load_simple_csv_solution(filepath, instance, fleet_sizing=fleet_sizing)
+            else:
+                solution, vehicles = self.load_csv_solution(
+                    filepath,
+                    request_map,
+                    instance.darp_instance_config.start_time,
+                    instance.darp_instance_config.vehicle_capacity
+                )
+                instance.vehicles = vehicles
+                return solution
 
-    def load_json_solution(self, filepath, use_virtual_vehicles, request_map, vehicle_map):
+    def load_json_solution(
+        self, filepath, use_virtual_vehicles, request_map, vehicle_map, fleet_sizing: bool = False
+    ):
         json_data = load_json(filepath)
 
         # handle infesible solutions
@@ -93,7 +124,9 @@ class SolutionLoader:
         vehicle_plans = []
         total_missmatch_actions = 0
         for json_plan in json_data["plans"]:
-            plan, mismatch_actions_count = self._load_plan(json_plan, use_virtual_vehicles, vehicle_map, request_map)
+            plan, mismatch_actions_count = self._load_plan(
+                json_plan, use_virtual_vehicles, vehicle_map, request_map, fleet_sizing=fleet_sizing
+            )
             vehicle_plans.append(plan)
             total_missmatch_actions += mismatch_actions_count
 
@@ -128,9 +161,101 @@ class SolutionLoader:
 
         return Solution(non_empty_vehicle_plans, None, set()), vehicles
 
-    def _load_plan(self, json_data, use_virtual_vehicles: bool, vehicle_map: Dict[int, Vehicle],
-                  request_map: Dict[int, Request]) -> Tuple[VehiclePlan, int]:
-        if use_virtual_vehicles:
+    def load_simple_csv_solution(
+        self, filepath: Path, instance: DARPInstance, fleet_sizing: bool = False
+    ) -> Solution:
+        """
+        Load a solution from a simple CSV that contains only order of the requests to be served (no ridesharing allowed).
+        The file should have two columns:
+        - first column is plan (vehicle) index,
+        - second column is request index from the instance. 
+        No times in the file;
+        """
+        data = pd.read_csv(filepath)
+        # Support 'plan'/'request' headers or first two columns by position
+        plan_col = 'plan' if 'plan' in data.columns else data.columns[0]
+        request_col = 'request' if 'request' in data.columns else data.columns[1]
+
+        request_map = {r.index: r for r in instance.requests}
+        config = instance.darp_instance_config
+        travel_time_provider = instance.travel_time_provider
+        travel_time_divider = getattr(config, 'travel_time_divider', 1) or 1
+        instance_start_time = config.start_time
+
+        vehicle_plans = []
+        for plan_id, group in data.groupby(plan_col, sort=False):
+            plan_id = int(plan_id)
+            # In fleet sizing mode, do not generate any vehicle; use None
+            if fleet_sizing:
+                vehicle = None
+            else:
+                vehicle = instance.vehicles[plan_id]
+
+            # Row order = order requests are served. Each request is pickup then dropoff
+            request_order = group[request_col].astype(int).tolist()
+            action_sequence = []
+            for req_idx in request_order:
+                action_sequence.append((req_idx, ActionType.PICKUP))
+                action_sequence.append((req_idx, ActionType.DROP_OFF))
+
+            if not action_sequence:
+                continue
+
+            first_req_idx, _ = action_sequence[0]
+            first_request = request_map[first_req_idx]
+            first_action = first_request.pickup_action
+            current_position = (
+                vehicle.initial_position if vehicle is not None else first_action.node
+            )
+            travel_time_to_first = travel_time_provider.get_travel_time(
+                current_position, first_action.node
+            ) / travel_time_divider
+
+            if vehicle is not None and vehicle.operation_start is not None:
+                current_time = vehicle.operation_start
+            else:
+                current_time = instance_start_time
+            actions_data_list = []
+
+            for req_idx, action_type in action_sequence:
+                request = request_map[req_idx]
+                action = request.pickup_action if action_type == ActionType.PICKUP else request.drop_off_action
+                travel_time = travel_time_provider.get_travel_time(
+                    current_position, action.node
+                )
+                travel_time = travel_time / travel_time_divider
+                arrival_time = current_time = current_time + timedelta(seconds=int(travel_time))
+
+                # wait for min time
+                if action.min_time is not None and arrival_time < action.min_time:
+                    current_time = action.min_time
+
+                departure_time = current_time = current_time + timedelta(seconds=int(action.service_time))
+                actions_data_list.append(ActionData(action, arrival_time, departure_time))
+                current_position = action.node
+
+            departure_datetime = actions_data_list[0].departure_time
+            arrival_datetime = actions_data_list[-1].departure_time
+            vh_plan = VehiclePlan(
+                vehicle, actions_data_list, None, departure_datetime, arrival_datetime
+            )
+            vehicle_plans.append(vh_plan)
+
+        return Solution(vehicle_plans, None, set())
+
+    def _load_plan(
+        self,
+        json_data,
+        use_virtual_vehicles: bool,
+        vehicle_map: Dict[int, Vehicle],
+        request_map: Dict[int, Request],
+        fleet_sizing: bool = False,
+    ) -> Tuple[VehiclePlan, int]:
+        if fleet_sizing:
+            v = json_data["vehicle"]
+            vid = int(v.get("index", v.get("id", 0)))
+            vehicle = Vehicle(vid, 0, 999, [], None, None)
+        elif use_virtual_vehicles:
             vehicle = vehicle_map[0]
         else:
             # legacy name for id
@@ -241,13 +366,13 @@ class SolutionLoader:
                 self._increment_error(LoadingError.ACTION_MAX_TIME_MISMATCH)
                 correct = False
 
-        # action position
-        if action_from_solution.node.get_idx() != action_from_instance.node.get_idx():
+        # action position (int for matrix/grid, Coordinate for Cordeau)
+        if not _nodes_equal(action_from_solution.node, action_from_instance.node):
             logging.warning(
                 "%s position mismatch: Action from instance: %s, action from solution: %s",
                 _get_action_info_string_from_action(action_from_solution),
-                action_from_instance.node.get_idx(),
-                action_from_solution.node.get_idx()
+                _node_repr(action_from_instance.node),
+                _node_repr(action_from_solution.node)
             )
             self._increment_error(LoadingError.ACTION_POSITION_MISMATCH)
             correct = False
@@ -262,7 +387,7 @@ class SolutionLoader:
             return None
 
         request_id = action_row['request_id']
-        node = action_row['node_id']
+        node = int(action_row['node_id'])
 
         # time loading
         arrival_time = None
@@ -278,20 +403,25 @@ class SolutionLoader:
         else:
             action_from_instance = request.drop_off_action
 
-        if action_from_instance.node != node:
+        if not _nodes_equal(action_from_instance.node, node):
             logging.warning(
-                "Node mismatch for request %d, action %d: Action from instance: %d, action from solution: %d",
+                "Node mismatch for request %d, action %d: Action from instance: %s, action from solution: %s",
                 request_id,
                 action_row.name - 1,
-                action_from_instance.node,
-                node
+                _node_repr(action_from_instance.node),
+                _node_repr(node)
             )
             self._increment_error(LoadingError.NODE_MISMATCH)
 
         return ActionData(action_from_instance, arrival_time, departure_time)
 
-    def _load_plan_from_csv(self, plan_data: pd.DataFrame, request_map: Dict[int, Request],
-                           vehicle_map: Dict[int, Vehicle], simulation_start_time: datetime) -> VehiclePlan:
+    def _load_plan_from_csv(
+        self,
+        plan_data: pd.DataFrame,
+        request_map: Dict[int, Request],
+        vehicle_map: Dict[int, Vehicle],
+        simulation_start_time: datetime
+    ) -> VehiclePlan:
         vehicle = vehicle_map[plan_data.name]
 
         # action data loading
@@ -319,25 +449,28 @@ class SolutionLoader:
 
 def _load_vehicle_from_csv(vehicle_row: pd.Series, simulation_start_time: datetime, vehicle_capacity: int) -> Vehicle:
     operation_start = simulation_start_time + timedelta(seconds=int(vehicle_row['time']))
-    return Vehicle(vehicle_row['vehicle_id'], vehicle_row['node_id'], vehicle_capacity, operation_start=operation_start)
+    return Vehicle(int(vehicle_row['vehicle_id']), int(vehicle_row['node_id']), vehicle_capacity, operation_start=operation_start)
 
 
 # Replaced by method in SolutionLoader class
 
 
-def load_solution(filepath: Path, instance: DARPInstance, time_loader: TimeLoader) -> Solution:
+def load_solution(
+    filepath: Path, instance: DARPInstance, time_loader: TimeLoader, fleet_sizing: bool = False
+) -> Solution:
     """Load a solution from a file using the SolutionLoader class
 
     Args:
         filepath: Path to the solution file
         instance: DARP instance
         time_loader: TimeLoader instance for parsing time values
+        fleet_sizing: If True, vehicles are not loaded from instance; placeholder vehicles are built from the solution file.
 
     Returns:
         Solution object
     """
     solution_loader = SolutionLoader(time_loader=time_loader)
-    return solution_loader.load_solution(filepath, instance)
+    return solution_loader.load_solution(filepath, instance, fleet_sizing)
 
 
 def _prepare_maps(instance: DARPInstance) -> Tuple[Dict[int, Request], Dict[int, Vehicle]]:

@@ -21,20 +21,6 @@ from darpinstances.solution import VehiclePlan, Solution
 from darpinstances.utils import TimeLoader
 
 
-# darp_folder_path = Path("C:\Google Drive/AIC Experiment Data\DARP")
-# darp_folder_path = Path(r"D:\Google Drive AIC/AIC Experiment Data\DARP")
-# darp_folder_path = Path(r"D:\Google Drive Citya\Bezba")
-#
-# instance_path = None
-# # solution_file_path = darp_folder_path / r"final\Results\DC\start_18-00\duration_15_min\max_delay_10_min\halns-vga/config.yaml-solution.json"
-# solution_file_path = darp_folder_path / r"fexperiments\2023-08-17-not_canceled\solutions/solution_2023-08-17_00-00-00.json"
-
-# test HALNS instance
-# instance_path = darp_folder_path / r'final/Instances/Chicago/instances/start_18-00/duration_05_min/max_delay_03_min/config.yaml'
-# instance_path = darp_folder_path / r'final/Instances/DC/instances/start_18-00/duration_15_min/max_delay_10_min/config.yaml'
-# solution_file_path = darp_folder_path / r"test/config.yaml-solution.json"
-
-
 class Failure(Enum):
     PLAN_DEPARTURE_TIME = auto()
 
@@ -55,7 +41,8 @@ class SolutionChecker:
         plan_counter: int,
         instance: DARPInstance,
         used_vehicles: set,
-        failures: Dict[Failure, int]
+        failures: Dict[Failure, int],
+        fleet_sizing: bool = False,
     ) -> Tuple[int, bool, Set[Request]]:
         plan_ok = True
         cost = 0.0
@@ -73,20 +60,24 @@ class SolutionChecker:
             self._increment_error()
 
         time = plan.departure_time
-        free_capacity = plan.vehicle.capacity
+        free_capacity = plan.vehicle.capacity if plan.vehicle is not None else None
         previous_action: Action = None
         onboard_requests = set()
         departure_times = dict()
-        vehicle_index = plan.vehicle.index
+        vehicle_index = plan.vehicle.index if plan.vehicle is not None else plan_counter
         travel_time_provider = instance.travel_time_provider
         served_requests = set()
-        vehicle_configurations = copy.deepcopy(plan.vehicle.configurations)
+        vehicle_configurations = (
+            copy.deepcopy(plan.vehicle.configurations)
+            if plan.vehicle is not None
+            else []
+        )
         used_equipment = []
         min_pause_length = instance.darp_instance_config.min_pause_length * 60
         max_pause_interval = instance.darp_instance_config.max_pause_interval * 60
         driving_start = time
 
-        if not instance.darp_instance_config.virtual_vehicles:
+        if not fleet_sizing and not instance.darp_instance_config.virtual_vehicles:
             if vehicle_index in used_vehicles:
                 print("[{}. plan]: Vehicle {} already used".format(plan_counter, vehicle_index))
                 plan_ok = False
@@ -94,28 +85,29 @@ class SolutionChecker:
             used_vehicles.add(vehicle_index)
 
         # operation time check
-        operation_start = plan.vehicle.operation_start
-        operation_end = plan.vehicle.operation_end
-        if (operation_start and (plan.departure_time < operation_start)):
-            print(
-                "{} plan starts at {}. operation starts at {}, plan should not start before operation".format(
-                    plan_counter,
-                    plan.departure_time,
-                    operation_start
+        if not fleet_sizing and plan.vehicle is not None:
+            operation_start = plan.vehicle.operation_start
+            operation_end = plan.vehicle.operation_end
+            if (operation_start and (plan.departure_time < operation_start)):
+                print(
+                    "{} plan starts at {}. operation starts at {}, plan should not start before operation".format(
+                        plan_counter,
+                        plan.departure_time,
+                        operation_start
+                    )
                 )
-            )
-            plan_ok = False
-            self._increment_error()
-        if (operation_end and (plan.arrival_time > operation_end)):
-            print(
-                "{} plan ends at {}. operation ends at {}, plan should not end after operation".format(
-                    plan_counter,
-                    plan.arrival_time,
-                    operation_end
+                plan_ok = False
+                self._increment_error()
+            if (operation_end and (plan.arrival_time > operation_end)):
+                print(
+                    "{} plan ends at {}. operation ends at {}, plan should not end after operation".format(
+                        plan_counter,
+                        plan.arrival_time,
+                        operation_end
+                    )
                 )
-            )
-            plan_ok = False
-            self._increment_error()
+                plan_ok = False
+                self._increment_error()
 
         travel_time_divider = instance.darp_instance_config.travel_time_divider
 
@@ -145,7 +137,9 @@ class SolutionChecker:
             if previous_action:
                 travel_time = travel_time_provider.get_travel_time(previous_action.node, action_data.action.node)
             else:
-                if instance.darp_instance_config.virtual_vehicles:
+                if fleet_sizing or plan.vehicle is None:
+                    travel_time = 0
+                elif instance.darp_instance_config.virtual_vehicles:
                     travel_time = plan.vehicle.time_to_start
                 else:
                     travel_time = travel_time_provider.get_travel_time(
@@ -178,7 +172,7 @@ class SolutionChecker:
                 self._increment_error()
 
             # capacity check
-            if not vehicle_configurations:
+            if not fleet_sizing and not vehicle_configurations:
                 if is_pickup:
                     if free_capacity == 0:
                         print(
@@ -193,37 +187,38 @@ class SolutionChecker:
                     free_capacity += 1
 
             # equipment check
-            matching_configurations = [config for config in vehicle_configurations if
-                                       any(num in used_equipment for num in config)]
-            available_configurations = copy.deepcopy(vehicle_configurations) if not used_equipment else copy.deepcopy(
-                matching_configurations
-            )
-            for config in available_configurations:
-                for item in used_equipment:
-                    if item in config:
-                        config.remove(item)
+            if not fleet_sizing:
+                matching_configurations = [config for config in vehicle_configurations if
+                                          any(num in used_equipment for num in config)]
+                available_configurations = copy.deepcopy(vehicle_configurations) if not used_equipment else copy.deepcopy(
+                    matching_configurations
+                )
+                for config in available_configurations:
+                    for item in used_equipment:
+                        if item in config:
+                            config.remove(item)
 
-            equipment = action_data.action.request.equipment
-            if equipment != 0:
-                if is_pickup:
-                    if not any(equipment in config for config in available_configurations):
-                        print(
-                            "Request {}, Equipment {} not available in vehicle equipment list. Vehicle: {}".format(
-                                action_data.action.request.index,
-                                equipment,
-                                vehicle_index
+                equipment = action_data.action.request.equipment
+                if equipment != 0:
+                    if is_pickup:
+                        if not any(equipment in config for config in available_configurations):
+                            print(
+                                "Request {}, Equipment {} not available in vehicle equipment list. Vehicle: {}".format(
+                                    action_data.action.request.index,
+                                    equipment,
+                                    vehicle_index
+                                )
                             )
-                        )
-                        plan_ok = False
-                        self._increment_error()
-                    used_equipment.append(equipment)
-                elif is_drop_off:
-                    used_equipment.remove(equipment)
+                            plan_ok = False
+                            self._increment_error()
+                        used_equipment.append(equipment)
+                    elif is_drop_off:
+                        used_equipment.remove(equipment)
 
             cost += travel_time
 
             # vehicle id check
-            if action_data.action.request.required_vehicle_id is not None:
+            if not fleet_sizing and action_data.action.request.required_vehicle_id is not None:
                 if action_data.action.request.required_vehicle_id != vehicle_index:
                     logging.warning("Request {} is not for vehicle {}.".format(action_data.action.request.index, vehicle_index))
                     plan_ok = False
@@ -233,10 +228,10 @@ class SolutionChecker:
             if action.action_type == ActionType.PICKUP and time < action_data.action.min_time:
                 pause_duration = action_data.action.min_time - time
                 time = action_data.action.min_time
-                if (pause_duration > timedelta(seconds=min_pause_length)):
+                if not fleet_sizing and (pause_duration > timedelta(seconds=min_pause_length)):
                     driving_start = time
 
-            if (max_pause_interval and time - driving_start > timedelta(seconds=max_pause_interval)):
+            if not fleet_sizing and (max_pause_interval and time - driving_start > timedelta(seconds=max_pause_interval)):
                 print(
                     "in Request {} driver is active {} min, max is {}.".format(
                         action_data.action.request.index,
@@ -277,6 +272,7 @@ class SolutionChecker:
                         plan_counter, action_index + 1, action_data.departure_time, time, action_data.action.request.index
                                   )
                 )
+                plan_ok = False
                 self._increment_error()
 
             time = action_data.departure_time
@@ -288,15 +284,22 @@ class SolutionChecker:
             previous_action = action_data.action
 
         # return to init position
-        if previous_action and instance.darp_instance_config.return_to_depot:
-            travel_time_to_depot = travel_time_provider.get_travel_time(previous_action.node, plan.vehicle.initial_position)
+        if (
+            not fleet_sizing
+            and plan.vehicle is not None
+            and previous_action
+            and instance.darp_instance_config.return_to_depot
+        ):
+            travel_time_to_depot = travel_time_provider.get_travel_time(
+                previous_action.node, plan.vehicle.initial_position
+            )
             travel_time_to_depot = travel_time_to_depot / travel_time_divider
             cost += travel_time_to_depot
             time += timedelta(seconds=int(travel_time_to_depot))
 
         # max route time check
         max_route_duration = instance.darp_instance_config.max_route_duration
-        if max_route_duration and time - plan.departure_time > max_route_duration:
+        if not fleet_sizing and max_route_duration and time - plan.departure_time > max_route_duration:
             print(
                 "[{}. plan] Total max route duration exceeded: Duration is {} but maximum allowed route duration is {}".format(
                     plan_counter,
@@ -322,7 +325,9 @@ class SolutionChecker:
 
         return cost, plan_ok, served_requests
 
-    def check_solution(self, instance: DARPInstance, solution: Solution) -> Tuple[bool, Dict[Failure, int]]:
+    def check_solution(
+        self, instance: DARPInstance, solution: Solution, fleet_sizing: bool = False
+    ) -> Tuple[bool, Dict[Failure, int]]:
         failures = {Failure.PLAN_DEPARTURE_TIME: 0}
 
         if not solution.feasible:
@@ -337,7 +342,9 @@ class SolutionChecker:
         plan_counter = 1
 
         for plan in solution.vehicle_plans:
-            cost, plan_ok, plan_served_requests = self.check_plan(plan, plan_counter, instance, used_vehicles, failures)
+            cost, plan_ok, plan_served_requests = self.check_plan(
+                plan, plan_counter, instance, used_vehicles, failures, fleet_sizing=fleet_sizing
+            )
             total_cost += cost
             if not plan_ok:
                 solution_ok = False
@@ -450,7 +457,12 @@ class SolutionChecker:
         return stat_df
 
 
-def load_data(solution_file_path: Path, instance_path: Optional[Path], demand_file_name: Optional[str] = None) -> Tuple[DARPInstance, Solution]:
+def load_data(
+    solution_file_path: Path,
+    instance_path: Optional[Path],
+    demand_file_name: Optional[str] = None,
+    fleet_sizing: bool = False,
+) -> Tuple[DARPInstance, Solution]:
     check_file_exists(solution_file_path)
     solution_dir_path = solution_file_path.parent
     os.chdir(solution_dir_path)
@@ -460,9 +472,13 @@ def load_data(solution_file_path: Path, instance_path: Optional[Path], demand_fi
         experiment_config = darpinstances.experiments.load_experiment_config(experiment_config_path)
         instance_path = Path(experiment_config['instance'])
 
-    instance, _, time_loader = load_instance(instance_path, demand_file_name=demand_file_name)
+    instance, _, time_loader = load_instance(
+        instance_path, demand_file_name=demand_file_name, load_vehicles=not fleet_sizing
+    )
 
-    solution = darpinstances.solution.load_solution(solution_file_path, instance, time_loader)
+    solution = darpinstances.solution.load_solution(
+        solution_file_path, instance, time_loader, fleet_sizing=fleet_sizing
+    )
 
     return instance, solution
 
@@ -472,13 +488,18 @@ def load_data(solution_file_path: Path, instance_path: Optional[Path], demand_fi
 def load_instance(
     instance_path: Path,
     travel_time_provider: Optional[TravelTimeProvider] = None,
-    demand_file_name: Optional[str] = None
+    demand_file_name: Optional[str] = None,
+    load_vehicles: bool = True,
 ) -> Tuple[DARPInstance, TravelTimeProvider, TimeLoader]:
     if instance_path.suffix == '.yaml':
-        instance, time_loader = darpinstances.instance.load_instance(instance_path, travel_time_provider, demand_file_name)
+        instance, time_loader = darpinstances.instance.load_instance(
+            instance_path, travel_time_provider, demand_file_name, load_vehicles=load_vehicles
+        )
         travel_time_provider = instance.travel_time_provider
     else:
         instance = load_cordeau(instance_path)
+        if not load_vehicles:
+            instance.vehicles = []
         travel_time_provider = darpinstances.instance.EuclideanTravelTimeProvider(60)
         time_loader = TimeLoader()  # Default TimeLoader for Cordeau instances
     return instance, travel_time_provider, time_loader
@@ -488,6 +509,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Scrip for checking DARP solutions')
     parser.add_argument('solution', type=Path, help='Path to solution file (JSON)')
     parser.add_argument('-i', '--instance', type=str, help='Path to instance config file (YAML)', required=False)
+    parser.add_argument(
+        '--fleet-sizing',
+        action='store_true',
+        help='Fleet-sizing mode: do not load vehicles from instance and ignore vehicle-related constraints',
+    )
 
     args = parser.parse_args()
 
@@ -510,6 +536,8 @@ if __name__ == '__main__':
 
     check_file_exists(instance_path)
 
-    instance, solution = load_data(solution_file_path, instance_path)
+    instance, solution = load_data(
+        solution_file_path, instance_path, fleet_sizing=args.fleet_sizing
+    )
     solution_checker = SolutionChecker()
-    solution_checker.check_solution(instance, solution)
+    solution_checker.check_solution(instance, solution, fleet_sizing=args.fleet_sizing)

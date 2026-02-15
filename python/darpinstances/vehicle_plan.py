@@ -31,7 +31,7 @@ class VehiclePlan:
 
     def __init__(
         self,
-        vehicle: Vehicle,
+        vehicle: Optional[Vehicle],
         actions: List[ActionData],
         cost: Optional[int] = None,
         departure_time: Optional[datetime] = None,

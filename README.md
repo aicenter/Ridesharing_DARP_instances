@@ -22,7 +22,6 @@ The dataset and methodology used to create it are described in the paper [Large-
 
 
 
-
 ## Table of contents
 - [Instances and Results download](#Instances-and-Results-download)
 - [Instances structure](#Instances-structure)
@@ -31,6 +30,8 @@ The dataset and methodology used to create it are described in the paper [Large-
 - [Citation](#Citation)
 - [License](#License)
 
+
+
 ## Instances and Results download
 
 [![Dataset DOI](https://img.shields.io/static/v1?label=Dataset&message=DOI%3A10.5281/zenodo.7986103&color=1682D4)](https://doi.org/10.5281/zenodo.7986103)
@@ -38,7 +39,16 @@ The dataset and methodology used to create it are described in the paper [Large-
 The dataset of instances and associated results are available through the dataset repository Zenodo. The dataset is compressed by [7zip](https://7-zip.org/) to adhere to the Zenodo dataset size limits, with some of the archives split into multiple parts. The distance matrices, instances, and results are in separate archives. However, the folder structure inside the archives follows the schema described below. Thus, unpacking the distance matrix archives places them in an appropriate directory in the `Instances` folder.  The dataset is licensed under the [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/) license.
 
 
-## Instances structure
+## Time Format
+All times in both the instances and the results can be expressed in two formats:
+
+- datetime string in the format `yyyy-mm-dd HH:MM:SS` (preferred format), and
+- seconds (legacy format)
+
+In case seconds are used, the datetime is calculated as *instance start time* + seconds.
+The instance start time is configured in the [instance configuration file](#Instance-configuration-file). If not provided, the instance start time is set to the [Unix timestamp](https://en.wikipedia.org/wiki/Unix_time) 0 (1970-01-01 00:00:00).
+
+## Instances
 Each area has its own folder in the `📁Instances directory. This direcory contains the distance matrix (travel time model) and map files.
 The instances are then organized into directories based on their parameters. 
 That is, an instance in an *area*, with a given *_start time_*, *duration* and *max delay* $\Delta$ is in the following directory structure:
@@ -57,21 +67,86 @@ and consists of three files, `vehicles.csv`, `requests.csv` and `config.yaml`.
 
 `📁 Instances/<area>/instances/start_<start time>/duration_<duration>/max_delay_<max delay>/config.yaml`
 
-The instance configuration file has the following structure:
+The instance configuration file has the following structure (**bold** fields are required and *italic* fields are used for the instance generation process and should be ignored when using the instances):
 
-```yaml
-area_dir: # path to the area directory. Only used for automatic construction of paths to files shared between instances in the same area
-demand:
-- filepath: # path to the demand file. ./requests.csv if not provided 
-dm_filepath: # path to the distance matrix file. <area_dir>/dm.hd5 if not provided
-max_prolongation: # maximum delay in seconds (deprecated)
-max_pickup_delay: # maximum delay for the pickup in seconds. 
-max_travel_time_delay:
-- mode: # mode of the delay calculation. Can be 'absolute' for the absolute delay or 'relative' for the delay relative to the minimal travel time
-- relative: # proportion of the delay relative to the minimal travel time. 1.0 means the maximal delay is equal to the minimal travel time
-- seconds: # absolute delay in seconds
-```
 
+- `area_dir`: path to the area directory. Only used for automatic construction of paths to files shared between instances in the same area
+- *`area_id`*: id of the area used during the instance generation process
+- `demand`:
+    - *`dataset`*: dataset id(s) used to generate the demand
+    - `filepath`: path to the demand file. `./requests.csv` (or `./trips.di` legacy format)
+    - *`max_time`*: the end time of the demand selection interval
+    - *`min_time`*: the start time of the demand selection interval
+    - *`mode`*: mode used for creating the demand. Can be 'load' for loading the demand from the file or 'generate' for generating the demand
+    - *`positions_set`*: id of the set of positions used to generate the demand.
+    - *`time_set`*: id of the set of times used to generate the demand.
+- `dm_filepath`: path to the distance matrix file. Set to `<area_dir>/dm.hd5` if not provided
+- `map`:
+    - *`SRID`*: id of the spatial reference system used for spherical projection.
+    - *`SRID_plane`*: id of the spatial reference system used for planar projection.
+- `max_pickup_delay`: maximum delay for the pickup in seconds.
+- `max_prolongation`: maximum delay in seconds (deprecated)
+- `max_travel_time_delay`:
+    - `mode`: mode of the delay calculation. Can be 'absolute' for the absolute delay or 'relative' for the delay relative to the minimal travel time
+    - `relative`: proportion of the delay relative to the minimal travel time. 1.0 means the maximal delay is equal to the minimal travel time
+    - `seconds`: absolute delay in seconds
+- `vehicles`:
+    - `start_time`: the start time of the vehicle operation (unless specified in the vehicles file)
+    - `vehicle_capacity`: the capacity of the vehicles.
+    - *`vehicle_count`*: the number of vehicles in the vehicle file.
+- *`save_shp`*: whether to save the shapefiles for the instance.
+- `start_time`: the start time of the instance. This time is used to calculate times that are specified in seconds. If not provided, the instance start time is set to the [Unix timestamp](https://en.wikipedia.org/wiki/Unix_time) 0 (1970-01-01 00:00:00).
+
+
+### Requests Files
+
+`📁Instances/<area>/instances/start_<start time>/duration_<duration>/max_delay_<max delay>/requests.csv`
+
+Request file contains the list of requests $R$ with a header defining the following columns (order does not matter):
+
+- `destination`: the id of the destination location of the request.
+- `id`: request id. If not provided, the request id is set to the index of the request in the file (starting from 0).
+- `origin`: the id of the starting location of the request.
+- `time`: the desired pickup time of the request.
+
+
+The legacy format has a 3(4) tab-separated columns:
+
+- `time_ms` - a request time in milliseconds from the start of the day $t$
+- `origin` - index of the origin node $o$. Used for indexing into the distance matrix 
+- `dest` - index of the destination node $d$
+- `min_travel_time` (optional) - direct, minimal travel time in seconds between origin and destination nodes
+
+
+### Vehicles Files
+`📁Instances/<area>/instances/start_<start time>/duration_<duration>/max_delay_<max delay>/vehicles.csv`
+
+Vehicle file contains the definition of the vehicles $V$. There are three possible formats of the vehicles file:
+
+- standard csv file with a header row - this should be the preferred format
+- two column `<tab>` separated file with no header row - legacy format used in the dataset
+    - only the first two data fields (starting node and capacity) are supported
+- json file - if structured configuration of vehicles is needed
+
+The data fields are as follows:
+
+- vehicle starting node $s$
+- vehicle capacity $c$
+- `operation_start` (optional) - the start time of the vehicle operation
+- `operation_end` (optional) - the end time of the vehicle operation
+
+
+A concrete example of an instance path is `Instances/NYC/instances/start_18-00/duration_05_min/max_delay_03_min/`.
+
+### Distance Matrix - the travel time model
+
+`🗎 Instances/<area>/dm.hd5`
+  
+The travel time model $f_t(l, l')$ that determines the shortest travel time between any two nodes $l$ and $l'$ has a form of distance matrix and is shared by all instances in the same area. 
+Since, for some areas, the matrix is quite large, it is saved using the [`hdf5`](https://www.hdfgroup.org/solutions/hdf5/) format. To load the distance matrix into Python, use [`h5py` python package](https://www.h5py.org/). The loading of the distance matrix is implemented in the [`MatrixTravelTimeProvider.from_hdf`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L62). Method [`get_travel_time(from_index, to_index)`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L73) implements the access to the distance matrix and is equivalent to $f_t(l, l')$
+
+
+### Instance Interpretation and Usage
 The *maximum delay* for each request should be interpreted as follows:
 
 1. if `maxing_travel_time_delay` is provided:
@@ -92,30 +167,12 @@ The logic for the maximum time for each action is as follows:
 
 Apart from the configuration above, there can be other fields used for the instance generation. These fields has no effect on the instance itself, and can be safely ignored when using the instances.
 
+The vehicle *operation time* is defined as follows:
 
-### Requests and Vehicles files
+- **operation start time**: is equal to `operation_start` if provided, otherwise, it is equal to `vehicles.start_time` field from the instance configuration file.
+    - ommiting both `operation_start` and `vehicles.start_time` results in an unrestricted operation start time.
+- **operation end time**: is equal to `operation_end` if provided, otherwise unrestricted
 
-The instance folder contains the two main instance files:
-
-`📁Instances/<area>/instances/start_<start time>/duration_<duration>/max_delay_<max delay>/`
-
-- `🗎 requests.csv` - a 3 (4) column `<tab>` separated file containing the list of requests $R$ with a header defining the following columns:
-  - `time_ms` - a request time in milliseconds from the start of the day $t$
-  - `origin` - index of the origin node $o$. Used for indexing into the distance matrix 
-  - `dest` - index of the destination node $d$
-  - `min_travel_time` (optional) - direct, minimal travel time in seconds between origin and destination nodes
-- `🗎 vehicles.csv` - a 2-column `<tab>` separated file containing the set of vehicles $V$ with no header row and the following column meaning:
-  - vehicle starting node $s$ 
-  - vehicle capacity $c$
-
-A concrete example of an instance path is `Instances/NYC/instances/start_18-00/duration_05_min/max_delay_03_min/`.
-
-### Distance Matrix - the travel time model
-
-`🗎 Instances/<area>/dm.hd5`
-  
-The travel time model $f_t(l, l')$ that determines the shortest travel time between any two nodes $l$ and $l'$ has a form of distance matrix and is shared by all instances in the same area. 
-Since, for some areas, the matrix is quite large, it is saved using the [`hdf5`](https://www.hdfgroup.org/solutions/hdf5/) format. To load the distance matrix into Python, use [`h5py` python package](https://www.h5py.org/). The loading of the distance matrix is implemented in the [`MatrixTravelTimeProvider.from_hdf`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L62). Method [`get_travel_time(from_index, to_index)`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L73) implements the access to the distance matrix and is equivalent to $f_t(l, l')$
 
 ### Instance metadata and supporting files
   
@@ -202,7 +259,9 @@ Contains area and instance files for visualization in e.g. [Q-GIS](https://www.q
 - `🗺 pickup.[shx, shp, prh, dbf, cpg]` - request pickup points
 - `🗺 dropoff.[shx, shp, prh, dbf, cpg]` - request dropoff points
 
-## Results structure
+
+
+## Results
 The results are stored in the `📁 Results/` folder. The folder structure follows a similar pattern as the `📁 Instance/` folder:
 
 ```text
