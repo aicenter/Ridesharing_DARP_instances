@@ -1,0 +1,22 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "name": "Check simple Fleet-sizing solution",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "python/darpinstances/solution_checker.py",
+            "console": "integratedTerminal",
+            "args": [
+                "C:/Google Drive AIC/My Drive/AIC Experiment Data/Fleet-sizing/fsd_chains.csv",
+                "--instance",
+                "C:/Google Drive AIC/My Drive/AIC Experiment Data/Fleet-sizing/grid_world.yaml",
+                "--fleet-sizing"
+            ]
+        }
+    ]
+}
