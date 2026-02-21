@@ -17,6 +17,17 @@
                 "C:/Google Drive AIC/My Drive/AIC Experiment Data/Fleet-sizing/grid_world.yaml",
                 "--fleet-sizing"
             ]
+        },
+        {
+            "name": "Generate Kronmueller 2024 grid instances",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "python/scripts/generate_kronmueller_2024_grid_instances.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--output-dir",
+                "C:/Google Drive AIC/My Drive/AIC Experiment Data/Fleet-sizing/kronmueller_2024_grid_instances"
+            ]
         }
     ]
 }
