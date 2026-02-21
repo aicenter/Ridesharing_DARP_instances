@@ -61,7 +61,7 @@ class SolutionChecker:
 
         time = plan.departure_time
         free_capacity = plan.vehicle.capacity if plan.vehicle is not None else None
-        previous_action: Action = None
+        previous_action: Optional[Action] = None
         onboard_requests = set()
         departure_times = dict()
         vehicle_index = plan.vehicle.index if plan.vehicle is not None else plan_counter
@@ -385,26 +385,31 @@ class SolutionChecker:
 
         return solution_ok, failures
 
-    def check_all_solutions(self, root_paths: List[Path], log_all=True) -> pd.DataFrame:
+    def check_all_solutions(
+        self,
+        root_paths: List[Path],
+        log_all=True,
+        area_index_in_path: Optional[int] = -5,
+        fleet_sizing: bool = False,
+    ) -> pd.DataFrame:
         logging.info('Checking solutions in the following root paths: \n%s', '\n'.join((str(path) for path in root_paths)))
 
         dirs = []
 
         for root_path in root_paths:
-            for root, dir, files in os.walk(root_path):
-                for file in files:
-                    filename = os.fsdecode(file)
-                    if filename == "config.yaml-solution.json":
-                        filepath = os.path.join(root, filename)
-                        dirs.append((root, filepath))
-                        break
+            for file in root_path.rglob("*"):
+                if file.name == "config.yaml-solution.json" or file.name == "fsd_chains.csv":
+                    dirs.append((file.parent, file))
 
         dir_df = pd.DataFrame(dirs, columns=["root", "solution path"])
         logging.info("%d solutions found", len(dir_df))
 
         # sort by area
-        dir_df['area'] = dir_df['root'].apply(lambda path: Path(path).parts[-5])
-        dir_df.sort_values(by=['area'], inplace=True)
+        if area_index_in_path is not None:
+            dir_df['area'] = dir_df['root'].apply(lambda path: Path(path).parts[-5])
+            dir_df.sort_values(by=['area'], inplace=True)
+        else:
+            dir_df['area'] = None
 
         stats = []
         last_instance_path = None
@@ -419,17 +424,17 @@ class SolutionChecker:
             if instance_path == last_instance_path:
                 instance = last_instance
             else:
-                if last_area == area:
+                if area is not None and last_area == area:
                     instance, _, time_loader = darpinstances.solution_checker.load_instance(
                         instance_path,
                         last_instance.travel_time_provider
                     )
                 else:
-                    instance, _, time_loader = darpinstances.solution_checker.load_instance(instance_path)
+                    instance, _, time_loader = darpinstances.solution_checker.load_instance(instance_path, load_vehicles=not fleet_sizing)
 
-            solution = darpinstances.solution.load_solution(solution_path, instance, time_loader)
+            solution = darpinstances.solution.load_solution(solution_path, instance, time_loader, fleet_sizing=fleet_sizing)
 
-            ok, failures = self.check_solution(instance, solution)
+            ok, failures = self.check_solution(instance, solution, fleet_sizing=fleet_sizing)
             sol_record = [solution_path, ok]
             sol_record.extend([count for _, count in failures.items()])
             stats.append(sol_record)

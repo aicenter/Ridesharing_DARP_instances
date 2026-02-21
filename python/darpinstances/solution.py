@@ -98,9 +98,9 @@ class SolutionLoader:
                 fleet_sizing=fleet_sizing,
             )
         elif filepath.suffix.lower() == '.csv':
-            # Use simple format (plan, request) only when CSV has exactly two columns
             peek = pd.read_csv(filepath, nrows=0)
-            if len(peek.columns) == 2:
+            # Use simple format (plan, request) when first column name is "plan"
+            if len(peek.columns) > 0 and peek.columns[0] == "plan":
                 return self.load_simple_csv_solution(filepath, instance, fleet_sizing=fleet_sizing)
             else:
                 solution, vehicles = self.load_csv_solution(

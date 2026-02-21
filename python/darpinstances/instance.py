@@ -3,7 +3,7 @@ import logging
 import math
 import os
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta, time, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Iterable, Dict, List, Optional, Sequence, TextIO, Tuple, Union
@@ -35,7 +35,7 @@ class DARPInstanceConfiguration:
         max_ride_time: int,
         return_to_depot: bool = True,
         virtual_vehicles: bool = False,
-        start_time: datetime = datetime.fromtimestamp(0),
+        start_time: datetime = datetime.fromtimestamp(0, tz=timezone.utc),
         min_pause_length: int = 0,
         max_pause_interval: int = 0,
         travel_time_divider: int = 1,
@@ -512,7 +512,7 @@ def load_instance(
     max_pickup_delay = instance_config.get('max_pickup_delay', 0)
     enable_negative_delay = instance_config.get('enable_negative_delay', False)
 
-    start_time = instance_config.get('start_time', datetime.fromtimestamp(0))
+    start_time = instance_config.get('start_time', datetime.fromtimestamp(0, tz=timezone.utc))
     min_pause_length = 0
     max_pause_interval = 0
     vehicle_capacity = None  # by default, each vehicle defines its own capacity

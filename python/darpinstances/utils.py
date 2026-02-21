@@ -1,6 +1,6 @@
 import logging
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Union
 
@@ -43,7 +43,7 @@ class TimeLoader:
         if self.instance_date is not None:
             return self.instance_date + timedelta(seconds=time_value)
 
-        return datetime.fromtimestamp(time_value)
+        return datetime.fromtimestamp(time_value, tz=timezone.utc)
 
 
 def load_time_field(time_value: Union[int, str], instance_date: datetime=None) -> datetime:

@@ -29,5 +29,25 @@
                 "C:/Google Drive AIC/My Drive/AIC Experiment Data/Fleet-sizing/kronmueller_2024_grid_instances"
             ]
         }
+        {
+            "name": "Check Kronmueller 2024 grid instances 1",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "python/darpinstances/solution_checker.py",
+            "console": "integratedTerminal",
+            "args": [
+                "C:/Google Drive AIC/My Drive/AIC Experiment Data/Fleet-sizing/kronmueller_2024_grid_instances/instance_0/fsd_chains.csv",
+                "--instance",
+                "C:/Google Drive AIC/My Drive/AIC Experiment Data/Fleet-sizing/kronmueller_2024_grid_instances/instance_0/config.yaml",
+                "--fleet-sizing"
+            ]
+        },
+        {
+            "name": "Check all solutions",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "python/scripts/check_all_solutions.py",
+            "console": "integratedTerminal"
+        }
     ]
 }
