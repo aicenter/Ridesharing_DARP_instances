@@ -91,9 +91,11 @@ The instance configuration file has the following structure (**bold** fields are
     - `relative`: proportion of the delay relative to the minimal travel time. 1.0 means the maximal delay is equal to the minimal travel time
     - `seconds`: absolute delay in seconds
 - `vehicles`:
+    - `capital_cost`: the capital cost per vehicle.
     - `start_time`: the start time of the vehicle operation (unless specified in the vehicles file)
     - `vehicle_capacity`: the capacity of the vehicles.
     - *`vehicle_count`*: the number of vehicles in the vehicle file.
+    
 - *`save_shp`*: whether to save the shapefiles for the instance.
 - `start_time`: the start time of the instance. This time is used to calculate times that are specified in seconds. If not provided, the instance start time is set to the [Unix timestamp](https://en.wikipedia.org/wiki/Unix_time) 0 (1970-01-01 00:00:00).
 

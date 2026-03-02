@@ -44,7 +44,7 @@ def main() -> None:
                 config = {
                     **BASE_CONFIG,
                     "max_travel_time_delay": {"mode": "absolute", "seconds": delay},
-                    "vehicle_capital_cost": vehicle_capital_cost,
+                    "vehicles": { "capital_cost": vehicle_capital_cost},
                 }
                 config_name = f"config-max_delay_{delay}_s-vehicle_cost_{vehicle_capital_cost}.yaml"
                 config_path = instance_dir / config_name

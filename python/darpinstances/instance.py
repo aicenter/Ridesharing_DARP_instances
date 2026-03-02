@@ -41,7 +41,9 @@ class DARPInstanceConfiguration:
         travel_time_divider: int = 1,
         max_pickup_delay: int = 0,
         enable_negative_delay: bool = False,
-        vehicle_capacity: Optional[int] = None
+        vehicle_capacity: Optional[int] = None,
+        vehicle_capital_cost: Optional[float] = None,
+        relative_delay_cost: float = 0,
     ):
         self.max_route_duration = max_route_duration
         self.max_ride_time = max_ride_time
@@ -54,6 +56,8 @@ class DARPInstanceConfiguration:
         self.max_pickup_delay = max_pickup_delay
         self.enable_negative_delay = enable_negative_delay
         self.vehicle_capacity = vehicle_capacity
+        self.vehicle_capital_cost = vehicle_capital_cost
+        self.relative_delay_cost = relative_delay_cost
 
 
 class DARPInstance:
@@ -516,14 +520,18 @@ def load_instance(
     min_pause_length = 0
     max_pause_interval = 0
     vehicle_capacity = None  # by default, each vehicle defines its own capacity
+    vehicle_capital_cost = None
     if 'vehicles' in instance_config:
         min_pause_length = instance_config['vehicles'].get('min_pause_length', 0)
         max_pause_interval = instance_config['vehicles'].get('max_pause_interval', 0)
 
         if 'capacity' in instance_config['vehicles']:
             vehicle_capacity = instance_config['vehicles']['capacity']
+        if 'capital_cost' in instance_config['vehicles']:
+            vehicle_capital_cost = instance_config['vehicles']['capital_cost']
 
     travel_time_divider = instance_config.get('travel_time_divider', 1)
+    relative_delay_cost = instance_config.get('demand', {}).get('relative_delay_cost', 0)
 
     darp_instance_config = DARPInstanceConfiguration(
         0,
@@ -536,7 +544,9 @@ def load_instance(
         travel_time_divider,
         max_pickup_delay,
         enable_negative_delay,
-        vehicle_capacity
+        vehicle_capacity,
+        vehicle_capital_cost,
+        relative_delay_cost,
     )
         
     darp_instance = DARPInstance(requests, vehicles, travel_time_provider, darp_instance_config)

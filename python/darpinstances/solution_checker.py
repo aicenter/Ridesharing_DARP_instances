@@ -217,6 +217,16 @@ class SolutionChecker:
 
             cost += travel_time
 
+            # delay cost (drop off delay * relative_delay_cost)
+            if is_drop_off:
+                relative_delay_cost = instance.darp_instance_config.relative_delay_cost
+                if relative_delay_cost != 0:
+                    min_drop_off_time = request.pickup_action.min_time + timedelta(
+                        seconds=request.min_travel_time
+                    )
+                    drop_off_delay_seconds = (time - min_drop_off_time).total_seconds()
+                    cost += drop_off_delay_seconds * relative_delay_cost
+
             # vehicle id check
             if not fleet_sizing and action_data.action.request.required_vehicle_id is not None:
                 if action_data.action.request.required_vehicle_id != vehicle_index:
@@ -309,6 +319,11 @@ class SolutionChecker:
             )
             plan_ok = False
             self._increment_error()
+
+        # add vehicle capital cost to plan cost
+        vehicle_capital_cost = instance.darp_instance_config.vehicle_capital_cost
+        if vehicle_capital_cost is not None and vehicle_capital_cost != 0:
+            cost += vehicle_capital_cost
 
         # cost check
         if plan.cost is not None and abs(cost - plan.cost) > 1:
