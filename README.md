@@ -23,12 +23,27 @@ The dataset and methodology used to create it are described in the paper [Large-
 
 
 ## Table of contents
-- [Instances and Results download](#Instances-and-Results-download)
-- [Instances structure](#Instances-structure)
-- [Results structure](#Results-structure)
-- [Instance creation](#Instance-creation)
-- [Citation](#Citation)
-- [License](#License)
+- [Instances and Results download](#instances-and-results-download)
+- [Time Format](#time-format)
+- [Instances](#instances)
+  - [Instance configuration file](#instance-configuration-file)
+  - [Requests Files](#requests-files)
+  - [Vehicles Files](#vehicles-files)
+  - [Distance Matrix - the travel time model](#distance-matrix-the-travel-time-model)
+  - [Instance Interpretation and Usage](#instance-interpretation-and-usage)
+  - [Instance metadata and supporting files](#instance-metadata-and-supporting-files)
+  - [Instance generation config files](#instance-generation-config-files)
+  - [Visualization files](#visualization-files)
+- [Results](#results)
+  - [Solution file](#solution-file)
+  - [Solution meta-data](#solution-meta-data)
+- [Instance Creation](#instance-creation)
+  - [Sizing](#sizing)
+  - [Public Datasets used in the creation of the instances](#public-datasets-used-in-the-creation-of-the-instances)
+- [Solution Checker](#solution-checker)
+  - [Command line usage](#command-line-usage)
+- [Citation](#citation)
+- [License](#license)
 
 
 

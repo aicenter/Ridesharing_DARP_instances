@@ -28,7 +28,18 @@
                 "--output-dir",
                 "C:/Google Drive AIC/My Drive/AIC Experiment Data/Fleet-sizing/kronmueller_2024_grid_instances"
             ]
-        }
+        },
+        {
+            "name": "Generate test grid instances",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "python/scripts/generate_grid_instances_by_size.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--output-dir",
+                "C:/Google Drive AIC/My Drive/AIC Experiment Data/Fleet-sizing/test_grid_instances-realistic"
+            ]
+        },
         {
             "name": "Check Kronmueller 2024 grid instances 1",
             "type": "debugpy",
