@@ -145,10 +145,12 @@ Vehicle file contains the definition of the vehicles $V$. There are three possib
     - only the first two data fields (starting node and capacity) are supported
 - json file - if structured configuration of vehicles is needed
 
-The data fields are as follows:
+In JSON and csv format, the order of the fields is not important. The data fields are as follows:
 
-- vehicle starting node $s$
-- vehicle capacity $c$
+- `position`: vehicle starting node $s$
+    - first column in the legacy format
+- `capacity`: vehicle capacity $c$
+    - second column in the legacy format
 - `operation_start` (optional) - the start time of the vehicle operation
 - `operation_end` (optional) - the end time of the vehicle operation
 
@@ -161,6 +163,16 @@ A concrete example of an instance path is `Instances/NYC/instances/start_18-00/d
   
 The travel time model $f_t(l, l')$ that determines the shortest travel time between any two nodes $l$ and $l'$ has a form of distance matrix and is shared by all instances in the same area. 
 Since, for some areas, the matrix is quite large, it is saved using the [`hdf5`](https://www.hdfgroup.org/solutions/hdf5/) format. To load the distance matrix into Python, use [`h5py` python package](https://www.h5py.org/). The loading of the distance matrix is implemented in the [`MatrixTravelTimeProvider.from_hdf`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L62). Method [`get_travel_time(from_index, to_index)`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L73) implements the access to the distance matrix and is equivalent to $f_t(l, l')$
+
+Note that most algorithms require the distance matrix to satisfy the triangle inequality. This means that for all nodes $ a, b, c $ in the distance matrix, the following inequality must hold:
+$$
+d(a, c) \leq d(a, b) + d(b, c)
+$$
+
+In real-world, this always holds. However, your data may be corrupted. To check if the triangle inequality holds for your distance matrix, you can use the `check_triangle_inequality.py` script.
+```bash
+python python/scripts/check_triangle_inequality.py <path_to_distance_matrix>
+```
 
 
 ### Instance Interpretation and Usage
