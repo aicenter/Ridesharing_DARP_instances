@@ -87,16 +87,16 @@ The instance configuration file has the following structure (**bold** fields are
 
 - `area_dir`: path to the area directory. Only used for automatic construction of paths to files shared between instances in the same area
 - *`area_id`*: id of the area used during the instance generation process
-- `demand`:
+- **`demand`**:
     - *`dataset`*: dataset id(s) used to generate the demand
-    - `filepath`: path to the demand file. `./requests.csv` (or `./trips.di` legacy format)
+    - **`filepath`**: path to the demand file. `./requests.csv` (or `./trips.di` legacy format)
     - *`max_time`*: the end time of the demand selection interval
     - *`min_time`*: the start time of the demand selection interval
     - *`mode`*: mode used for creating the demand. Can be 'load' for loading the demand from the file or 'generate' for generating the demand
     - *`positions_set`*: id of the set of positions used to generate the demand.
     - *`time_set`*: id of the set of times used to generate the demand.
 - `dm_filepath`: path to the distance matrix file. Set to `<area_dir>/dm.hd5` if not provided
-- `map`:
+- *`map`*:
     - *`SRID`*: id of the spatial reference system used for spherical projection.
     - *`SRID_plane`*: id of the spatial reference system used for planar projection.
 - `max_pickup_delay`: maximum delay for the pickup in seconds.
@@ -107,7 +107,8 @@ The instance configuration file has the following structure (**bold** fields are
     - `seconds`: absolute delay in seconds
 - `vehicles`:
     - `capital_cost`: the capital cost per vehicle.
-    - `start_time`: the start time of the vehicle operation (unless specified in the vehicles file)
+    - `operation_start` or `start_time` (deprecated): the start time of the vehicle operation (unless specified in the vehicles file)
+        - it is considered an error to provide `operation_start` in both the instance configuration file and the vehicles file
     - `vehicle_capacity`: the capacity of the vehicles.
     - *`vehicle_count`*: the number of vehicles in the vehicle file.
     
@@ -145,11 +146,14 @@ Vehicle file contains the definition of the vehicles $V$. There are three possib
     - only the first two data fields (starting node and capacity) are supported
 - json file - if structured configuration of vehicles is needed
 
-The data fields are as follows:
+In JSON and csv format, the order of the fields is not important. The data fields are as follows:
 
-- vehicle starting node $s$
-- vehicle capacity $c$
+- `position`: vehicle starting node $s$
+    - first column in the legacy format
+- `capacity`: vehicle capacity $c$
+    - second column in the legacy format
 - `operation_start` (optional) - the start time of the vehicle operation
+    - it can be instead set globally in the instance configuration file
 - `operation_end` (optional) - the end time of the vehicle operation
 
 
@@ -161,6 +165,16 @@ A concrete example of an instance path is `Instances/NYC/instances/start_18-00/d
   
 The travel time model $f_t(l, l')$ that determines the shortest travel time between any two nodes $l$ and $l'$ has a form of distance matrix and is shared by all instances in the same area. 
 Since, for some areas, the matrix is quite large, it is saved using the [`hdf5`](https://www.hdfgroup.org/solutions/hdf5/) format. To load the distance matrix into Python, use [`h5py` python package](https://www.h5py.org/). The loading of the distance matrix is implemented in the [`MatrixTravelTimeProvider.from_hdf`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L62). Method [`get_travel_time(from_index, to_index)`](https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/python/darpinstances/instance.py#L73) implements the access to the distance matrix and is equivalent to $f_t(l, l')$
+
+Note that most algorithms require the distance matrix to satisfy the triangle inequality. This means that for all nodes $ a, b, c $ in the distance matrix, the following inequality must hold:
+$$
+d(a, c) \leq d(a, b) + d(b, c)
+$$
+
+In real-world, this always holds. However, your data may be corrupted. To check if the triangle inequality holds for your distance matrix, you can use the `check_triangle_inequality.py` script.
+```bash
+python python/scripts/check_triangle_inequality.py <path_to_distance_matrix>
+```
 
 
 ### Instance Interpretation and Usage
