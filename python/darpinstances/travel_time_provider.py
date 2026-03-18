@@ -54,8 +54,11 @@ class MatrixTravelTimeProvider(TravelTimeProvider):
     @classmethod
     def from_hdf(cls, path_to_dm: Path):
         with h5py.File(path_to_dm, 'r') as dm_file:
-            a_group_key = list(dm_file.keys())[0]
-            dm_arr = dm_file[a_group_key][()]
+            if 'dm' in dm_file:
+                dataset_name = 'dm'
+            else:
+                dataset_name = list(dm_file.keys())[0]
+            dm_arr = dm_file[dataset_name][()]
             return cls(dm_arr)
 
     def __init__(self, dm: np.ndarray):

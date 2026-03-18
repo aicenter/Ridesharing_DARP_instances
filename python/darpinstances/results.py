@@ -390,7 +390,8 @@ def load_all_data_for_result(path: Path, included_config_keys: Optional[List[str
     if data is None:
         return None
     
-    config_path = path / 'config.yaml'
+    if not path.is_file():
+        config_path = path / 'config.yaml'
     exp_config = darpinstances.experiments.load_experiment_config(str(config_path))
     data['method'] = exp_config['method']
     if included_config_keys is not None:
