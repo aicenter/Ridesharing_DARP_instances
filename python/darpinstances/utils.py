@@ -3,7 +3,7 @@ import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Union
-
+import yaml
 from darpinstances.inout import load_yaml
 
 
@@ -36,7 +36,7 @@ class TimeLoader:
         if isinstance(time_value, str):
             # if the string contains a space, it is a datetime string
             if ' ' in time_value:
-                return datetime.strptime(time_value, '%Y-%m-%d %H:%M:%S')
+                return datetime.strptime(time_value, '%Y-%m-%d %H:%M:%S', tzinfo=timezone.utc)
             # otherwise, it is a timestamp
             time_value = int(time_value)
 
@@ -73,3 +73,24 @@ def load_dm_mem_size_GB(instances_path: Path):
         dm_sizes[dmf.parent.name] = dm_size_GB
     assert len(dm_sizes) > 0, f"seems like no distance matrices were found in {instances_path}"
     return dm_sizes
+
+
+class DarpinstancesTimestampLoader(yaml.SafeLoader):
+    pass
+
+
+def construct_timestamp_force_utc(loader, node):
+    # use the original PyYAML logic first
+    value = yaml.SafeLoader.construct_yaml_timestamp(loader, node)
+
+    # attach UTC if datetime has no tzinfo
+    if isinstance(value, datetime) and value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+
+    return value
+
+
+DarpinstancesTimestampLoader.add_constructor(
+    'tag:yaml.org,2002:timestamp',
+    construct_timestamp_force_utc,
+)

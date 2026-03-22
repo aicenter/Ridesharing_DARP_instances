@@ -19,7 +19,7 @@ from tqdm.autonotebook import tqdm
 import darpinstances.log
 from darpinstances.inout import check_file_exists
 from darpinstances.instance_objects import Coordinate, Request, Vehicle
-from darpinstances.utils import TimeLoader
+from darpinstances.utils import TimeLoader, DarpinstancesTimestampLoader
 from darpinstances.travel_time_provider import (
     TravelTimeProvider,
     EuclideanTravelTimeProvider,
@@ -96,7 +96,7 @@ def load_instance_config(config_file_path: Path, set_defaults: bool = True) -> d
     config_file_path_abs = config_file_path.absolute()
     logging.info(f"Loading instance config from {config_file_path_abs}")
     with open(config_file_path_abs, 'r') as config_file:
-        config = yaml.safe_load(config_file)
+        config = yaml.load(config_file, Loader=DarpinstancesTimestampLoader)
 
         if set_defaults:
             defaults = {
@@ -464,7 +464,7 @@ def load_instance(
     filepath: Path,
     travel_time_provider: MatrixTravelTimeProvider = None,
     demand_file_name: Optional[str] = None,
-    load_vehicles: bool = True,
+    should_load_vehicles: bool = True,
 ) -> Tuple[DARPInstance, TimeLoader]:
     instance_config = load_instance_config(filepath, set_defaults=False)
     instance_dir_path = filepath.parent
@@ -478,7 +478,7 @@ def load_instance(
         demand_path = instance_dir_path / demand_file_name
     check_file_exists(demand_path)
 
-    vehicles = load_vehicles(instance_dir_path, instance_config) if load_vehicles else []
+    vehicles = load_vehicles(instance_dir_path, instance_config) if should_load_vehicles else []
 
     # dm loading
     if travel_time_provider is None:
@@ -492,6 +492,8 @@ def load_instance(
                 dm_filepath = instance_config['dm_filepath']
             else:
                 dm_filepath = Path(instance_config['area_dir']) / 'dm.h5'
+                if not dm_filepath.exists():
+                    dm_filepath = Path(instance_config['area_dir']) / 'dm.csv'
             check_file_exists(dm_filepath)
             logging.info("Reading dm from: {}".format(os.path.realpath(dm_filepath)))
             travel_time_provider = MatrixTravelTimeProvider.read_from_file(dm_filepath)
@@ -504,13 +506,24 @@ def load_instance(
         file_begin = demand_file.tell()
         header = demand_file.readline()
         demand_file.seek(file_begin)
+        time_loader = None
         if ',' in header:
             time_loader = TimeLoader()
             requests = load_demand(demand_file, instance_config, travel_time_provider, time_loader)
         else:
-            instance_start_time = _load_datetime(instance_config['demand']['min_time'])
-            instance_date = datetime.combine(instance_start_time.date(), time())
-            time_loader = TimeLoader(instance_date)
+            instance_time = None
+            if 'min_time' in instance_config['demand']:
+                instance_time = _load_datetime(instance_config['demand']['min_time'])
+            elif 'vehicles' in instance_config:
+                if 'operation_start' in instance_config['vehicles']:
+                    instance_time = _load_datetime(instance_config['vehicles']['operation_start'])
+                elif 'start_time' in instance_config['vehicles']:
+                    instance_time = instance_config['vehicles']['start_time']
+            if instance_time is None:
+                time_loader = TimeLoader()
+            else:
+                instance_date = datetime.combine(instance_time.date(), time(), tzinfo=timezone.utc)
+                time_loader = TimeLoader(instance_date)
             requests = load_demand_legacy(demand_file, instance_config, travel_time_provider, demand_path, time_loader)
 
     max_pickup_delay = instance_config.get('max_pickup_delay', 0)

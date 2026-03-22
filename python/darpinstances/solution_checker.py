@@ -513,7 +513,7 @@ def load_instance(
 ) -> Tuple[DARPInstance, TravelTimeProvider, TimeLoader]:
     if instance_path.suffix == '.yaml':
         instance, time_loader = darpinstances.instance.load_instance(
-            instance_path, travel_time_provider, demand_file_name, load_vehicles=load_vehicles
+            instance_path, travel_time_provider, demand_file_name, should_load_vehicles=load_vehicles
         )
         travel_time_provider = instance.travel_time_provider
     else:

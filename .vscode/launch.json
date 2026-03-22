@@ -59,6 +59,18 @@
             "request": "launch",
             "program": "python/scripts/check_all_solutions.py",
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Check VGA-receding-horizon Chyse",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "python/darpinstances/solution_checker.py",
+            "console": "integratedTerminal",
+            "args": [
+                "C:/Workspaces/AIC/darp_solvers/cmake-build-debug/test_resources/Chyse/expected/solution-receding_horizon_VGA.json",
+                "--instance",
+                "C:/Workspaces/AIC/darp_solvers/cmake-build-debug/test_resources/Chyse/config.yaml"
+            ]
         }
     ]
 }
