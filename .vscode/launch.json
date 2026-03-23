@@ -69,7 +69,19 @@
             "args": [
                 "C:/Workspaces/AIC/darp_solvers/cmake-build-debug/test_resources/Chyse/expected/solution-receding_horizon_VGA.json",
                 "--instance",
-                "C:/Workspaces/AIC/darp_solvers/cmake-build-debug/test_resources/Chyse/config.yaml"
+                "C:/Workspaces/AIC/darp_solvers/cmake-build-debug/test_resources/Chyse/config-fleet-sizing.yaml"
+            ]
+        },
+        {
+            "name": "Check VGA-receding-horizon Manhattan 2 min",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "python/darpinstances/solution_checker.py",
+            "console": "integratedTerminal",
+            "args": [
+                "C:/Google Drive AIC/My Drive/AIC Experiment Data/Ridepooling Trade-offs Article/Receding_horizon_VGA_test/config-fleet-sizing.yaml-solution.json",
+                "--instance",
+                "C:/Google Drive AIC/My Drive/AIC Experiment Data/DARP/Instances/Manhattan/instances/start_18-00/duration_02_min/max_delay_05_min/config-fleet-sizing.yaml"
             ]
         }
     ]

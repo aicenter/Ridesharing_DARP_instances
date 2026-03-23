@@ -44,6 +44,7 @@ class DARPInstanceConfiguration:
         vehicle_capacity: Optional[int] = None,
         vehicle_capital_cost: Optional[float] = None,
         relative_delay_cost: float = 0,
+        problem: str = "DARP",
     ):
         self.max_route_duration = max_route_duration
         self.max_ride_time = max_ride_time
@@ -58,6 +59,11 @@ class DARPInstanceConfiguration:
         self.vehicle_capacity = vehicle_capacity
         self.vehicle_capital_cost = vehicle_capital_cost
         self.relative_delay_cost = relative_delay_cost
+        self.problem = problem
+
+    @property
+    def is_fleet_sizing(self) -> bool:
+        return self.problem.lower() == "fleet-sizing"
 
 
 class DARPInstance:
@@ -108,6 +114,18 @@ def load_instance_config(config_file_path: Path, set_defaults: bool = True) -> d
 
             _set_config_defaults(config, defaults)
         return config
+
+
+def instance_problem_from_config(instance_config: Dict) -> str:
+    raw = instance_config.get("problem", "DARP")
+    if raw is None:
+        return "DARP"
+    s = str(raw).strip()
+    return s if s else "DARP"
+
+
+def instance_config_indicates_fleet_sizing(instance_config: Dict) -> bool:
+    return instance_problem_from_config(instance_config).lower() == "fleet-sizing"
 
 
 def load_vehicles_csv(vehicles_path: Path) -> List[Vehicle]:
@@ -464,10 +482,12 @@ def load_instance(
     filepath: Path,
     travel_time_provider: MatrixTravelTimeProvider = None,
     demand_file_name: Optional[str] = None,
-    should_load_vehicles: bool = True,
+    fleet_sizing: bool = False,
 ) -> Tuple[DARPInstance, TimeLoader]:
     instance_config = load_instance_config(filepath, set_defaults=False)
     instance_dir_path = filepath.parent
+
+    effective_fleet_sizing = fleet_sizing or instance_config_indicates_fleet_sizing(instance_config)
 
     # Here, we are completing the possibly relative paths. Therefore, we need to change the dir because dm path
     # loaded from instance config is relative to the instance dir
@@ -478,7 +498,9 @@ def load_instance(
         demand_path = instance_dir_path / demand_file_name
     check_file_exists(demand_path)
 
-    vehicles = load_vehicles(instance_dir_path, instance_config) if should_load_vehicles else []
+    vehicles = (
+        load_vehicles(instance_dir_path, instance_config) if not effective_fleet_sizing else []
+    )
 
     # dm loading
     if travel_time_provider is None:
@@ -545,6 +567,7 @@ def load_instance(
 
     travel_time_divider = instance_config.get('travel_time_divider', 1)
     relative_delay_cost = instance_config.get('demand', {}).get('relative_delay_cost', 0)
+    problem = instance_problem_from_config(instance_config)
 
     darp_instance_config = DARPInstanceConfiguration(
         0,
@@ -560,6 +583,7 @@ def load_instance(
         vehicle_capacity,
         vehicle_capital_cost,
         relative_delay_cost,
+        problem,
     )
         
     darp_instance = DARPInstance(requests, vehicles, travel_time_provider, darp_instance_config)

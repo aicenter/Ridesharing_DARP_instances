@@ -442,14 +442,21 @@ class SolutionChecker:
                 if area is not None and last_area == area:
                     instance, _, time_loader = darpinstances.solution_checker.load_instance(
                         instance_path,
-                        last_instance.travel_time_provider
+                        last_instance.travel_time_provider,
+                        fleet_sizing=fleet_sizing,
                     )
                 else:
-                    instance, _, time_loader = darpinstances.solution_checker.load_instance(instance_path, load_vehicles=not fleet_sizing)
+                    instance, _, time_loader = darpinstances.solution_checker.load_instance(
+                        instance_path, fleet_sizing=fleet_sizing
+                    )
 
-            solution = darpinstances.solution.load_solution(solution_path, instance, time_loader, fleet_sizing=fleet_sizing)
+            effective_fleet_sizing = fleet_sizing or instance.darp_instance_config.is_fleet_sizing
 
-            ok, failures = self.check_solution(instance, solution, fleet_sizing=fleet_sizing)
+            solution = darpinstances.solution.load_solution(
+                solution_path, instance, time_loader, fleet_sizing=effective_fleet_sizing
+            )
+
+            ok, failures = self.check_solution(instance, solution, fleet_sizing=effective_fleet_sizing)
             sol_record = [solution_path, ok]
             sol_record.extend([count for _, count in failures.items()])
             stats.append(sol_record)
@@ -482,7 +489,7 @@ def load_data(
     instance_path: Optional[Path],
     demand_file_name: Optional[str] = None,
     fleet_sizing: bool = False,
-) -> Tuple[DARPInstance, Solution]:
+) -> Tuple[DARPInstance, Solution, bool]:
     check_file_exists(solution_file_path)
     solution_dir_path = solution_file_path.parent
     os.chdir(solution_dir_path)
@@ -493,14 +500,15 @@ def load_data(
         instance_path = Path(experiment_config['instance'])
 
     instance, _, time_loader = load_instance(
-        instance_path, demand_file_name=demand_file_name, load_vehicles=not fleet_sizing
+        instance_path, demand_file_name=demand_file_name, fleet_sizing=fleet_sizing
     )
+    effective_fleet_sizing = fleet_sizing or instance.darp_instance_config.is_fleet_sizing
 
     solution = darpinstances.solution.load_solution(
-        solution_file_path, instance, time_loader, fleet_sizing=fleet_sizing
+        solution_file_path, instance, time_loader, fleet_sizing=effective_fleet_sizing
     )
 
-    return instance, solution
+    return instance, solution, effective_fleet_sizing
 
     # uncoment the following line to read the Cordeau & Laport solution files  # solution = darpbenchmark.cordeau_benchmark.load_cordeau_solution(cordeau_solution_path, vehicle_map, request_map)
 
@@ -509,16 +517,16 @@ def load_instance(
     instance_path: Path,
     travel_time_provider: Optional[TravelTimeProvider] = None,
     demand_file_name: Optional[str] = None,
-    load_vehicles: bool = True,
+    fleet_sizing: bool = False,
 ) -> Tuple[DARPInstance, TravelTimeProvider, TimeLoader]:
     if instance_path.suffix == '.yaml':
         instance, time_loader = darpinstances.instance.load_instance(
-            instance_path, travel_time_provider, demand_file_name, should_load_vehicles=load_vehicles
+            instance_path, travel_time_provider, demand_file_name, fleet_sizing=fleet_sizing
         )
         travel_time_provider = instance.travel_time_provider
     else:
         instance = load_cordeau(instance_path)
-        if not load_vehicles:
+        if fleet_sizing:
             instance.vehicles = []
         travel_time_provider = darpinstances.instance.EuclideanTravelTimeProvider(60)
         time_loader = TimeLoader()  # Default TimeLoader for Cordeau instances
@@ -532,7 +540,11 @@ if __name__ == '__main__':
     parser.add_argument(
         '--fleet-sizing',
         action='store_true',
-        help='Fleet-sizing mode: do not load vehicles from instance and ignore vehicle-related constraints',
+        help=(
+            'Fleet-sizing mode: do not load vehicles from instance and ignore vehicle-related constraints. '
+            'Also enabled when the instance config sets problem: fleet-sizing. '
+            'Passing this flag forces fleet-sizing even if problem in YAML is DARP.'
+        ),
     )
 
     args = parser.parse_args()
@@ -556,8 +568,8 @@ if __name__ == '__main__':
 
     check_file_exists(instance_path)
 
-    instance, solution = load_data(
+    instance, solution, fleet_sizing = load_data(
         solution_file_path, instance_path, fleet_sizing=args.fleet_sizing
     )
     solution_checker = SolutionChecker()
-    solution_checker.check_solution(instance, solution, fleet_sizing=args.fleet_sizing)
+    solution_checker.check_solution(instance, solution, fleet_sizing=fleet_sizing)
