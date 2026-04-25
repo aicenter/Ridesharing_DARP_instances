@@ -153,7 +153,7 @@ class SolutionChecker:
             # arrival time check
             if action_data.arrival_time is not None:
                 diff = action_data.arrival_time - time
-                if diff > timedelta(seconds=1):
+                if abs(diff) > timedelta(seconds=1):
                     logging.warning(
                         f"[{plan_counter}. plan, {action_index + 1}. Action] Arrival time mismatch (expected {time}, "
                         f"was {action_data.arrival_time}) when handling request {action_data.action.request.index}"
@@ -271,14 +271,12 @@ class SolutionChecker:
 
             # service time
             time += timedelta(seconds=int(action_data.action.service_time))
-            max_departure_time = action_data.departure_time + timedelta(
-                seconds=instance.darp_instance_config.max_pickup_delay
-            )
 
-            # departure time check
-            if max_departure_time < time:
+            # departure time check.
+            # We can departure after the current time, but not before
+            if action_data.departure_time < time:
                 print(
-                    "[{}. plan, {}. action] Departure time mismatch (was {}, must be higher than {}) when handling request {}".format(
+                    "[{}. plan, {}. action] Departure time mismatch (was {}, must be higher than current time {}) when handling request {}".format(
                         plan_counter, action_index + 1, action_data.departure_time, time, action_data.action.request.index
                                   )
                 )

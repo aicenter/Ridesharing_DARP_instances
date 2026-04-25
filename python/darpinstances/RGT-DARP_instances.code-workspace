@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../road-graph-tool"
+		}
+	],
+    "settings": {}
+}
