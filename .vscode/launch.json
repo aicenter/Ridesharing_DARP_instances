@@ -95,6 +95,16 @@
                 "--instance",
                 "C:/Users/david/Downloads/max_delay_05_min/config-fleet-sizing.yaml"
             ]
+        },
+        {
+            "name": "Install Commuter Instances DB",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "python/scripts/install_sql.py",
+            "console": "integratedTerminal",
+            "args": [
+                "C:/Google Drive AIC/My Drive/AIC Experiment Data/Line Planning/Instances/LODES/config.yaml"
+            ]
         }
     ]
 }
