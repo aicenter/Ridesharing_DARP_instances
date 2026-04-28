@@ -83,6 +83,18 @@
                 "--instance",
                 "C:/Google Drive AIC/My Drive/AIC Experiment Data/DARP/Instances/Manhattan/instances/start_18-00/duration_02_min/max_delay_05_min/config-fleet-sizing.yaml"
             ]
+        },
+        {
+            "name": "Check VGA-receding-horizon gdb test instance",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "python/darpinstances/solution_checker.py",
+            "console": "integratedTerminal",
+            "args": [
+                "C:/Users/david/Downloads/max_delay_05_min/Results/config-fleet-sizing.yaml-solution.json",
+                "--instance",
+                "C:/Users/david/Downloads/max_delay_05_min/config-fleet-sizing.yaml"
+            ]
         }
     ]
 }

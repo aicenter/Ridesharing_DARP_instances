@@ -511,7 +511,7 @@ def load_instance(
             logging.info("Using grid travel time provider (size=%s, distance=%s)", size, distance)
         else:
             if 'dm_filepath' in instance_config:
-                dm_filepath = instance_config['dm_filepath']
+                dm_filepath = Path(instance_config['dm_filepath'])
             else:
                 dm_filepath = Path(instance_config['area_dir']) / 'dm.h5'
                 if not dm_filepath.exists():
