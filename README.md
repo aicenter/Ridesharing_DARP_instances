@@ -329,12 +329,23 @@ There are two files with meta-data for the solution, `ðŸ–º config.yaml` and `ðŸ–
 - `peak_memory_KiB` - peak memory usage of the solver in KiB
 - `solver_stats`- solver-specific statistics, if available. For example, for the VGA method, `group_generation_time` and `vehicle_assignment_time` are logged separately.
 
+
 ## Instance Creation
 The methodology for the instance creation is described in the article. The process is divided into the following steps:
 
 ![FlowChart_v3-1.png](figures%2FFlowChart_v4.png)
 
-Many of the steps are implemented in the associated repository, but some of them rely on external binaries. That is why the published dataset contains full distance matrices for every area instead of the instance-specific, smaller distance matrices.
+The travel time model (blue in the flow chart) is created by the [road-graph-tool](https://github.com/aicenter/road-graph-tool). The rest is handeled by the code in this repo, which also includes high-level scripts for the instance creation process.
+
+
+### Getting started
+First, no matter of what part of the instance creation process you are interested in, you need to:
+
+1. install the package for this repository: `pip install <path_to_this_repository>/python`
+1. prepare the configuration files for the database server (for that, see the [Road Graph Tool documentation](https://github.com/aicenter/road-graph-tool#configuration))
+1. if you are starting with a fresh database, you need to install the SQL tables, functions, etc. For that, call `python python/scripts/install_sql.py <path_to_road-graph-tool_config_file>`
+
+
 
 [//]: # (## Road Network Processing)
 

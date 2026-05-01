@@ -23,7 +23,6 @@ setup(
 		'psycopg2-binary',
 		'sqlalchemy',
 		'geoalchemy2',
-		'sshtunnel',
 		'scikit-learn',
 		'roadgraphtool',
         'pandera'
