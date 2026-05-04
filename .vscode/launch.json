@@ -105,6 +105,12 @@
             "args": [
                 "C:/Google Drive AIC/My Drive/AIC Experiment Data/Line Planning/Instances/LODES/config.yaml"
             ]
+        },
+        {
+            "name": "Attach to Python (pick process)",
+            "type": "debugpy",
+            "request": "attach",
+            "processId": 78360
         }
     ]
 }

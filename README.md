@@ -341,13 +341,19 @@ The travel time model (blue in the flow chart) is created by the [road-graph-too
 ### Getting started
 First, no matter of what part of the instance creation process you are interested in, you need to:
 
-1. install the package for this repository: `pip install <path_to_this_repository>/python`
-1. prepare the configuration files for the database server (for that, see the [Road Graph Tool documentation](https://github.com/aicenter/road-graph-tool#configuration))
-1. if you are starting with a fresh database, you need to install the SQL tables, functions, etc. For that, call `python python/scripts/install_sql.py <path_to_road-graph-tool_config_file>`
+1. install the package for this repository: `pip install <path_to_this_repository>/python`,
+1. prepare the configuration files for the database server (for that, see the [Road Graph Tool documentation](https://github.com/aicenter/road-graph-tool#configuration)),
+1. if you are starting with a fresh database, you need to install the SQL tables, functions, etc. For that, call `python python/scripts/install_sql.py <path_to_road-graph-tool_config_file>`.
 
 
+### Zone processing
+Typically, origin and destination locations in the demand datasets are provided as some area IDs, instead of the actual coordinates. To sample the actual coordinates, we need first import zone data to the database. To do that, you need to:
 
-[//]: # (## Road Network Processing)
+1. if the type of your zones is not present in the `zone_types` table, first insert the new zone type,
+1. get the ID (database ID) for the correct zone type,
+1. insert the zones into the `zones` table using the columns provided by the zone dataset provider and the database ID from the previous step.
+    - You can find the example code for this step in the [demand cell script](python/nb/demand.py)
+
 
 [//]: # (## Demand and Vehicle Processing)
 

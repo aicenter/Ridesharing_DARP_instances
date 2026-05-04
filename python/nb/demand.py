@@ -20,6 +20,9 @@
 # %autoreload
 
 # %%
+import importlib
+import roadgraphtool
+importlib.reload(roadgraphtool)
 import pandas as pd
 import os
 import matplotlib.pyplot as plt
@@ -35,12 +38,98 @@ import sqlalchemy.types
 import geoalchemy2
 import geoalchemy2.shape
 from pathlib import Path
+import roadgraphtool.config
+import roadgraphtool.db as db_module
+db = db_module.db
+
+config_path = Path(r"C:\Google Drive AIC\My Drive\AIC Experiment Data\Line Planning\Instances\LODES/config.yaml")
+config = roadgraphtool.config.parse_config_file(config_path)
+roadgraphtool.db.init_db(config)
+roadgraphtool.config.set_logging(config)
 
 # %% [markdown]
 # # NYC Commuter Demand
+# LODES-style census-block zones and OD counts. Use `import_commuter_zones` / `import_commuter_demand` with paths for another state; dataset id and zone type id stay fixed.
 
-# %% [raw]
+# %%
+COMMUTER_DEMAND_DATASET_ID = 1
+COMMUTER_ZONE_TYPE_ID = 1
+
+
+def import_commuter_zones(census_blocks_path: Path | str) -> None:
+    """Load census blocks GeoPackage/Shapefile and insert into `zones`.
+
+    Expects GEOID20, NAME20, geometry columns (LODES / Census 2020 block fields).
+    Zone ``type`` is fixed to ``COMMUTER_ZONE_TYPE_ID``.
+    """
+    path = Path(census_blocks_path)
+    census_gdf = gpd.read_file(path)
+    census_gdf_for_insert = gpd.GeoDataFrame(census_gdf[["GEOID20", "NAME20", "geometry"]])
+    census_gdf_for_insert.rename(
+        columns={"GEOID20": "id", "NAME20": "name", "geometry": "geom"}, inplace=True
+    )
+    census_gdf_for_insert["type"] = COMMUTER_ZONE_TYPE_ID
+    census_gdf_for_insert.set_geometry("geom", inplace=True)
+    census_gdf_for_insert.to_crs(epsg=4326, inplace=True)
+    db.geodataframe_to_db_table(census_gdf_for_insert, "zones", store_index=False, chunk=True)
+
+
+def import_commuter_demand(demand_csv_path: Path | str) -> None:
+    """Read LODES-style OD CSV (h_geocode, w_geocode, S000), disaggregate counts, insert into `demand`.
+
+    ``dataset`` is fixed to ``COMMUTER_DEMAND_DATASET_ID``. ``origin_time`` is fixed.
+    """
+    path = Path(demand_csv_path)
+    demand = pd.read_csv(path)
+    demand_sel = pd.DataFrame(demand[["h_geocode", "w_geocode", "S000"]])
+    demand_disaggregated = demand_sel.loc[demand_sel.index.repeat(demand_sel["S000"])]
+    demand_disaggregated.reset_index(drop=True, inplace=True)
+    demand_for_insert = pd.DataFrame(demand_disaggregated[["h_geocode", "w_geocode"]])
+    demand_for_insert.rename(
+        columns={"h_geocode": "origin", "w_geocode": "destination"}, inplace=True
+    )
+    demand_for_insert["origin_time"] = pd.to_datetime("2026-01-01 00:08:00")
+    demand_for_insert["dataset"] = COMMUTER_DEMAND_DATASET_ID
+    db.dataframe_to_db_table(demand_for_insert, "demand")
+
+
+# %% [markdown]
+# ## Zones
+# NY Census Blocks
+
+# %%
+import_commuter_zones(Path(r"C:\OwnCloud\areas\NY census blocks"))
+
+# %% [markdown]
+# ## Demand
 #
+
+# %%
+import_commuter_demand(Path(r"C:\OwnCloud\demand\LODES/ny_od_main_JT00_2023.csv"))
+
+
+# %% [markdown]
+# # NJ Commuter Demand
+# ## Zones
+
+# %%
+import_commuter_zones(Path(r"C:\OwnCloud\areas\NJ census blocks"))
+
+# %% [markdown]
+# ## NJ Demand
+
+# %%
+import_commuter_demand(Path(r"C:\OwnCloud\demand\LODES/NJ/nj_od_main_JT00_2023.csv"))
+
+# %%
+ny_zones_path = Path(r"C:\OwnCloud\areas\NY census blocks")
+ny_zones = gpd.read_file(ny_zones_path)
+ny_zones.iloc[0:3]
+
+# %%
+nj_zones_path = Path(r"C:\OwnCloud\areas\NJ census blocks")
+nj_zones = gpd.read_file(nj_zones_path)
+nj_zones.iloc[0:3]
 
 # %% [markdown]
 # # NYC
