@@ -111,6 +111,16 @@
             "type": "debugpy",
             "request": "attach",
             "processId": 78360
+        },
+        {
+            "name": "Run Instance Generator Pipeline",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "python/scripts/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "C:/Google Drive AIC/My Drive/AIC Experiment Data/Line Planning/Instances/LODES/config.yaml"
+            ]
         }
     ]
 }
