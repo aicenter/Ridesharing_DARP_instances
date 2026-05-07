@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 
 from roadgraphtool.config import parse_config_file, set_logging
-from roadgraphtool.db import db, init_db
+import roadgraphtool.db
 import roadgraphtool.pipeline
 
 
@@ -14,8 +14,10 @@ if len(args) < 2:
 config_path = Path(args[1])
 
 config = parse_config_file(config_path)
-init_db(config)
 set_logging(config)
+
+roadgraphtool.db.init_db(config)
+roadgraphtool.db.db._start_or_restart_ssh_connection_if_needed()
 
 # Run the RGT pipeline
 roadgraphtool.pipeline.main(config)
