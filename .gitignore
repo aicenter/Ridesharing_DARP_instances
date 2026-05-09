@@ -6,3 +6,6 @@ __pycache__
 
 /python/nb/*.ipynb
 
+web/graph-editor/node_modules
+web/graph-editor/dist
+
