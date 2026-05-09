@@ -4,6 +4,14 @@
  */
 export const DEFAULT_TRAVEL_TIME_SECONDS = 60;
 
+/** Default seat capacity when a new vehicle is placed on a node. */
+export const DEFAULT_VEHICLE_CAPACITY = 4;
+
+export type VehicleState = {
+  id: number;
+  capacity: number;
+};
+
 export type RoadEdgeData = {
   travelTime: number;
 };
