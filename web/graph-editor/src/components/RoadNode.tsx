@@ -5,12 +5,14 @@ import {
   useGraphEditor,
   type DndPayload,
 } from "../GraphEditorContext";
-import type { VehicleState } from "../lib/graphModel";
+import type { RequestBadge, VehicleState } from "../lib/graphModel";
 import { VehicleGlyph } from "./VehicleGlyph";
+import { RequestGlyph } from "./RequestGlyph";
 
 export type RoadNodeData = {
   logicalId: number;
   vehicles: VehicleState[];
+  requestBadges: RequestBadge[];
 };
 
 export type RoadNodeType = Node<RoadNodeData, "road">;
@@ -28,12 +30,16 @@ function parsePayload(raw: string): DndPayload | null {
     if (!o || typeof o !== "object") return null;
     const rec = o as Record<string, unknown>;
     if (rec.kind === "new-vehicle") return { kind: "new-vehicle" };
+    if (rec.kind === "new-request") return { kind: "new-request" };
     if (
       rec.kind === "vehicle" &&
       typeof rec.nodeId === "string" &&
       typeof rec.vehicleId === "number"
     ) {
       return { kind: "vehicle", nodeId: rec.nodeId, vehicleId: rec.vehicleId };
+    }
+    if (rec.kind === "request" && typeof rec.requestId === "number") {
+      return { kind: "request", requestId: rec.requestId };
     }
   } catch {
     /* ignore */
@@ -42,7 +48,16 @@ function parsePayload(raw: string): DndPayload | null {
 }
 
 export function RoadNode({ id, data }: NodeProps<RoadNodeType>) {
-  const { selectedVehicle, selectVehicle, addVehicleToNode, moveVehicle } = useGraphEditor();
+  const {
+    selectedVehicle,
+    selectVehicle,
+    addVehicleToNode,
+    moveVehicle,
+    selectedRequest,
+    selectRequest,
+    addRequestToNode,
+    dropRequestOnNode,
+  } = useGraphEditor();
 
   const onDragOver = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -60,13 +75,21 @@ export function RoadNode({ id, data }: NodeProps<RoadNodeType>) {
         addVehicleToNode(id);
         return;
       }
+      if (payload.kind === "new-request") {
+        addRequestToNode(id);
+        return;
+      }
       if (payload.kind === "vehicle") {
         if (payload.nodeId !== id) {
           moveVehicle(payload.nodeId, payload.vehicleId, id);
         }
+        return;
+      }
+      if (payload.kind === "request") {
+        dropRequestOnNode(payload.requestId, id);
       }
     },
-    [id, addVehicleToNode, moveVehicle],
+    [id, addVehicleToNode, moveVehicle, addRequestToNode, dropRequestOnNode],
   );
 
   const onVehicleChipDragStart = useCallback(
@@ -87,13 +110,33 @@ export function RoadNode({ id, data }: NodeProps<RoadNodeType>) {
     [id, selectVehicle],
   );
 
+  const onRequestChipDragStart = useCallback(
+    (e: DragEvent, requestId: number) => {
+      e.stopPropagation();
+      const payload: DndPayload = { kind: "request", requestId };
+      e.dataTransfer.setData(GRAPH_EDITOR_DND_MIME, JSON.stringify(payload));
+      e.dataTransfer.effectAllowed = "move";
+    },
+    [],
+  );
+
+  const onRequestChipClick = useCallback(
+    (e: MouseEvent, requestId: number) => {
+      e.stopPropagation();
+      selectRequest({ requestId });
+    },
+    [selectRequest],
+  );
+
   const hasVehicles = data.vehicles.length > 0;
+  const hasRequests = data.requestBadges.length > 0;
   const chipSelected = (v: VehicleState) =>
     selectedVehicle?.nodeId === id && selectedVehicle.vehicleId === v.id;
+  const requestSelected = (r: RequestBadge) => selectedRequest?.requestId === r.id;
 
   return (
     <div
-      className={`road-node${hasVehicles ? " road-node--with-vehicles" : ""}`}
+      className={`road-node${hasVehicles || hasRequests ? " road-node--with-vehicles" : ""}`}
       onDragOver={onDragOver}
       onDrop={onDrop}
     >
@@ -121,6 +164,36 @@ export function RoadNode({ id, data }: NodeProps<RoadNodeType>) {
                   <span className="road-node__vehicle-id">{v.id}</span>
                   <span className="road-node__vehicle-cap">cap {v.capacity}</span>
                 </span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {hasRequests ? (
+          <div className="road-node__requests">
+            {data.requestBadges.map((r) => (
+              <div
+                key={`${r.role}-${r.id}`}
+                className={`road-node__request-chip nodrag${requestSelected(r) ? " road-node__request-chip--selected" : ""}`}
+                draggable
+                onDragStart={(e) => onRequestChipDragStart(e, r.id)}
+                onClick={(e) => onRequestChipClick(e, r.id)}
+                title={
+                  r.role === "origin"
+                    ? `Request ${r.id} pickup at t=${r.pickupTimeSeconds}s (drag to set/move)`
+                    : `Request ${r.id} dropoff (drag to move / reset origin)`
+                }
+              >
+                <RequestGlyph />
+                {r.role === "origin" ? (
+                  <span className="road-node__request-meta">
+                    <span className="road-node__request-id">R{r.id}</span>
+                    <span className="road-node__request-time">t {r.pickupTimeSeconds}s</span>
+                  </span>
+                ) : (
+                  <span className="road-node__request-meta">
+                    <span className="road-node__request-id">R{r.id}</span>
+                  </span>
+                )}
               </div>
             ))}
           </div>

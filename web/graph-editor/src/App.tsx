@@ -15,17 +15,22 @@ import {
   GraphEditorProvider,
   GRAPH_EDITOR_DND_MIME,
   type SelectedVehicle,
+  type SelectedRequest,
 } from "./GraphEditorContext";
 import { RoadEdge } from "./components/RoadEdge";
 import { RoadNode, type RoadNodeType } from "./components/RoadNode";
 import { VehicleGlyph } from "./components/VehicleGlyph";
+import { RequestGlyph } from "./components/RequestGlyph";
 import {
   DEFAULT_TRAVEL_TIME_SECONDS,
+  DEFAULT_REQUEST_PICKUP_TIME_SECONDS,
   DEFAULT_VEHICLE_CAPACITY,
   handleIdsForDirectedEdge,
   hasDirectedEdge,
   makeEdgeId,
   type RoadEdgeData,
+  type RequestBadge,
+  type RequestState,
 } from "./lib/graphModel";
 import "./App.css";
 
@@ -41,7 +46,7 @@ function newRoadNode(
     id,
     type: "road",
     position,
-    data: { logicalId, vehicles: [] },
+    data: { logicalId, vehicles: [], requestBadges: [] },
   };
 }
 
@@ -60,9 +65,12 @@ function AppShell() {
   const [nodes, setNodes, onNodesChange] = useNodesState<RoadNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<RoadEdgeData>>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<SelectedVehicle | null>(null);
+  const [requests, setRequests] = useState<RequestState[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<SelectedRequest | null>(null);
 
   const nextLogicalIdRef = useRef(0);
   const nextVehicleIdRef = useRef(0);
+  const nextRequestIdRef = useRef(0);
 
   const deselectEdges = useCallback(() => {
     setEdges((eds) => eds.map((e) => ({ ...e, selected: false })));
@@ -72,6 +80,16 @@ function AppShell() {
     (sel: SelectedVehicle | null) => {
       setSelectedVehicle(sel);
       if (sel) deselectEdges();
+      if (sel) setSelectedRequest(null);
+    },
+    [deselectEdges],
+  );
+
+  const selectRequest = useCallback(
+    (sel: SelectedRequest | null) => {
+      setSelectedRequest(sel);
+      if (sel) deselectEdges();
+      if (sel) setSelectedVehicle(null);
     },
     [deselectEdges],
   );
@@ -172,6 +190,65 @@ function AppShell() {
     [setNodes],
   );
 
+  const addRequestToNode = useCallback(
+    (nodeId: string) => {
+      const rid = nextRequestIdRef.current++;
+      setRequests((rs) => [
+        ...rs,
+        {
+          id: rid,
+          pickupTimeSeconds: DEFAULT_REQUEST_PICKUP_TIME_SECONDS,
+          originNodeId: nodeId,
+          destinationNodeId: null,
+        },
+      ]);
+      setSelectedRequest({ requestId: rid });
+    },
+    [setRequests],
+  );
+
+  const dropRequestOnNode = useCallback(
+    (requestId: number, nodeId: string) => {
+      setRequests((rs) =>
+        rs.map((r) => {
+          if (r.id !== requestId) return r;
+          // Step 1: set origin
+          if (!r.originNodeId) {
+            return { ...r, originNodeId: nodeId, destinationNodeId: null };
+          }
+          // Step 2: set destination (must differ from origin)
+          if (!r.destinationNodeId) {
+            if (r.originNodeId === nodeId) return r;
+            return { ...r, destinationNodeId: nodeId };
+          }
+          // If already complete: dropping resets origin to this node and clears destination,
+          // so user can pick a new destination with the next drop.
+          return { ...r, originNodeId: nodeId, destinationNodeId: null };
+        }),
+      );
+      setSelectedRequest({ requestId });
+    },
+    [setRequests],
+  );
+
+  const setRequestPickupTime = useCallback(
+    (requestId: number, pickupTimeSeconds: number) => {
+      if (!Number.isFinite(pickupTimeSeconds) || pickupTimeSeconds < 0) return;
+      setRequests((rs) =>
+        rs.map((r) => (r.id === requestId ? { ...r, pickupTimeSeconds } : r)),
+      );
+    },
+    [setRequests],
+  );
+
+  const removeRequest = useCallback(
+    (requestId: number) => {
+      setRequests((rs) => rs.filter((r) => r.id !== requestId));
+      setSelectedRequest((sel) => (sel?.requestId === requestId ? null : sel));
+    },
+    [setRequests],
+  );
+
   const graphContextValue = useMemo(
     () => ({
       selectedVehicle,
@@ -180,6 +257,12 @@ function AppShell() {
       moveVehicle,
       setVehicleCapacity,
       removeVehicle,
+      selectedRequest,
+      selectRequest,
+      addRequestToNode,
+      dropRequestOnNode,
+      setRequestPickupTime,
+      removeRequest,
     }),
     [
       selectedVehicle,
@@ -188,6 +271,12 @@ function AppShell() {
       moveVehicle,
       setVehicleCapacity,
       removeVehicle,
+      selectedRequest,
+      selectRequest,
+      addRequestToNode,
+      dropRequestOnNode,
+      setRequestPickupTime,
+      removeRequest,
     ],
   );
 
@@ -248,18 +337,79 @@ function AppShell() {
     );
   }, [nodes, setEdges]);
 
+  useEffect(() => {
+    // Derive per-node request badges for rendering chips.
+    setNodes((nds) =>
+      nds.map((n) => {
+        const badges: RequestBadge[] = [];
+        for (const r of requests) {
+          if (r.originNodeId === n.id) {
+            badges.push({
+              id: r.id,
+              pickupTimeSeconds: r.pickupTimeSeconds,
+              role: "origin",
+              otherNodeId: r.destinationNodeId,
+            });
+          } else if (r.destinationNodeId === n.id) {
+            badges.push({
+              id: r.id,
+              pickupTimeSeconds: r.pickupTimeSeconds,
+              role: "destination",
+              otherNodeId: r.originNodeId,
+            });
+          }
+        }
+        // Avoid pointless state churn.
+        const prev: RequestBadge[] = n.data.requestBadges;
+        if (
+          prev.length === badges.length &&
+          prev.every(
+            (p, i) =>
+              p.id === badges[i]?.id &&
+              p.role === badges[i]?.role &&
+              p.otherNodeId === badges[i]?.otherNodeId &&
+              p.pickupTimeSeconds === badges[i]?.pickupTimeSeconds,
+          )
+        ) {
+          return n;
+        }
+        return { ...n, data: { ...n.data, requestBadges: badges } };
+      }),
+    );
+  }, [requests, setNodes]);
+
   const onNodesDelete = useCallback(
     (deleted: RoadNodeType[]) => {
       const ids = new Set(deleted.map((n) => n.id));
       setEdges((eds) => eds.filter((e) => !ids.has(e.source) && !ids.has(e.target)));
       setSelectedVehicle((sel) => (sel && ids.has(sel.nodeId) ? null : sel));
+      setRequests((rs) =>
+        rs
+          .map((r) => ({
+            ...r,
+            originNodeId: r.originNodeId && ids.has(r.originNodeId) ? null : r.originNodeId,
+            destinationNodeId:
+              r.destinationNodeId && ids.has(r.destinationNodeId) ? null : r.destinationNodeId,
+          }))
+          .filter((r) => r.originNodeId !== null || r.destinationNodeId !== null),
+      );
     },
     [setEdges],
   );
 
+  useEffect(() => {
+    if (!selectedRequest) return;
+    if (!requests.some((r) => r.id === selectedRequest.requestId)) {
+      setSelectedRequest(null);
+    }
+  }, [requests, selectedRequest]);
+
   const onSelectionChange = useCallback(
     ({ edges: selEdges }: { edges: Edge<RoadEdgeData>[] }) => {
-      if (selEdges.some((e) => e.selected)) setSelectedVehicle(null);
+      if (selEdges.some((e) => e.selected)) {
+        setSelectedVehicle(null);
+        setSelectedRequest(null);
+      }
     },
     [],
   );
@@ -273,6 +423,13 @@ function AppShell() {
     if (!n || !v) return null;
     return { node: n, vehicle: v };
   }, [nodes, selectedVehicle]);
+
+  const selectedRequestRecord = useMemo(() => {
+    if (!selectedRequest) return null;
+    const r = requests.find((x) => x.id === selectedRequest.requestId);
+    if (!r) return null;
+    return r;
+  }, [requests, selectedRequest]);
 
   const setSelectedTravelTime = useCallback(
     (raw: string) => {
@@ -298,18 +455,35 @@ function AppShell() {
     [selectedVehicle, setVehicleCapacity],
   );
 
+  const setInspectorRequestPickupTime = useCallback(
+    (raw: string) => {
+      if (!selectedRequest) return;
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0) return;
+      setRequestPickupTime(selectedRequest.requestId, n);
+    },
+    [selectedRequest, setRequestPickupTime],
+  );
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Delete" && e.key !== "Backspace") return;
       const t = e.target as HTMLElement | null;
       if (t?.closest("input, textarea, select, [contenteditable=true]")) return;
-      if (!selectedVehicle || edges.some((ed) => ed.selected)) return;
-      e.preventDefault();
-      removeVehicle(selectedVehicle.nodeId, selectedVehicle.vehicleId);
+      if (edges.some((ed) => ed.selected)) return;
+      if (selectedVehicle) {
+        e.preventDefault();
+        removeVehicle(selectedVehicle.nodeId, selectedVehicle.vehicleId);
+        return;
+      }
+      if (selectedRequest) {
+        e.preventDefault();
+        removeRequest(selectedRequest.requestId);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedVehicle, edges, removeVehicle]);
+  }, [selectedVehicle, selectedRequest, edges, removeVehicle, removeRequest]);
 
   return (
     <GraphEditorProvider value={graphContextValue}>
@@ -335,10 +509,26 @@ function AppShell() {
             <span>Vehicle</span>
             <span className="vehicle-palette__hint">→ node</span>
           </div>
+          <div
+            className="request-palette"
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData(
+                GRAPH_EDITOR_DND_MIME,
+                JSON.stringify({ kind: "new-request" }),
+              );
+              e.dataTransfer.effectAllowed = "copy";
+            }}
+            title="Drag onto a node to set request origin. Drag the request again to set destination."
+          >
+            <RequestGlyph />
+            <span>Request</span>
+            <span className="vehicle-palette__hint">O→D</span>
+          </div>
           <p className="app__hint">
             Connect nodes with handles; both directions added. Drag <strong>Vehicle</strong> onto a
             node (default capacity {DEFAULT_VEHICLE_CAPACITY}). Drag chips between nodes to relocate.
-            Delete removes selected vehicle. Layout only.
+            Drag <strong>Request</strong> to set origin, then drag it again to set destination. Layout only.
           </p>
         </header>
 
@@ -386,6 +576,28 @@ function AppShell() {
                 </label>
                 <p className="app__inspector-note">Delete / Backspace removes this vehicle.</p>
               </>
+            ) : selectedRequestRecord ? (
+              <>
+                <h2 className="app__inspector-title">Selected request</h2>
+                <p className="app__inspector-route">
+                  R{selectedRequestRecord.id} · O:{selectedRequestRecord.originNodeId ?? "?"} · D:
+                  {selectedRequestRecord.destinationNodeId ?? "?"}
+                </p>
+                <label className="app__field">
+                  <span>Pickup time (s)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={selectedRequestRecord.pickupTimeSeconds}
+                    onChange={(ev) => setInspectorRequestPickupTime(ev.target.value)}
+                  />
+                </label>
+                <p className="app__inspector-note">
+                  Drag the request chip to set the missing endpoint. Delete / Backspace removes this
+                  request.
+                </p>
+              </>
             ) : selectedEdge ? (
               <>
                 <h2 className="app__inspector-title">Selected edge</h2>
@@ -405,7 +617,8 @@ function AppShell() {
               </>
             ) : (
               <p className="app__inspector-empty">
-                Select an edge or a vehicle chip. Drag Vehicle from the toolbar onto a node.
+                Select an edge, vehicle chip, or request chip. Drag Vehicle/Request from the toolbar
+                onto a node.
               </p>
             )}
           </aside>

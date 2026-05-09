@@ -7,9 +7,26 @@ export const DEFAULT_TRAVEL_TIME_SECONDS = 60;
 /** Default seat capacity when a new vehicle is placed on a node. */
 export const DEFAULT_VEHICLE_CAPACITY = 4;
 
+/** Default pickup time for a newly created request (seconds). */
+export const DEFAULT_REQUEST_PICKUP_TIME_SECONDS = 0;
+
 export type VehicleState = {
   id: number;
   capacity: number;
+};
+
+export type RequestState = {
+  id: number;
+  pickupTimeSeconds: number;
+  originNodeId: string | null;
+  destinationNodeId: string | null;
+};
+
+export type RequestBadge = {
+  id: number;
+  pickupTimeSeconds: number;
+  role: "origin" | "destination";
+  otherNodeId: string | null;
 };
 
 export type RoadEdgeData = {

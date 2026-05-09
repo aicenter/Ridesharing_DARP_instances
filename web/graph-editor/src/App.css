@@ -200,6 +200,72 @@
   opacity: 0.75;
 }
 
+.request-glyph {
+  flex-shrink: 0;
+  display: block;
+}
+
+.request-palette {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 2px dashed #8b5cf6;
+  background: #fbf7ff;
+  cursor: grab;
+  font-size: 0.9rem;
+  font-weight: 600;
+  user-select: none;
+}
+
+.request-palette:active {
+  cursor: grabbing;
+}
+
+.road-node__requests {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  max-width: 260px;
+}
+
+.road-node__request-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid #8b5cf6;
+  background: rgba(251, 247, 255, 0.96);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: grab;
+  color: #2a1b44;
+}
+
+.road-node__request-chip:active {
+  cursor: grabbing;
+}
+
+.road-node__request-chip--selected {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 1px #7c3aed;
+}
+
+.road-node__request-meta {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+  font-family: ui-monospace, monospace;
+}
+
+.road-node__request-role {
+  opacity: 0.85;
+  font-weight: 500;
+}
+
 .app__inspector-note {
   margin: 12px 0 0;
   font-size: 0.8rem;
@@ -272,6 +338,23 @@
     background: #252525;
     border-color: #888;
     color: #f3f4f6;
+  }
+
+  .request-palette {
+    background: #241b2f;
+    border-color: #a78bfa;
+    color: #f3f4f6;
+  }
+
+  .road-node__request-chip {
+    background: rgba(36, 27, 47, 0.95);
+    border-color: #a78bfa;
+    color: #f5f3ff;
+  }
+
+  .road-node__request-chip--selected {
+    border-color: #c4b5fd;
+    box-shadow: 0 0 0 1px #c4b5fd;
   }
 
   .app__btn {

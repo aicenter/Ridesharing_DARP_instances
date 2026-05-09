@@ -3,6 +3,7 @@ import { createContext, useContext, type ReactNode } from "react";
 export const GRAPH_EDITOR_DND_MIME = "application/graph-editor";
 
 export type DndNewVehicle = { kind: "new-vehicle" };
+export type DndNewRequest = { kind: "new-request" };
 
 export type DndMoveVehicle = {
   kind: "vehicle";
@@ -10,9 +11,15 @@ export type DndMoveVehicle = {
   vehicleId: number;
 };
 
-export type DndPayload = DndNewVehicle | DndMoveVehicle;
+export type DndMoveRequest = {
+  kind: "request";
+  requestId: number;
+};
+
+export type DndPayload = DndNewVehicle | DndMoveVehicle | DndNewRequest | DndMoveRequest;
 
 export type SelectedVehicle = { nodeId: string; vehicleId: number };
+export type SelectedRequest = { requestId: number };
 
 export type GraphEditorContextValue = {
   selectedVehicle: SelectedVehicle | null;
@@ -21,6 +28,13 @@ export type GraphEditorContextValue = {
   moveVehicle: (fromNodeId: string, vehicleId: number, toNodeId: string) => void;
   setVehicleCapacity: (nodeId: string, vehicleId: number, capacity: number) => void;
   removeVehicle: (nodeId: string, vehicleId: number) => void;
+
+  selectedRequest: SelectedRequest | null;
+  selectRequest: (sel: SelectedRequest | null) => void;
+  addRequestToNode: (nodeId: string) => void;
+  dropRequestOnNode: (requestId: number, nodeId: string) => void;
+  setRequestPickupTime: (requestId: number, pickupTimeSeconds: number) => void;
+  removeRequest: (requestId: number) => void;
 };
 
 const GraphEditorContext = createContext<GraphEditorContextValue | null>(null);
