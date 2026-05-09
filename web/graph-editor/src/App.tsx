@@ -21,6 +21,7 @@ import { RoadEdge } from "./components/RoadEdge";
 import { RoadNode, type RoadNodeType } from "./components/RoadNode";
 import { VehicleGlyph } from "./components/VehicleGlyph";
 import { RequestGlyph } from "./components/RequestGlyph";
+import { exportInstanceZip } from "./lib/exportInstance";
 import {
   DEFAULT_TRAVEL_TIME_SECONDS,
   DEFAULT_REQUEST_PICKUP_TIME_SECONDS,
@@ -492,6 +493,13 @@ function AppShell() {
           <h1 className="app__title">Road network sketcher</h1>
           <button type="button" className="app__btn" onClick={addNode}>
             Add node
+          </button>
+          <button
+            type="button"
+            className="app__btn"
+            onClick={() => exportInstanceZip({ nodes, edges, requests })}
+          >
+            Export
           </button>
           <div
             className="vehicle-palette"
