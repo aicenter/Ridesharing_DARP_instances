@@ -1,0 +1,127 @@
+{
+    "$schema": "https://json-schema.org/draft/2019-09/schema",
+    "$id": "https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/JSON/vehicle_plan_schema.json",
+    "type": "object",
+    "title": "Single-vehicle route plan",
+    "required": [
+        "cost",
+        "vehicle",
+        "departure_time",
+        "arrival_time",
+        "actions"
+    ],
+    "properties": {
+        "cost": {
+            "type": "integer",
+            "title": "Cost of this vehicle's route (seconds)"
+        },
+        "vehicle": {
+            "type": "object",
+            "title": "Vehicle and its initial state",
+            "required": [
+                "index"
+            ],
+            "properties": {
+                "index": {
+                    "type": "integer",
+                    "title": "Vehicle index in the fleet"
+                },
+                "init_position": {
+                    "type": "object",
+                    "title": "Starting location on the road graph",
+                    "required": [
+                        "index"
+                    ],
+                    "properties": {
+                        "index": {
+                            "type": "integer",
+                            "title": "Road graph node index at route start"
+                        }
+                    }
+                },
+                "capacity": {
+                    "type": "integer",
+                    "title": "Maximum passenger load (vehicle capacity)"
+                }
+            }
+        },
+        "departure_time": {
+            "type": "integer",
+            "title": "Time the vehicle departs its start (seconds from horizon origin)"
+        },
+        "arrival_time": {
+            "type": "integer",
+            "title": "Time the vehicle completes the route (seconds from horizon origin)"
+        },
+        "actions": {
+            "type": "array",
+            "title": "Ordered list of stops (pickups and drop-offs)",
+            "items": {
+                "type": "object",
+                "title": "One timetable row at a stop",
+                "required": [
+                    "arrival_time",
+                    "departure_time",
+                    "action"
+                ],
+                "properties": {
+                    "arrival_time": {
+                        "type": "integer",
+                        "title": "Arrival time at this stop (seconds from horizon origin)"
+                    },
+                    "departure_time": {
+                        "type": "integer",
+                        "title": "Departure time from this stop (seconds from horizon origin)"
+                    },
+                    "action": {
+                        "type": "object",
+                        "title": "Request operation performed at this stop",
+                        "required": [
+                            "request_index",
+                            "type"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer",
+                                "title": "Unique stop or operation id"
+                            },
+                            "request_index": {
+                                "type": "integer",
+                                "title": "Index of the passenger request"
+                            },
+                            "type": {
+                                "type": "string",
+                                "title": "Operation kind: pickup or drop_off"
+                            },
+                            "position": {
+                                "type": "object",
+                                "title": "Stop coordinates as a graph node",
+                                "required": [
+                                    "index"
+                                ],
+                                "properties": {
+                                    "index": {
+                                        "type": "integer",
+                                        "title": "Road graph node index for this stop"
+                                    }
+                                }
+                            },
+                            "min_time": {
+                                "type": "integer",
+                                "title": "Earliest time window bound for serving this stop (seconds)"
+                            },
+                            "max_time": {
+                                "type": "integer",
+                                "title": "Latest time window bound for serving this stop (seconds)"
+                            },
+                            "service_duration": {
+                                "type": "integer",
+                                "title": "Time spent loading or unloading at the stop (seconds)"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
