@@ -11,7 +11,7 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   GraphEditorProvider,
   GRAPH_EDITOR_DND_MIME,
@@ -24,6 +24,7 @@ import { VehicleGlyph } from "./components/VehicleGlyph";
 import { RequestGlyph } from "./components/RequestGlyph";
 import { captureCroppedFlowPng } from "./lib/captureFlowPng";
 import { exportInstanceZip } from "./lib/exportInstance";
+import { importInstanceFiles } from "./lib/importInstance";
 import {
   DEFAULT_TRAVEL_TIME_SECONDS,
   DEFAULT_REQUEST_PICKUP_TIME_SECONDS,
@@ -76,6 +77,7 @@ function AppShell() {
   const nextRequestIdRef = useRef(0);
   const flowHostRef = useRef<HTMLDivElement | null>(null);
   const rfInstanceRef = useRef<ReactFlowInstance<RoadNodeType, Edge<RoadEdgeData>> | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const deselectEdges = useCallback(() => {
     setEdges((eds) => eds.map((e) => ({ ...e, selected: false })));
@@ -484,6 +486,42 @@ function AppShell() {
     await exportInstanceZip({ nodes, edges, requests, pngBlob });
   }, [nodes, edges, requests]);
 
+  const applyImportedFiles = useCallback(
+    async (files: File[]) => {
+      const data = await importInstanceFiles(files);
+      setNodes(data.nodes);
+      setEdges(data.edges);
+      setRequests(data.requests);
+      nextLogicalIdRef.current = data.nextLogicalId;
+      nextVehicleIdRef.current = data.nextVehicleId;
+      nextRequestIdRef.current = data.nextRequestId;
+      setSelectedVehicle(null);
+      setSelectedRequest(null);
+      deselectEdges();
+      if (data.warnings.length > 0) {
+        window.alert(data.warnings.join("\n"));
+      }
+      requestAnimationFrame(() => {
+        rfInstanceRef.current?.fitView({ padding: 0.2, duration: 240 });
+      });
+    },
+    [deselectEdges, setEdges, setNodes, setRequests],
+  );
+
+  const onImportFileChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const list = e.target.files;
+      if (!list || list.length === 0) return;
+      // FileList is live: clearing the input empties it, so snapshot before reset.
+      const files = Array.from(list);
+      e.target.value = "";
+      void applyImportedFiles(files).catch((err) => {
+        window.alert(err instanceof Error ? err.message : String(err));
+      });
+    },
+    [applyImportedFiles],
+  );
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Delete" && e.key !== "Backspace") return;
@@ -514,6 +552,23 @@ function AppShell() {
           </button>
           <button type="button" className="app__btn" onClick={() => void handleExport()}>
             Export
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            multiple
+            accept=".csv,.yaml,.yml,.zip,text/csv,application/zip"
+            className="app__file-input"
+            aria-hidden
+            tabIndex={-1}
+            onChange={onImportFileChange}
+          />
+          <button
+            type="button"
+            className="app__btn"
+            onClick={() => importInputRef.current?.click()}
+          >
+            Import
           </button>
           <div
             className="vehicle-palette"
@@ -548,6 +603,9 @@ function AppShell() {
             <span className="vehicle-palette__hint">O→D</span>
           </div>
           <p className="app__hint">
+            <strong>Import</strong> accepts several files at once (<code>dm.csv</code> required;{" "}
+            <code>requests.csv</code>, <code>vehicles.csv</code>, <code>config.yaml</code> optional) or a
+            single <code>.zip</code>.{" "}
             Connect nodes with handles; both directions added. Drag <strong>Vehicle</strong> onto a
             node (default capacity {DEFAULT_VEHICLE_CAPACITY}). Drag chips between nodes to relocate.
             Drag <strong>Request</strong> to set origin, then drag it again to set destination. Layout only.
