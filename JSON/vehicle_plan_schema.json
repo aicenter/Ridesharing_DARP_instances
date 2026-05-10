@@ -17,31 +17,49 @@
         },
         "vehicle": {
             "type": "object",
-            "title": "Vehicle and its initial state",
-            "required": [
-                "index"
-            ],
+            "title": "Vehicle this plan is assigned to (fleet or virtual slot)",
             "properties": {
-                "index": {
-                    "type": "integer",
-                    "title": "Vehicle index in the fleet"
-                },
-                "init_position": {
-                    "type": "object",
-                    "title": "Starting location on the road graph",
-                    "required": [
-                        "index"
-                    ],
-                    "properties": {
-                        "index": {
-                            "type": "integer",
-                            "title": "Road graph node index at route start"
-                        }
-                    }
-                },
                 "capacity": {
                     "type": "integer",
-                    "title": "Maximum passenger load (vehicle capacity)"
+                    "minimum": 1,
+                    "description": "Omitted in JSON → implementation default (e.g. 4)."
+                }
+            },
+            "if": {
+                "properties": {
+                    "type": { "const": "virtual" }
+                }
+            },
+            "then": {
+                "properties": {
+                    "time_to_start": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "Seconds; omitted → 0."
+                    },
+                    "vehicle_count": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Omitted → 1."
+                    }
+                }
+            },
+            "else": {
+                "required": ["index"],
+                "properties": {
+                    "index": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "Index into the instance fleet (DARP_instance vehicles)."
+                    },
+                    "init_position": {
+                        "type": "object",
+                        "description": "Optional; not read by JSON_deserialize but useful for interchange.",
+                        "required": ["index"],
+                        "properties": {
+                            "index": { "type": "integer", "minimum": 0 }
+                        }
+                    }
                 }
             }
         },
