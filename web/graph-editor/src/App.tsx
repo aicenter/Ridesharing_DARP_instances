@@ -25,6 +25,7 @@ import { RequestGlyph } from "./components/RequestGlyph";
 import { captureCroppedFlowPng } from "./lib/captureFlowPng";
 import { exportInstanceZip } from "./lib/exportInstance";
 import { importInstanceFiles } from "./lib/importInstance";
+import { exportSolutionJsonString } from "./lib/exportSolution";
 import {
   DEFAULT_TRAVEL_TIME_SECONDS,
   DEFAULT_REQUEST_PICKUP_TIME_SECONDS,
@@ -36,6 +37,13 @@ import {
   type RequestBadge,
   type RequestState,
 } from "./lib/graphModel";
+import {
+  buildInitialSolution,
+  ensureVehicleColumns,
+  fleetFromNodes,
+  type SolutionItems,
+} from "./lib/solutionModel";
+import { SolutionPanel } from "./components/SolutionPanel";
 import "./App.css";
 
 const nodeTypes = { road: RoadNode };
@@ -71,6 +79,8 @@ function AppShell() {
   const [selectedVehicle, setSelectedVehicle] = useState<SelectedVehicle | null>(null);
   const [requests, setRequests] = useState<RequestState[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<SelectedRequest | null>(null);
+  const [solutionOpen, setSolutionOpen] = useState(false);
+  const [solutionItems, setSolutionItems] = useState<SolutionItems | null>(null);
 
   const nextLogicalIdRef = useRef(0);
   const nextVehicleIdRef = useRef(0);
@@ -255,6 +265,13 @@ function AppShell() {
     },
     [setRequests],
   );
+
+  const flatFleet = useMemo(() => fleetFromNodes(nodes), [nodes]);
+
+  useEffect(() => {
+    if (!solutionOpen) return;
+    setSolutionItems((prev) => (prev ? ensureVehicleColumns(prev, flatFleet) : prev));
+  }, [flatFleet, solutionOpen]);
 
   const graphContextValue = useMemo(
     () => ({
@@ -472,6 +489,27 @@ function AppShell() {
     [selectedRequest, setRequestPickupTime],
   );
 
+  const handleExportSolution = useCallback(() => {
+    if (!solutionItems) return;
+    try {
+      const json = exportSolutionJsonString({
+        nodes,
+        edges,
+        requests,
+        solutionItems,
+      });
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "solution.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : String(e));
+    }
+  }, [nodes, edges, requests, solutionItems]);
+
   const handleExport = useCallback(async () => {
     const host = flowHostRef.current;
     const rf = rfInstanceRef.current;
@@ -569,6 +607,16 @@ function AppShell() {
             onClick={() => importInputRef.current?.click()}
           >
             Import
+          </button>
+          <button
+            type="button"
+            className="app__btn"
+            onClick={() => {
+              setSolutionOpen(true);
+              setSolutionItems((prev) => prev ?? buildInitialSolution(flatFleet, requests));
+            }}
+          >
+            Create solution
           </button>
           <div
             className="vehicle-palette"
@@ -708,6 +756,19 @@ function AppShell() {
               </p>
             )}
           </aside>
+
+          {solutionOpen && solutionItems ? (
+            <SolutionPanel
+              items={solutionItems}
+              onItemsChange={setSolutionItems}
+              vehicles={flatFleet}
+              onClose={() => setSolutionOpen(false)}
+              onResetFromGraph={() =>
+                setSolutionItems(buildInitialSolution(flatFleet, requests))
+              }
+              onExportSolution={handleExportSolution}
+            />
+          ) : null}
         </div>
       </div>
     </GraphEditorProvider>
