@@ -8,6 +8,7 @@ import {
   useNodesState,
   type Connection,
   type Edge,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -21,6 +22,7 @@ import { RoadEdge } from "./components/RoadEdge";
 import { RoadNode, type RoadNodeType } from "./components/RoadNode";
 import { VehicleGlyph } from "./components/VehicleGlyph";
 import { RequestGlyph } from "./components/RequestGlyph";
+import { captureCroppedFlowPng } from "./lib/captureFlowPng";
 import { exportInstanceZip } from "./lib/exportInstance";
 import {
   DEFAULT_TRAVEL_TIME_SECONDS,
@@ -72,6 +74,8 @@ function AppShell() {
   const nextLogicalIdRef = useRef(0);
   const nextVehicleIdRef = useRef(0);
   const nextRequestIdRef = useRef(0);
+  const flowHostRef = useRef<HTMLDivElement | null>(null);
+  const rfInstanceRef = useRef<ReactFlowInstance<RoadNodeType, Edge<RoadEdgeData>> | null>(null);
 
   const deselectEdges = useCallback(() => {
     setEdges((eds) => eds.map((e) => ({ ...e, selected: false })));
@@ -466,6 +470,20 @@ function AppShell() {
     [selectedRequest, setRequestPickupTime],
   );
 
+  const handleExport = useCallback(async () => {
+    const host = flowHostRef.current;
+    const rf = rfInstanceRef.current;
+    let pngBlob: Blob | null = null;
+    if (host && rf && nodes.length > 0) {
+      try {
+        pngBlob = await captureCroppedFlowPng(host, rf, nodes);
+      } catch {
+        pngBlob = null;
+      }
+    }
+    await exportInstanceZip({ nodes, edges, requests, pngBlob });
+  }, [nodes, edges, requests]);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Delete" && e.key !== "Backspace") return;
@@ -494,11 +512,7 @@ function AppShell() {
           <button type="button" className="app__btn" onClick={addNode}>
             Add node
           </button>
-          <button
-            type="button"
-            className="app__btn"
-            onClick={() => exportInstanceZip({ nodes, edges, requests })}
-          >
+          <button type="button" className="app__btn" onClick={() => void handleExport()}>
             Export
           </button>
           <div
@@ -541,10 +555,13 @@ function AppShell() {
         </header>
 
         <div className="app__main">
-          <div className="app__flow">
+          <div className="app__flow" ref={flowHostRef}>
             <ReactFlow
               nodes={nodes}
               edges={edges}
+              onInit={(inst) => {
+                rfInstanceRef.current = inst;
+              }}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
@@ -557,7 +574,10 @@ function AppShell() {
               snapGrid={[16, 16]}
               deleteKeyCode={["Backspace", "Delete"]}
               connectionLineStyle={{ strokeWidth: 2 }}
-              defaultEdgeOptions={{ type: "road", style: { strokeWidth: 2 } }}
+              defaultEdgeOptions={{
+              type: "road",
+              style: { stroke: "#6b7280", fill: "none", strokeWidth: 2 },
+            }}
             >
               <Background gap={16} />
               <Controls />

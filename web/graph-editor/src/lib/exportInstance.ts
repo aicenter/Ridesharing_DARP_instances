@@ -3,8 +3,6 @@ import type { Edge } from "@xyflow/react";
 import type { RoadNodeType } from "../components/RoadNode";
 import type { RoadEdgeData, RequestState } from "./graphModel";
 
-const INF = 2147483647; // max int32, compatible with MatrixTravelTimeProvider.from_csv dtype=np.int32
-
 function csvRow(fields: Array<string | number>): string {
   return `${fields.join(",")}\n`;
 }
@@ -29,14 +27,15 @@ function buildConfigYaml(): string {
 
 function dijkstraAllPairs(n: number, adj: Array<Array<{ to: number; w: number }>>): number[][] {
   const dm: number[][] = [];
+  const unreachable = Number.POSITIVE_INFINITY;
   for (let s = 0; s < n; s++) {
-    const dist = new Array<number>(n).fill(INF);
+    const dist = new Array<number>(n).fill(unreachable);
     const used = new Array<boolean>(n).fill(false);
     dist[s] = 0;
 
     for (let iter = 0; iter < n; iter++) {
       let v = -1;
-      let best = INF;
+      let best = unreachable;
       for (let i = 0; i < n; i++) {
         if (!used[i] && dist[i] < best) {
           best = dist[i];
@@ -51,7 +50,7 @@ function dijkstraAllPairs(n: number, adj: Array<Array<{ to: number; w: number }>
       }
     }
 
-    dm.push(dist.map((x) => (x === INF ? INF : Math.max(0, Math.round(x)))));
+    dm.push(dist.map((x) => (x === unreachable ? unreachable : Math.max(0, Math.round(x)))));
   }
   return dm;
 }
@@ -60,6 +59,8 @@ export type ExportInstanceInput = {
   nodes: RoadNodeType[];
   edges: Edge<RoadEdgeData>[];
   requests: RequestState[];
+  /** Optional screenshot of the graph (cropped to nodes), e.g. `instance.png`. */
+  pngBlob?: Blob | null;
 };
 
 export async function exportInstanceZip(input: ExportInstanceInput) {
@@ -113,10 +114,14 @@ export async function exportInstanceZip(input: ExportInstanceInput) {
 
   const dm = dijkstraAllPairs(nodeCount, adj);
 
-  // dm.csv is a pure numeric matrix with no header (MatrixTravelTimeProvider.from_csv expects header=None).
+  // dm.csv: numeric matrix, no header; unreachable pairs written as `inf`.
   const dmLines: string[] = [];
   for (let i = 0; i < nodeCount; i++) {
-    dmLines.push(csvRow(dm[i]));
+    dmLines.push(
+      csvRow(
+        dm[i].map((x) => (x === Number.POSITIVE_INFINITY ? "inf" : x)),
+      ),
+    );
   }
 
   const zip = new JSZip();
@@ -124,6 +129,9 @@ export async function exportInstanceZip(input: ExportInstanceInput) {
   zip.file("vehicles.csv", vehiclesLines.join(""));
   zip.file("dm.csv", dmLines.join(""));
   zip.file("config.yaml", buildConfigYaml());
+  if (input.pngBlob) {
+    zip.file("instance.png", input.pngBlob);
+  }
 
   const blob = await zip.generateAsync({ type: "blob" });
   const url = URL.createObjectURL(blob);

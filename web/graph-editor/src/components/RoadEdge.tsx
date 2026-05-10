@@ -72,6 +72,9 @@ export function RoadEdge({
         interactionWidth={20}
         style={{
           ...(style as CSSProperties | undefined),
+          // Explicit paint so html-to-image captures paths (CSS-variable stroke can rasterize empty).
+          stroke: "#6b7280",
+          fill: "none",
           strokeWidth: selected ? 3 : 2,
         }}
       />
