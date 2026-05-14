@@ -121,6 +121,16 @@
             "args": [
                 "C:/Google Drive AIC/My Drive/AIC Experiment Data/Line Planning/Instances/LODES/config.yaml"
             ]
+        },
+        {
+            "name": "Insert NYC area",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "python/scripts/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "C:/Google Drive AIC/My Drive/AIC Experiment Data/Line Planning/Instances/LODES/NYC_area.yaml"
+            ]
         }
     ]
 }
