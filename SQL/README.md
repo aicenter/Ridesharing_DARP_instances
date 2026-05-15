@@ -8,6 +8,39 @@ Then apply this repository, in order:
   2. `functions/*.sql`
   3. `procedures/*.sql`
 
+# Procedures
+
+## generate_demand_positions
+
+Samples origin and destination network nodes for selected demand requests and inserts them into `trip_locations`.
+
+Example with an existing location set:
+
+```sql
+CALL generate_demand_positions(
+    p_area_id => 1,
+    p_demand_dataset_ids => ARRAY[2, 3, 4, 5],
+    p_trip_location_set_id => 1,
+    p_start_time => '2022-03-11 18:00:00',
+    p_end_time => '2022-03-11 18:59:59',
+    p_zone_types => ARRAY[2]::smallint[],
+    p_ignored_zones => ARRAY[1, 264, 265]::bigint[]
+);
+```
+
+Example creating a new location set:
+
+```sql
+CALL generate_demand_positions(
+    p_area_id => 1,
+    p_demand_dataset_ids => ARRAY[2, 3, 4, 5],
+    p_trip_location_set_description => 'NYC Friday evening demand positions',
+    p_zone_types => ARRAY[2]::smallint[]
+);
+```
+
+Validation failures raise exceptions, so the current transaction is aborted and rolled back. Requests whose origin or destination zone is outside the selected area are ignored; neighborhood-zone fallback is checked only against the remaining in-area requests.
+
 # address_block
 
 Column | Type | Required | Description
@@ -105,4 +138,3 @@ Column | Type | Required | Description
 `name` | character varying | No | Optional zone label
 `geom` | geometry(MultiPolygon, 4326) | Yes | Zone boundary (WGS 84)
 `type` | smallint | Yes | Foreign key to `zone_type.id` (part of primary key with `id`)
-

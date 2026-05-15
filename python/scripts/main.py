@@ -6,7 +6,7 @@ from roadgraphtool.config import parse_config_file, set_logging
 import roadgraphtool.db
 import roadgraphtool.pipeline
 
-from darpinstances.instance_generation.demand_positions import generate_positions
+# from darpinstances.instance_generation.demand_positions import generate_positions
 
 
 args = sys.argv
@@ -57,16 +57,60 @@ if demand_position_sampling is not None and getattr(
     if zone_types is not None and len(zone_types) == 0:
         zone_types = None
     ignored_zones = getattr(demand_position_sampling, "ignored_zones", None)
-    print_sql = getattr(demand_position_sampling, "print_sql", False)
+    if isinstance(ignored_zones, int):
+        ignored_zones = [ignored_zones]
+    if ignored_zones is not None and len(ignored_zones) == 0:
+        ignored_zones = None
+
+    trip_location_set = demand_position_sampling.trip_location_set
+    if isinstance(trip_location_set, int):
+        trip_location_set_id = trip_location_set
+        trip_location_set_description = None
+    elif isinstance(trip_location_set, str):
+        trip_location_set_id = None
+        trip_location_set_description = trip_location_set
+    else:
+        logging.error(
+            "demand_position_sampling.trip_location_set must be an integer id or a string description."
+        )
+        sys.exit(1)
+
     logging.info("Running demand position sampling (demand_position_sampling)")
-    generate_positions(
-        int(area_id),
-        demand_datasets,
-        demand_position_sampling.trip_location_set,
-        start_time=getattr(demand_position_sampling, "start_time", None),
-        end_time=getattr(demand_position_sampling, "end_time", None),
-        zone_types=zone_types,
-        ignored_zones=ignored_zones,
-        print_sql=print_sql,
+    roadgraphtool.db.db.execute_procedure(
+        """
+        CALL generate_demand_positions(
+            p_area_id => CAST(%s AS smallint),
+            p_demand_dataset_ids => CAST(%s AS integer[]),
+            p_trip_location_set_id => CAST(%s AS integer),
+            p_trip_location_set_description => CAST(%s AS varchar),
+            p_start_time => CAST(%s AS timestamp),
+            p_end_time => CAST(%s AS timestamp),
+            p_zone_types => CAST(%s AS smallint[]),
+            p_ignored_zones => CAST(%s AS bigint[])
+        )
+        """,
+        (
+            int(area_id),
+            demand_datasets,
+            trip_location_set_id,
+            trip_location_set_description,
+            getattr(demand_position_sampling, "start_time", None),
+            getattr(demand_position_sampling, "end_time", None),
+            zone_types,
+            ignored_zones,
+        ),
+        schema=getattr(config, "schema", "public"),
     )
+
+    # Quick rollback path to the previous Python implementation:
+    # generate_positions(
+    #     int(area_id),
+    #     demand_datasets,
+    #     demand_position_sampling.trip_location_set,
+    #     start_time=getattr(demand_position_sampling, "start_time", None),
+    #     end_time=getattr(demand_position_sampling, "end_time", None),
+    #     zone_types=zone_types,
+    #     ignored_zones=ignored_zones,
+    #     print_sql=getattr(demand_position_sampling, "print_sql", False),
+    # )
 
