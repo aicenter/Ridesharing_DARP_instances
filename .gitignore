@@ -9,3 +9,4 @@ __pycache__
 web/graph-editor/node_modules
 web/graph-editor/dist
 
+/.codex/config.toml

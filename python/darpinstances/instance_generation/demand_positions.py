@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from roadgraphtool.db import db
 
@@ -9,24 +9,49 @@ from roadgraphtool.db import db
 # start_time = '2022-03-11 18:00:00'
 # end_time = '2022-03-11 18:59:59'
 # zone_types = [2]
-# trip_location_set = 1
+# trip_location_set = 1  # or a string description to create a new trip_location_sets row
 
 # e.g. for zones in NYC representing trips outside the city borders (264, 265) and the Newark airport which is outside
 # city borders (1)
 # ignored_zones = [1, 264, 265]
 
 
+def _resolve_trip_location_set_id(trip_location_set: Union[int, str]) -> int:
+    if isinstance(trip_location_set, int):
+        return trip_location_set
+    if isinstance(trip_location_set, str):
+        desc = trip_location_set.strip()
+        if not desc:
+            raise ValueError("trip_location_set string must be non-empty")
+        logging.info(
+            "Inserting trip_location_sets row with description %r",
+            desc,
+        )
+        rows = db.execute_sql_and_fetch_all_rows(
+            "INSERT INTO trip_location_sets (description) VALUES (:desc) RETURNING id",
+            {"desc": desc},
+        )
+        new_id = int(rows[0][0])
+        logging.info("Using new trip_location_sets.id=%s", new_id)
+        return new_id
+    raise TypeError(
+        f"trip_location_set must be int or str, got {type(trip_location_set).__name__}"
+    )
+
+
 def generate_positions(
         area_id: int,
         demand_datasets: List[int],
-        start_time: str,
-        end_time: str,
-        zone_types: List[int],
-        trip_location_set: int,
+        trip_location_set: Union[int, str],
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        zone_types: Optional[List[int]] = None,
         ignored_zones: Optional[List[int]] = None,
         print_sql: bool = False
 ):
     logging.info("Selecting demand edges for target area")
+
+    trip_location_set_id = _resolve_trip_location_set_id(trip_location_set)
 
     # select network network_edges
     drop_network_edges()
@@ -61,18 +86,40 @@ def generate_positions(
     logging.info(
         f"Positions will be generated for the following demand datasets: [{', '.join(demand_datasets['name'])}]")
 
-    # zone names
-    zone_type_str = ', '.join((str(zt) for zt in zone_types))
-    sql = f"""
-    SELECT name from zone_type WHERE id IN ({zone_type_str})
-    """
-    zone_types = db.execute_query_to_pandas(sql)
-    logging.info(f"Demand will be joined to zones from the following zones types: [{', '.join(zone_types['name'])}]")
+    if zone_types is None or len(zone_types) == 0:
+        zone_type_str: Optional[str] = None
+        logging.info(
+            "Demand will be joined to zones of any zone type (no zone_types filter)",
+        )
+    else:
+        zone_type_str = ", ".join(str(zt) for zt in zone_types)
+        sql = f"""
+        SELECT name from zone_type WHERE id IN ({zone_type_str})
+        """
+        zone_type_names = db.execute_query_to_pandas(sql)
+        logging.info(
+            "Demand will be joined to zones from the following zone types: [%s]",
+            ", ".join(zone_type_names["name"]),
+        )
+
+    if start_time is not None and end_time is not None:
+        time_clause = (
+            f" AND origin_time BETWEEN '{start_time}' AND '{end_time}'"
+        )
+        time_desc = f"between {start_time} and {end_time}"
+    elif start_time is not None:
+        time_clause = f" AND origin_time >= '{start_time}'"
+        time_desc = f"from {start_time} onward"
+    elif end_time is not None:
+        time_clause = f" AND origin_time <= '{end_time}'"
+        time_desc = f"up to {end_time}"
+    else:
+        time_clause = ""
+        time_desc = "the full time range (no start/end filter)"
 
     sql_base = f"""
     FROM demand
-        WHERE dataset IN({demand_set_str})
-            AND origin_time BETWEEN '{start_time}' AND '{end_time}'
+        WHERE dataset IN({demand_set_str}){time_clause}
     """
     if ignored_zones:
         ignored_zones_str = ", ".join(str(zone_id) for zone_id in ignored_zones)
@@ -93,7 +140,11 @@ def generate_positions(
         logging.info(count_sql)
 
     trip_count = db.execute_count_query(count_sql)
-    logging.info(f"There are {trip_count} trips between {start_time} and {end_time} in the requested demand datasets")
+    logging.info(
+        "There are %s trips (%s) in the requested demand datasets",
+        trip_count,
+        time_desc,
+    )
 
     # joining trip to zones
     logging.info("Checking that all trips have a corresponding zone")
@@ -103,13 +154,15 @@ def generate_positions(
         SELECT *
         {sql_base}
     )"""
+    oz_type = f" AND oz.type IN ({zone_type_str})" if zone_type_str else ""
+    dz_type = f" AND dz.type IN ({zone_type_str})" if zone_type_str else ""
     count_joint_zones_sql = f"""
     {with_sql}
     
     SELECT COUNT(1)
         FROM selected_demand
-        JOIN zones AS oz ON selected_demand.origin = oz.id AND oz.type IN ({zone_type_str})
-        JOIN zones AS dz ON selected_demand.destination = dz.id AND dz.type IN ({zone_type_str})
+        JOIN zones AS oz ON selected_demand.origin = oz.id{oz_type}
+        JOIN zones AS dz ON selected_demand.destination = dz.id{dz_type}
     """
 
     if print_sql:
@@ -125,12 +178,12 @@ def generate_positions(
         
         SELECT selected_demand.origin AS zone_id
         FROM selected_demand
-            LEFT JOIN zones AS oz ON selected_demand.origin = oz.id AND oz.type IN ({zone_type_str})
+            LEFT JOIN zones AS oz ON selected_demand.origin = oz.id{oz_type}
         WHERE oz.id IS NULL
         UNION
         SELECT selected_demand.destination AS zone_id
         FROM selected_demand
-            LEFT JOIN zones AS dz ON selected_demand.destination = dz.id AND dz.type IN ({zone_type_str})
+            LEFT JOIN zones AS dz ON selected_demand.destination = dz.id{dz_type}
         WHERE dz.id IS NULL
         """
         missing = db.execute_query_to_pandas(sql)
@@ -289,7 +342,7 @@ def generate_positions(
             selected_demand.id,
             coalesce(origin_nodes.node_id, origin_neighborhood_nodes.node_id) as origin,
             coalesce(destination_nodes.node_id, destination_neighborhood_nodes.node_id) as destination,
-            {trip_location_set} AS set
+            {trip_location_set_id} AS set
         {from_sql}
             {_get_node_lateral_join(order=True)}
             {_get_node_lateral_join(origin=False, order=True)}
@@ -328,7 +381,7 @@ def generate_positions(
             selected_demand.id,
             origin_nodes.node_id as origin,
             destination_nodes.node_id as destination,
-            {trip_location_set}
+            {trip_location_set_id}
         {from_sql}
             {_get_node_lateral_join(order=True)}
             {_get_node_lateral_join(origin=False, order=True)}
@@ -356,14 +409,18 @@ def _get_node_lateral_join(origin:bool = True, order: bool = False) -> str:
     return sql
 
 
-def _get_zone_join(zone_type_str: str, area_id: int, origin: bool = True, left: bool = False) -> str:
-    zone_alias = 'oz' if origin else 'dz'
-    areas_alias = 'origin_areas' if origin else 'destination_areas'
+def _get_zone_join(
+    zone_type_str: Optional[str], area_id: int, origin: bool = True, left: bool = False
+) -> str:
+    zone_alias = "oz" if origin else "dz"
+    areas_alias = "origin_areas" if origin else "destination_areas"
+    type_filter = (
+        f" AND {zone_alias}.type IN ({zone_type_str})" if zone_type_str else ""
+    )
 
     sql = f"""
     JOIN zones AS {'oz' if origin else 'dz'} 
-        ON {'selected_demand.origin' if origin else 'selected_demand.destination'} = {zone_alias}.id
-        AND {zone_alias}.type IN ({zone_type_str})
+        ON {'selected_demand.origin' if origin else 'selected_demand.destination'} = {zone_alias}.id{type_filter}
     {"LEFT " if left else ""}JOIN areas {areas_alias} 
         ON {areas_alias}.id = {area_id}
         AND st_intersects({areas_alias}.geom, {zone_alias}.geom)

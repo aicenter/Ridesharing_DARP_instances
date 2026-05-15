@@ -39,9 +39,6 @@ if demand_position_sampling is not None and getattr(
         sys.exit(1)
     required = (
         "demand_datasets",
-        "start_time",
-        "end_time",
-        "zone_types",
         "trip_location_set",
     )
     for key in required:
@@ -52,21 +49,23 @@ if demand_position_sampling is not None and getattr(
             )
             sys.exit(1)
     demand_datasets = demand_position_sampling.demand_datasets
-    zone_types = demand_position_sampling.zone_types
+    zone_types = getattr(demand_position_sampling, "zone_types", None)
     if isinstance(demand_datasets, int):
         demand_datasets = [demand_datasets]
     if isinstance(zone_types, int):
         zone_types = [zone_types]
+    if zone_types is not None and len(zone_types) == 0:
+        zone_types = None
     ignored_zones = getattr(demand_position_sampling, "ignored_zones", None)
     print_sql = getattr(demand_position_sampling, "print_sql", False)
     logging.info("Running demand position sampling (demand_position_sampling)")
     generate_positions(
         int(area_id),
         demand_datasets,
-        demand_position_sampling.start_time,
-        demand_position_sampling.end_time,
-        zone_types,
-        int(demand_position_sampling.trip_location_set),
+        demand_position_sampling.trip_location_set,
+        start_time=getattr(demand_position_sampling, "start_time", None),
+        end_time=getattr(demand_position_sampling, "end_time", None),
+        zone_types=zone_types,
         ignored_zones=ignored_zones,
         print_sql=print_sql,
     )
