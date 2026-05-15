@@ -3,9 +3,9 @@ LANGUAGE plpgsql
 AS
 $$
 DECLARE
-    v_edge_count bigint;
+    edge_count bigint;
 BEGIN
-    DROP TABLE IF EXISTS pg_temp.demand_sampling_edges;
+    DROP TABLE IF EXISTS demand_sampling_edges;
 
     RAISE NOTICE 'Creating demand sampling edges table for area %', p_area_id;
 
@@ -23,8 +23,11 @@ BEGIN
         ON from_node_ways.way_id = ways.id
     WHERE ways.tags->'highway' NOT IN ('motorway', 'motorway_link', 'trunk', 'trunk_link');
 
-    SELECT count(1) INTO v_edge_count FROM demand_sampling_edges;
-    RAISE NOTICE 'Created % demand sampling edges. Generating geometry index.', v_edge_count;
+    SELECT count(1) INTO edge_count FROM demand_sampling_edges;
+    IF edge_count = 0 THEN
+        RAISE EXCEPTION 'No demand sampling edges found for area %', p_area_id;
+    END IF;
+    RAISE NOTICE 'Created % demand sampling edges. Generating geometry index.', edge_count;
 
     CREATE INDEX demand_sampling_edges_geom_idx ON demand_sampling_edges USING GIST(geom);
 END;
