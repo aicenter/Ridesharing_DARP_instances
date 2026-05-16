@@ -21,7 +21,12 @@ BEGIN
         ON from_nodes.id = from_node_ways.node_id
     JOIN ways
         ON from_node_ways.way_id = ways.id
-    WHERE ways.tags->'highway' NOT IN ('motorway', 'motorway_link', 'trunk', 'trunk_link');
+    JOIN ways_tags
+        ON ways_tags.way_id = ways.id
+    JOIN tags
+        ON tags.id = ways_tags.tag_id
+        AND tags."key" = 'highway'
+    WHERE ways_tags.tag_value NOT IN ('motorway', 'motorway_link', 'trunk', 'trunk_link');
 
     SELECT count(1) INTO edge_count FROM demand_sampling_edges;
     IF edge_count = 0 THEN

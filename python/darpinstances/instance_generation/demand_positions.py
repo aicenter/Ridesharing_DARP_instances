@@ -68,7 +68,9 @@ def generate_positions(
 --         JOIN nodes to_nodes ON network_edges."to" = to_nodes.id
         JOIN nodes_ways from_node_ways ON from_nodes.id = from_node_ways.node_id
         JOIN ways ON from_node_ways.way_id = ways.id
-        WHERE tags->'highway' NOT IN('motorway', 'motorway_link', 'trunk', 'trunk_link')
+        JOIN ways_tags ON ways_tags.way_id = ways.id
+        JOIN tags ON tags.id = ways_tags.tag_id AND tags."key" = 'highway'
+        WHERE ways_tags.tag_value NOT IN('motorway', 'motorway_link', 'trunk', 'trunk_link')
     );
     CREATE INDEX network_edges_geom_idx ON network_edges USING GIST(geom);
     """
