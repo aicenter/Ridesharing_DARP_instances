@@ -332,23 +332,22 @@ There are two files with meta-data for the solution, `ðŸ–º config.yaml` and `ðŸ–
 - `solver_stats`- solver-specific statistics, if available. For example, for the VGA method, `group_generation_time` and `vehicle_assignment_time` are logged separately.
 
 
-## Instance Creation
-The methodology for the instance creation is described in the article. The process is divided into the following steps:
+## Create Your Own Instances
+The steps to create your own instances are:
 
-![FlowChart_v3-1.png](figures%2FFlowChart_v4.png)
-
-The travel time model (blue in the flow chart) is created by the [road-graph-tool](https://github.com/aicenter/road-graph-tool). The rest is handeled by the code in this repo, which also includes high-level scripts for the instance creation process.
-
-
-### Getting started
-First, no matter of what part of the instance creation process you are interested in, you need to:
-
-1. install the package for this repository: `pip install <path_to_this_repository>/python`,
-1. prepare the configuration files for the database server (for that, see the [Road Graph Tool documentation](https://github.com/aicenter/road-graph-tool#configuration)),
-1. if you are starting with a fresh database, you need to install the SQL tables, functions, etc. For that, call `python python/scripts/install_sql.py <path_to_road-graph-tool_config_file>`.
+1. clone and locally install the [road-graph-tool](https://github.com/aicenter/road-graph-tool) package (so far, we are unable to keep the PyPI version up to date),
+1. clone and locally install the package for this repository,
+1. prepare the configuration files for the database server. See the [configuration section](#configuration) for details.
+1. If you are starting with a fresh database, you need to install the SQL tables, functions, etc. For that, call `python python/scripts/install_sql.py <path_to_road-graph-tool_config_file>`.
+1. Use your custom code to import zone and demand data to the database. See the [zone and demand import section](#zone-and-demand-import) for details.
+1. Call `python python/scripts/main.py <path_to_YAML_config_file>`. This script calls both the main pipeline of Road Graph Tool and the processing steps for the instance creation.
 
 
-### Zone processing
+### Zone and Demand Import
+For each data source, the zone and demand input format is different. Therefore, we cannot provide a generic code for the import. However, you can find the example code for the import in the [demand cell script](python/nb/demand.py).
+
+
+#### Zone processing
 Typically, origin and destination locations in the demand datasets are provided as some area IDs, instead of the actual coordinates. To sample the actual coordinates, we need first import zone data to the database. To do that, you need to:
 
 1. if the type of your zones is not present in the `zone_types` table, first insert the new zone type,
@@ -357,7 +356,43 @@ Typically, origin and destination locations in the demand datasets are provided 
     - You can find the example code for this step in the [demand cell script](python/nb/demand.py)
 
 
-[//]: # (## Demand and Vehicle Processing)
+#### Demand filtration and processing
+To import the demand, you typically need to:
+
+1. download the demand dataset,
+1. filter the data you actually need,
+1. add a new record to the `demand_datasets` table, or find the right `id` for the existing dataset, if you want to use it,
+1. convert the data to the format corresponding to the `demand` table in the database,
+1. and finally, insert the data into the `demand` table.
+
+
+## Instance Creation Configuration
+The methodology for the instance creation is described in the article. The process is divided into the following steps:
+
+![FlowChart_v3-1.png](figures%2FFlowChart_v4.png)
+
+Both Road Graph Tool and this repository use the same `YAML` configuration, so you are supposed to use the same configuration file for both. The Instance Creation Process is composed of steps, where each step has its own `YAML` object in the configuration file.
+
+The travel time model (blue in the flow chart) is created by the [road-graph-tool](https://github.com/aicenter/road-graph-tool). Please refer to the [Road Graph Tool configuration](https://github.com/aicenter/road-graph-tool#configuration)) for details on how to configure the network processing steps.
+The remaining steps (green) are handled by the code in this repo, which also includes high-level scripts for the instance creation process. For guidance on how to configure the instance creation steps, please refer to the following sections.
+
+
+### Request location generation
+`demand_position_sampling`
+
+The implemented sampling sample origin and destination locations independently. It is a uniform sampling across all nodes in the zone of the origin/destination.
+
+If no road network nodes are found in the zone, the sampling is performed in the neighboring zones.
+
+Only the zones that have at least 50% of their area inside the target area (specified by `area_id`) are considered.
+
+Configurable parameters:
+
+- `demand_datasets`: the array of demand dataset IDs to sample from. Default is all demand datasets.
+- `trip_location_set`:
+    - if specified as string, it is the name of the trip location set to use
+    - if specified as integer, it is the ID of the trip location set to use
+
 
 ### Sizing
 The sizing of the instances is performed with the insertion heuristic (IH): 
@@ -367,7 +402,8 @@ The sizing of the instances is performed with the insertion heuristic (IH):
 
 This number is then used in all the experimental results.
 
-### Public Datasets used in the creation of the instances
+
+## Public Datasets used in the creation of the instances
 The following data sources were used to generate demand and travel time data:
 
 | Area                        | Demand Dataset                                                                                     | Zone Dataset                          | Request times |

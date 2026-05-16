@@ -100,15 +100,3 @@ if demand_position_sampling is not None and getattr(
         schema=getattr(config, "schema", "public"),
     )
 
-    # Quick rollback path to the previous Python implementation:
-    # generate_positions(
-    #     int(area_id),
-    #     demand_datasets,
-    #     demand_position_sampling.trip_location_set,
-    #     start_time=getattr(demand_position_sampling, "start_time", None),
-    #     end_time=getattr(demand_position_sampling, "end_time", None),
-    #     zone_types=zone_types,
-    #     ignored_zones=ignored_zones,
-    #     print_sql=getattr(demand_position_sampling, "print_sql", False),
-    # )
-
