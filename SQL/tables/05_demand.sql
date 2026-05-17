@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS public.demand (
     id integer NOT NULL,
     origin bigint NOT NULL,
     destination bigint NOT NULL,
-    origin_time timestamp without time zone NOT NULL,
+    origin_time timestamp without time zone,
     dataset integer NOT NULL,
     passenger_count smallint DEFAULT 1,
     destination_time timestamp without time zone,

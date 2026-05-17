@@ -41,6 +41,54 @@ CALL generate_demand_positions(
 
 Validation failures raise exceptions, so the current transaction is aborted and rolled back. Requests whose origin or destination zone is outside the selected area are ignored; neighborhood-zone fallback is checked only against the remaining in-area requests.
 
+## generate_trip_times
+
+Samples request times for demand rows that already have sampled positions in a selected `trip_location_sets` entry and inserts them into `trip_times`.
+
+Example with an existing time set:
+
+```sql
+CALL generate_trip_times(
+    p_trip_location_set_id => 1,
+    p_trip_time_set_id => 1,
+    p_demand_dataset_ids => ARRAY[2, 3, 4, 5],
+    p_time_mode => 'around_origin_time',
+    p_filter_start_time => '2022-03-11 18:00:00',
+    p_filter_end_time => '2022-03-11 18:59:59',
+    p_distribution => 'uniform',
+    p_time_resolution_minutes => 60
+);
+```
+
+Example creating a new time set with a truncated normal distribution:
+
+```sql
+CALL generate_trip_times(
+    p_trip_location_set_id => 1,
+    p_trip_time_set_description => 'NYC Friday evening sampled request times',
+    p_time_mode => 'around_origin_time',
+    p_distribution => 'truncated_normal',
+    p_time_resolution_minutes => 60,
+    p_std_dev_minutes => 10
+);
+```
+
+Example for demand rows without `origin_time`, sampling inside an absolute interval:
+
+```sql
+CALL generate_trip_times(
+    p_trip_location_set_id => 1,
+    p_trip_time_set_description => 'Generated Friday evening request times',
+    p_demand_dataset_ids => ARRAY[7],
+    p_time_mode => 'between_times',
+    p_sample_start_time => '2022-03-11 18:00:00',
+    p_sample_end_time => '2022-03-11 18:59:59',
+    p_distribution => 'uniform'
+);
+```
+
+Supported modes are `around_origin_time` and `between_times`. In `around_origin_time` mode, both distributions sample around `demand.origin_time` inside a window of `p_time_resolution_minutes`; for example, a 60-minute resolution samples within plus/minus 30 minutes. In `between_times` mode, both distributions sample inside `[p_sample_start_time, p_sample_end_time]`; `truncated_normal` is centered on the midpoint of that interval. When `p_std_dev_minutes` is omitted for `truncated_normal`, it defaults to one sixth of the active sampling window. `p_filter_start_time` and `p_filter_end_time` only select demand rows by `demand.origin_time`; they are separate from the sampling bounds.
+
 # address_block
 
 Column | Type | Required | Description
@@ -67,7 +115,7 @@ Column | Type | Required | Description
 `id` | integer | Yes | Unique identifier for the trip request (default from `demand_id_seq`)
 `origin` | bigint | Yes | Origin node id (`nodes.id` from road-graph-tool)
 `destination` | bigint | Yes | Destination node id (`nodes.id` from road-graph-tool)
-`origin_time` | timestamp without time zone | Yes | Request start time
+`origin_time` | timestamp without time zone | No | Request start time, if known
 `dataset` | integer | Yes | Foreign key to `dataset.id`
 `passenger_count` | smallint | No | Number of passengers (default 1)
 `destination_time` | timestamp without time zone | No | Request end / arrival time, if known

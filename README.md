@@ -327,9 +327,33 @@ There are two files with meta-data for the solution, `🖺 config.yaml` and `�
 `🖺 config.yaml` file contains the experiment configuration, such as the relative path to the instance, method-specific configuration and so on. 
 
 `🖺 config.yaml-performance.json` file contains logged information on the run of the solver. The JSON has the following fields
+
 - `total_time` - total time of the solver run in seconds
 - `peak_memory_KiB` - peak memory usage of the solver in KiB
 - `solver_stats`- solver-specific statistics, if available. For example, for the VGA method, `group_generation_time` and `vehicle_assignment_time` are logged separately.
+
+
+## Implementation Details of the provided instances
+
+### Fleet Sizing
+The sizing of the instances is performed with the insertion heuristic (IH): 
+
+1. We find the lowest number of vehicles for an instance for which the IH solution drops 0 requests. 
+2. We multiply this number by 1.05, adding a buffer of 5% of vehicles. 
+
+This number is then used in all the experimental results.
+
+
+### Public Datasets used in the creation of the instances
+The following data sources were used to generate demand and travel time data:
+
+| Area                        | Demand Dataset                                                                                     | Zone Dataset                          | Request times |
+|-----------------------------|----------------------------------------------------------------------------------------------------|---------------------------------------|---------------|
+| New York City and Manhattan | [NYC Taxi and Limousine Commission](https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page) | [NYC taxi zones]()                    | exact         |
+| Chicago                     | [City of Chicago](https://data.cityofchicago.org/Transportation/Taxi-Trips/wrvz-psew)              | [Census tracts and community areas]() | generated     |
+| Washington, DC              | [City of Washington, DC](https://opendata.dc.gov/search?q=taxi%20trips)                            | [Master Address Repository]()         | generated     |
+
+
 
 
 ## Create Your Own Instances
@@ -394,23 +418,25 @@ Configurable parameters:
     - if specified as integer, it is the ID of the trip location set to use
 
 
-### Sizing
-The sizing of the instances is performed with the insertion heuristic (IH): 
+### Request time generation
+`trip_time_sampling`
 
-1. We find the lowest number of vehicles for an instance for which the IH solution drops 0 requests. 
-2. We multiply this number by 1.05, adding a buffer of 5% of vehicles. 
+The implemented sampling generates request times only for demand requests that already have sampled positions in the configured `trip_location_set`. It can either sample around each request's `demand.origin_time`, or sample inside a fixed time interval for demand rows where `origin_time` is unknown.
 
-This number is then used in all the experimental results.
+Configurable parameters:
 
+- `trip_location_set`: integer ID of the existing trip location set used to select requests with sampled positions.
+- `trip_time_set`:
+    - if specified as string, it is the name of a new trip time set to create
+    - if specified as integer, it is the ID of the existing trip time set to use
+- `time_mode`: supported values are `around_origin_time` and `between_times`; default is `around_origin_time`.
+- `distribution`: supported values are `uniform` and `truncated_normal`.
+- `time_resolution_minutes`: full sampling window around `demand.origin_time` in `around_origin_time` mode; for example, `60` samples within plus/minus 30 minutes.
+- `sample_start_time`, `sample_end_time`: required in `between_times` mode; generated request times are sampled inside this interval.
+- `std_dev_minutes`: optional standard deviation for `truncated_normal`; when omitted, it defaults to one sixth of the active sampling window.
+- `demand_datasets` or `dataset_ids`: optional array of demand dataset IDs to sample from.
+- `filter_start_time`, `filter_end_time`: optional selection bounds applied to `demand.origin_time`. The old names `start_time` and `end_time` are still accepted as aliases for these filter bounds.
 
-## Public Datasets used in the creation of the instances
-The following data sources were used to generate demand and travel time data:
-
-| Area                        | Demand Dataset                                                                                     | Zone Dataset                          | Request times |
-|-----------------------------|----------------------------------------------------------------------------------------------------|---------------------------------------|---------------|
-| New York City and Manhattan | [NYC Taxi and Limousine Commission](https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page) | [NYC taxi zones]()                    | exact         |
-| Chicago                     | [City of Chicago](https://data.cityofchicago.org/Transportation/Taxi-Trips/wrvz-psew)              | [Census tracts and community areas]() | generated     |
-| Washington, DC              | [City of Washington, DC](https://opendata.dc.gov/search?q=taxi%20trips)                            | [Master Address Repository]()         | generated     |
 
 
 
