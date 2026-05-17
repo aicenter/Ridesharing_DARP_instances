@@ -132,7 +132,7 @@ def get_map(config: Dict) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
         nodes = gpd.GeoDataFrame(
             nodes,
             geometry=gpd.points_from_xy(nodes.x, nodes.y),
-            crs=f'epsg:{config["map"]["SRID"]}'
+            crs="epsg:4326"
         )
         edges_file_path = path.join(map_dir, 'edges.csv')
         logging.info("Loading edges from %s", path.abspath(edges_file_path))
@@ -165,3 +165,24 @@ def get_map(config: Dict) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     nodes.set_index('id', inplace=True)
 
     return nodes, edges
+
+
+def get_exported_map_nodes(config: Dict) -> gpd.GeoDataFrame:
+    area_dir = config['area_dir']
+    nodes_file_path = path.join(area_dir, 'map', 'nodes.csv')
+
+    if not path.exists(nodes_file_path):
+        raise FileNotFoundError(
+            f"Map nodes file not found at {path.abspath(nodes_file_path)}. "
+            "Demand export requires the RGT-exported nodes.csv with a db_id column."
+        )
+
+    logging.info("Loading exported map nodes from %s", path.abspath(nodes_file_path))
+    nodes = pd.read_csv(nodes_file_path, index_col=None, delim_whitespace=True)
+    nodes = gpd.GeoDataFrame(
+        nodes,
+        geometry=gpd.points_from_xy(nodes.x, nodes.y),
+        crs="epsg:4326"
+    )
+    nodes.set_index('id', inplace=True)
+    return nodes

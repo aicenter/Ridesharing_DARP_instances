@@ -438,6 +438,31 @@ Configurable parameters:
 - `filter_start_time`, `filter_end_time`: optional selection bounds applied to `demand.origin_time`. The old names `start_time` and `end_time` are still accepted as aliases for these filter bounds.
 
 
+### Demand export
+`demand_export`
+
+Exports selected demand from the database to the instance request format by calling the existing demand generation/export code in load mode. The step uses sampled positions from `trip_locations` and, if configured, sampled request times from `trip_times`.
+
+The export maps database node IDs from `trip_locations` to instance/DM node indices using the `db_id` column in `nodes.csv`.
+
+Configurable parameters:
+
+- `instance_dir` (optional): output directory for generated files. If not provided, the instance generation config directory is used.
+- `filepath` (optional): request file path. If not provided, the `<instance_dir>/requests.csv` file is used.
+- `demand_datasets`: demand dataset IDs to export.
+- `trip_location_set`: sampled position set ID.
+- `trip_time_set`: sampled time set ID.
+- `filter_start_time`, `filter_end_time` (optional): time bounds.
+
+
+### Instance config export
+`instance_config_export`
+
+Writes the instance `config.yaml`. All path-like fields in the exported YAML are written relative to the exported config file location.
+
+Configurable parameters:
+
+- `filepath`: output YAML file. Defaults to `<demand_export.instance_dir>/instance.yaml`.
 
 
 ## Solution Checker
