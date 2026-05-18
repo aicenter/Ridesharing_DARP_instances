@@ -1,0 +1,20 @@
+{
+    "$schema": "https://json-schema.org/draft/2019-09/schema",
+    "$id": "https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/JSON/virtual_vehicle.schema.json",
+    "type": "object",
+    "title": "Virtual vehicles used in the solution",
+    "required": [
+        "time_to_start",
+        "vehicle_count"
+    ],
+    "properties": {
+        "time_to_start": {
+            "type": "integer",
+            "title": "Time to reach the first request (seconds)"
+        },
+        "vehicle_count": {
+            "type": "integer",
+            "title": "Number of vehicles available"
+        }
+    }
+}

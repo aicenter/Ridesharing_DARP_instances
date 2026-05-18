@@ -1,0 +1,48 @@
+{
+    "$schema": "https://json-schema.org/draft/2019-09/schema",
+    "$id": "https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/JSON/action.schema.json",
+    "type": "object",
+    "title": "Unserved stop leg (pickup or drop-off)",
+    "required": [
+        "id"
+    ],
+    "properties": {
+        "id": {
+            "type": "integer",
+            "title": "Unique stop or operation id"
+        },
+        "request_index": {
+            "type": "integer",
+            "title": "Index of the passenger request"
+        },
+        "type": {
+            "type": "string",
+            "title": "Leg kind: pickup or drop_off"
+        },
+        "position": {
+            "type": "object",
+            "title": "Stop location as a road graph node",
+            "required": [
+                "index"
+            ],
+            "properties": {
+                "index": {
+                    "type": "integer",
+                    "title": "Road graph node index"
+                }
+            }
+        },
+        "min_time": {
+            "type": "integer",
+            "title": "Earliest service time at this stop (seconds from horizon origin)"
+        },
+        "max_time": {
+            "type": "integer",
+            "title": "Latest service time at this stop (seconds from horizon origin)"
+        },
+        "service_duration": {
+            "type": "integer",
+            "title": "Time spent loading or unloading (seconds)"
+        }
+    }
+}

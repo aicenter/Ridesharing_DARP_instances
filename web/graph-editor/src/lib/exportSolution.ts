@@ -201,7 +201,7 @@ function makeUnservedLeg(
 }
 
 /**
- * Build a JSON object matching `JSON/solution_schema.json` (plans follow `vehicle_plan_schema.json`).
+ * Build a JSON object matching `JSON/solution.schema.json` (plans follow `vehicle_plan.schema.json`).
  */
 export function buildSolutionExportObject(input: ExportSolutionInput): Record<string, unknown> {
   const { nodes, edges, requests, solutionItems } = input;

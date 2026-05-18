@@ -319,7 +319,7 @@ The solution is stored in `🗎 config.yaml-solution.json` and contains the foll
 
 All locations in the solution file are node IDs from the road network. The node IDs are the same as in the `🖺 nodes.csv` file in the instance folder. All times are in seconds from the start of the day.
 
-A complete description of the solution format is given by the [JSON schema](solution_schema.json) in this repository.
+A complete description of the solution format is given by the [JSON schema](JSON/solution.schema.json) in this repository.
 
 ### Solution meta-data
 There are two files with meta-data for the solution, `🖺 config.yaml` and `🖺 config.yaml-performance.json`
