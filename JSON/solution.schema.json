@@ -9,6 +9,12 @@
         "dropped_requests"
     ],
     "properties": {
+        "problem": {
+            "enum": [
+                "DARP",
+                "fleet-sizing"
+            ]
+        },
         "cost": {
             "type": "integer",
             "default": 0,
@@ -18,6 +24,14 @@
             "type": "integer",
             "default": 0,
             "title": "Same total cost expressed in whole minutes (rounded)"
+        },
+        "vehicles": {
+            "type": "array",
+            "default": [],
+            "title": "Vehicles used in the solution. Required for fleet-sizing problems.",
+            "items": {
+                "$ref": "vehicle.schema.json"
+            }
         },
         "virtual_vehicle": {
             "title": "Virtual vehicle used in the solution",
@@ -73,28 +87,46 @@
             }
         }
     },
-    "if": {
-        "properties": {
-            "plans": {
-                "contains": {
-                    "type": "object",
-                    "properties": {
-                        "vehicle": {
+    "allOf": [
+        {
+            "if": {
+                "properties": {
+                    "problem": {
+                        "const": "fleet-sizing"
+                    }
+                }
+            },
+            "then": {
+                "required": [
+                    "vehicles"
+                ]
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "plans": {
+                        "contains": {
                             "type": "object",
                             "properties": {
-                                "type": {
-                                    "const": "virtual"
+                                "vehicle": {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "const": "virtual"
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
+            },
+            "then": {
+                "required": [
+                    "virtual_vehicle"
+                ]
             }
         }
-    },
-    "then": {
-        "required": [
-            "virtual_vehicle"
-        ]
-    }
+    ]
 }

@@ -1,0 +1,18 @@
+{
+    "type": "object",
+    "title": "Vehicle",
+    "required": [
+        "index",
+        "capacity"
+    ],
+    "properties": {
+        "index": {
+            "type": "integer",
+            "description": "Index of the vehicle"
+        },
+        "capacity": {
+            "type": "integer",
+            "description": "Capacity of the vehicle"
+        }
+    }
+}
