@@ -455,6 +455,31 @@ Configurable parameters:
 - `filter_start_time`, `filter_end_time` (optional): time bounds.
 
 
+### Vehicle generation
+`vehicle_generation`
+
+Generates `vehicles.csv` from expected demand origin areas. The SQL function samples origin zones weighted by selected demand count, then samples valid road-network nodes from those zones. Python maps the sampled database node IDs to the continuous instance node IDs using the `db_id` column in `nodes.csv`.
+
+The step inherits `area_id`, `demand_datasets`, `trip_location_set`, `trip_time_set`, `filter_start_time`, `filter_end_time`, `instance_dir`, and `save_shp` from `demand_export` when they are not specified directly.
+
+Configurable parameters:
+
+- `vehicle_count` (optional): exact number of vehicles to generate.
+- `vehicle_to_request_ratio` (optional): used when `vehicle_count` is not provided; the count is `ceil(selected_request_count * vehicle_to_request_ratio)`.
+- `vehicle_capacity`: vehicle capacity. If omitted, `vehicles.vehicle_capacity` is used.
+- `zone_types` (optional): zone types used for origin-zone sampling.
+- `seed` or `random_seed` (optional): PostgreSQL random seed in the range `[-1, 1]`; default is `0.123`.
+
+Example:
+
+```yaml
+vehicle_generation:
+  activated: true
+  vehicle_count: 100
+  vehicle_capacity: 4
+```
+
+
 ### Instance config export
 `instance_config_export`
 

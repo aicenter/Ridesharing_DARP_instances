@@ -4,7 +4,9 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import logging
-from os import path, getcwd
+from os import path, getcwd, makedirs
+
+import sqlalchemy
 
 from roadgraphtool.db import db
 from darpinstances.instance_generation.demand_generation import get_dataset_string, assign_nearest_nodes, NearestNodeProvider
@@ -12,6 +14,7 @@ from darpinstances.instance_generation.demand_generation import get_dataset_stri
 
 def _save_vehicles_csv(vehicles: pd.DataFrame, dir: str):
     df = vehicles[['origin', 'capacity']]
+    makedirs(dir, exist_ok=True)
     out_path = path.join(dir, 'vehicles.csv')
     logging.info("Saving vehicles to %s", out_path)
     df.to_csv(out_path, sep='\t', index=False, header=False)
@@ -22,11 +25,111 @@ def _save_vehicles_shapefile(vehicles: pd.DataFrame, nodes, crsg, dir: str):
     pickup = vehicles[['origin']].copy()
 
     pickup['geometry'] = nodes_.loc[pickup['origin']].geometry.values
-    pickup = gpd.GeoDataFrame(pickup, geometry='geometry', crs={'init': f'epsg:{crsg}'})
+    pickup = gpd.GeoDataFrame(pickup, geometry='geometry', crs=f'epsg:{crsg}')
 
+    makedirs(path.join(dir, 'shapefiles'), exist_ok=True)
     out_filepath = path.join(dir, 'shapefiles', 'vehicles.shp')
     logging.info("Saving shapefile with vehicles to: %s", out_filepath)
     pickup.to_file(driver='ESRI Shapefile', filename=out_filepath)
+
+
+def _to_int_list(value):
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return [value]
+    if isinstance(value, str):
+        return [int(part.strip()) for part in value.split(",") if part.strip()]
+    return [int(item) for item in value]
+
+
+def _qualified_sql_identifier(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def _map_db_vehicle_nodes_to_instance_nodes(vehicle_starts: pd.DataFrame, nodes: gpd.GeoDataFrame) -> pd.DataFrame:
+    if 'db_id' not in nodes.columns:
+        raise Exception(
+            "Loaded map nodes do not contain a db_id column. "
+            "Vehicle export from database sampling requires nodes.csv generated from database nodes."
+        )
+
+    node_map = nodes.reset_index()[['id', 'db_id']]
+    duplicate_db_ids = node_map[node_map.duplicated('db_id', keep=False)]
+    if not duplicate_db_ids.empty:
+        raise Exception(
+            "Loaded map nodes contain duplicate db_id values. "
+            f"Examples: {duplicate_db_ids['db_id'].head(10).tolist()}"
+        )
+
+    db_id_to_instance_id = node_map.set_index('db_id')['id']
+    missing_db_ids = pd.Index(vehicle_starts.origin_db_id.dropna().unique()).difference(db_id_to_instance_id.index)
+    if not missing_db_ids.empty:
+        raise Exception(
+            "Some sampled vehicle start nodes are missing from nodes.csv/db_id mapping. "
+            f"Missing count: {len(missing_db_ids)}. Examples: {missing_db_ids[:10].tolist()}"
+        )
+
+    vehicles = pd.DataFrame()
+    vehicles['origin'] = vehicle_starts.origin_db_id.map(db_id_to_instance_id).astype(int)
+    return vehicles
+
+
+def generate_vehicles_from_db(nodes: gpd.GeoDataFrame, config: dict) -> pd.DataFrame:
+    logging.info("Loading vehicle start positions from DB")
+
+    schema = config.get('schema', 'public')
+    sql_function = (
+        f"{_qualified_sql_identifier(schema)}."
+        f"{_qualified_sql_identifier('select_vehicle_starts_for_export')}"
+    )
+    sql = sqlalchemy.text(f"""
+        SELECT
+            vehicle_index,
+            origin_db_id
+        FROM {sql_function}(
+            CAST(:area_id AS smallint),
+            CAST(:demand_dataset_ids AS integer[]),
+            CAST(:trip_location_set_id AS integer),
+            CAST(:trip_time_set_ids AS integer[]),
+            CAST(:start_time AS timestamp),
+            CAST(:end_time AS timestamp),
+            CAST(:zone_types AS smallint[]),
+            CAST(:vehicle_count AS integer),
+            CAST(:vehicle_to_request_ratio AS real),
+            CAST(:random_seed AS real)
+        )
+    """)
+    vehicle_starts = db.execute_query_to_pandas(
+        sql,
+        params={
+            'area_id': config['area_id'],
+            'demand_dataset_ids': _to_int_list(config['demand']['dataset']),
+            'trip_location_set_id': int(config['demand']['positions_set']),
+            'trip_time_set_ids': _to_int_list(config['demand'].get('time_set')),
+            'start_time': config['demand'].get('min_time'),
+            'end_time': config['demand'].get('max_time'),
+            'zone_types': _to_int_list(config.get('zone_types')),
+            'vehicle_count': config['vehicles'].get('vehicle_count'),
+            'vehicle_to_request_ratio': config['vehicles'].get('vehicle_to_request_ratio'),
+            'random_seed': config.get('seed', 0.123),
+        },
+    )
+
+    if vehicle_starts.empty:
+        logging.error("No vehicle starts fetched from the database.")
+        raise Exception("No vehicle starts fetched from the database.")
+
+    vehicles = _map_db_vehicle_nodes_to_instance_nodes(vehicle_starts, nodes)
+    vehicles['capacity'] = int(config['vehicles']['vehicle_capacity'])
+
+    instance_dir = config['instance_dir']
+    _save_vehicles_csv(vehicles, instance_dir)
+
+    if config.get("save_shp", False):
+        _save_vehicles_shapefile(vehicles, nodes, 4326, instance_dir)
+
+    return vehicles
 
 
 def _load_datetime(string: str):

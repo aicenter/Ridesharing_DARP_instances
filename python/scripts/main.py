@@ -10,6 +10,7 @@ import roadgraphtool.db
 import roadgraphtool.pipeline
 from darpinstances.instance_generation.demand import generate_demand
 from darpinstances.instance_generation.map import get_exported_map_nodes
+from darpinstances.instance_generation.vehicles import generate_vehicles_from_db
 
 # from darpinstances.instance_generation.demand_positions import generate_positions
 
@@ -17,6 +18,8 @@ from darpinstances.instance_generation.map import get_exported_map_nodes
 def _config_to_dict(value):
     if isinstance(value, SimpleNamespace):
         return {key: _config_to_dict(item) for key, item in vars(value).items()}
+    if isinstance(value, dict):
+        return {key: _config_to_dict(item) for key, item in value.items()}
     if isinstance(value, list):
         return [_config_to_dict(item) for item in value]
     return value
@@ -217,6 +220,170 @@ def _get_demand_export_request_filepath(demand_export_config, fallback_instance_
 
     instance_dir = demand_export_config.get("instance_dir", fallback_instance_dir)
     return Path(instance_dir) / "requests.csv"
+
+
+def _build_vehicle_generation_config(config, vehicle_generation, demand_export_config, default_instance_dir):
+    export_demand_config = {}
+    if demand_export_config is not None:
+        export_demand_config = demand_export_config.get("demand", {})
+
+    vehicle_config = _config_to_dict(config)
+    vehicle_config.update(_config_to_dict(vehicle_generation))
+
+    vehicle_config["instance_dir"] = _get_first_config_value(
+        vehicle_generation,
+        "instance_dir",
+        default=(
+            demand_export_config.get("instance_dir")
+            if demand_export_config is not None
+            else default_instance_dir
+        ),
+    )
+    vehicle_config["area_dir"] = _get_first_config_value(
+        vehicle_generation,
+        "area_dir",
+        default=(
+            demand_export_config.get("area_dir")
+            if demand_export_config is not None
+            else vehicle_config["instance_dir"]
+        ),
+    )
+    vehicle_config["save_shp"] = bool(
+        _get_first_config_value(
+            vehicle_generation,
+            "save_shp",
+            default=(
+                demand_export_config.get("save_shp")
+                if demand_export_config is not None
+                else getattr(config, "save_shp", False)
+            ),
+        )
+    )
+    vehicle_config["schema"] = getattr(config, "schema", "public")
+    vehicle_config["seed"] = _get_first_config_value(
+        vehicle_generation,
+        "seed",
+        "random_seed",
+        default=0.123,
+    )
+    vehicle_config["zone_types"] = _get_first_config_value(
+        vehicle_generation,
+        "zone_types",
+        default=None,
+    )
+
+    vehicle_config["area_id"] = _get_first_config_value(
+        vehicle_generation,
+        "area_id",
+        default=(
+            demand_export_config.get("area_id")
+            if demand_export_config is not None
+            else getattr(config, "area_id", None)
+        ),
+    )
+    if vehicle_config["area_id"] is None:
+        logging.error(
+            "vehicle_generation is activated but area_id is not set: "
+            "configure vehicle_generation.area_id, demand_export.area_id, or top-level area_id."
+        )
+        sys.exit(1)
+
+    export_map_config = _config_to_dict(getattr(config, "map", SimpleNamespace()))
+    export_map_config.update(_config_to_dict(getattr(vehicle_generation, "map", SimpleNamespace())))
+    if "path" not in export_map_config:
+        export_map_config["path"] = Path(vehicle_config["area_dir"]) / "map"
+    vehicle_config["map"] = export_map_config
+
+    vehicle_generation_demand = _config_to_dict(getattr(vehicle_generation, "demand", SimpleNamespace()))
+    demand_config = {}
+    demand_config["dataset"] = _get_first_config_value(
+        vehicle_generation,
+        "demand_datasets",
+        "dataset_ids",
+        "dataset",
+        default=vehicle_generation_demand.get("dataset", export_demand_config.get("dataset")),
+    )
+    if demand_config["dataset"] is None:
+        logging.error(
+            "vehicle_generation requires demand_datasets, dataset_ids, or dataset "
+            "unless demand_export provides one."
+        )
+        sys.exit(1)
+
+    demand_config["positions_set"] = _get_first_config_value(
+        vehicle_generation,
+        "trip_location_set",
+        "positions_set",
+        default=vehicle_generation_demand.get(
+            "positions_set",
+            export_demand_config.get("positions_set"),
+        ),
+    )
+    if demand_config["positions_set"] is None:
+        logging.error(
+            "vehicle_generation requires trip_location_set or positions_set "
+            "unless demand_export provides one."
+        )
+        sys.exit(1)
+
+    demand_config["time_set"] = _get_first_config_value(
+        vehicle_generation,
+        "trip_time_set",
+        "time_set",
+        default=vehicle_generation_demand.get("time_set", export_demand_config.get("time_set")),
+    )
+    demand_config["min_time"] = _get_first_config_value(
+        vehicle_generation,
+        "filter_start_time",
+        "start_time",
+        "min_time",
+        default=vehicle_generation_demand.get("min_time", export_demand_config.get("min_time")),
+    )
+    demand_config["max_time"] = _get_first_config_value(
+        vehicle_generation,
+        "filter_end_time",
+        "end_time",
+        "max_time",
+        default=vehicle_generation_demand.get("max_time", export_demand_config.get("max_time")),
+    )
+    vehicle_config["demand"] = demand_config
+
+    base_vehicles_config = _config_to_dict(getattr(config, "vehicles", SimpleNamespace()))
+    base_vehicles_config.update(_config_to_dict(getattr(vehicle_generation, "vehicles", SimpleNamespace())))
+    vehicles_config = {}
+    vehicles_config["vehicle_capacity"] = _get_first_config_value(
+        vehicle_generation,
+        "vehicle_capacity",
+        default=base_vehicles_config.get("vehicle_capacity"),
+    )
+    if vehicles_config["vehicle_capacity"] is None:
+        logging.error(
+            "vehicle_generation requires vehicle_capacity or top-level vehicles.vehicle_capacity."
+        )
+        sys.exit(1)
+
+    vehicles_config["vehicle_count"] = _get_first_config_value(
+        vehicle_generation,
+        "vehicle_count",
+        default=base_vehicles_config.get("vehicle_count"),
+    )
+    vehicles_config["vehicle_to_request_ratio"] = _get_first_config_value(
+        vehicle_generation,
+        "vehicle_to_request_ratio",
+        default=base_vehicles_config.get("vehicle_to_request_ratio"),
+    )
+    if (
+        vehicles_config["vehicle_count"] is None
+        and vehicles_config["vehicle_to_request_ratio"] is None
+    ):
+        logging.error(
+            "vehicle_generation requires vehicle_count or vehicle_to_request_ratio, "
+            "either directly or under top-level vehicles."
+        )
+        sys.exit(1)
+    vehicle_config["vehicles"] = vehicles_config
+
+    return vehicle_config
 
 
 def _build_instance_config(config, instance_config_export, default_instance_dir, demand_export_config=None):
@@ -503,6 +670,19 @@ if demand_export is not None and getattr(demand_export, "activated", False):
         None,
         None,
     )
+
+vehicle_generation = getattr(config, "vehicle_generation", None)
+if vehicle_generation is not None and getattr(vehicle_generation, "activated", False):
+    vehicle_generation_config = _build_vehicle_generation_config(
+        config,
+        vehicle_generation,
+        demand_export_config,
+        config_path.parent,
+    )
+
+    logging.info("Running vehicle generation (vehicle_generation)")
+    map_nodes = get_exported_map_nodes(vehicle_generation_config)
+    generate_vehicles_from_db(map_nodes, vehicle_generation_config)
 
 instance_config_export = getattr(config, "instance_config_export", None)
 if instance_config_export is not None and getattr(
