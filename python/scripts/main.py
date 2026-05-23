@@ -34,6 +34,25 @@ def _get_first_config_value(config_object, *names, default=None):
     return default
 
 
+def _get_first_dict_value(mapping, *keys, default=None):
+    for key in keys:
+        if key in mapping and mapping[key] is not None:
+            return mapping[key]
+    return default
+
+
+def _normalize_demand_dataset_ids(value):
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return [value]
+    if isinstance(value, list):
+        if len(value) == 0:
+            return None
+        return value
+    return value
+
+
 def _require_config_value(config_object, object_name, *names):
     value = _get_first_config_value(config_object, *names)
     if value is None:
@@ -181,25 +200,31 @@ def _build_demand_export_config(config, demand_export, default_instance_dir):
         demand_filepath = Path(export_config["instance_dir"]) / "requests.csv"
     demand_config["filepath"] = demand_filepath
 
-    demand_config["dataset"] = _get_first_config_value(
-        demand_export,
-        "demand_datasets",
-        "dataset_ids",
-        "dataset",
-        default=demand_config.get("dataset"),
+    demand_config["dataset"] = _normalize_demand_dataset_ids(
+        _get_first_config_value(
+            demand_export,
+            "demand_datasets",
+            "dataset_ids",
+            "dataset",
+            default=_get_first_dict_value(
+                demand_config,
+                "demand_datasets",
+                "dataset_ids",
+                "dataset",
+            ),
+        )
     )
     if demand_config["dataset"] is None:
-        logging.error("demand_export requires demand_datasets, dataset_ids, or dataset.")
-        sys.exit(1)
+        logging.info("No demand datasets specified; using all demand datasets.")
 
-    demand_config["positions_set"] = _get_first_config_value(
+    demand_config["trip_location_set"] = _get_first_config_value(
         demand_export,
         "trip_location_set",
         "positions_set",
         default=demand_config.get("positions_set"),
     )
-    if demand_config["positions_set"] is None:
-        logging.error("demand_export requires trip_location_set or positions_set.")
+    if demand_config["trip_location_set"] is None:
+        logging.error("demand_export requires trip_location_set or trip_location_set.")
         sys.exit(1)
 
     trip_time_set = _get_first_config_value(
@@ -408,19 +433,23 @@ def _build_vehicle_generation_config(config, vehicle_generation, demand_export_c
 
     vehicle_generation_demand = _config_to_dict(getattr(vehicle_generation, "demand", SimpleNamespace()))
     demand_config = {}
-    demand_config["dataset"] = _get_first_config_value(
-        vehicle_generation,
-        "demand_datasets",
-        "dataset_ids",
-        "dataset",
-        default=vehicle_generation_demand.get("dataset", export_demand_config.get("dataset")),
+    demand_config["dataset"] = _normalize_demand_dataset_ids(
+        _get_first_config_value(
+            vehicle_generation,
+            "demand_datasets",
+            "dataset_ids",
+            "dataset",
+            default=_get_first_dict_value(
+                vehicle_generation_demand,
+                "demand_datasets",
+                "dataset_ids",
+                "dataset",
+                default=export_demand_config.get("dataset"),
+            ),
+        )
     )
     if demand_config["dataset"] is None:
-        logging.error(
-            "vehicle_generation requires demand_datasets, dataset_ids, or dataset "
-            "unless demand_export provides one."
-        )
-        sys.exit(1)
+        logging.info("No demand datasets specified; using all demand datasets.")
 
     demand_config["positions_set"] = _get_first_config_value(
         vehicle_generation,
@@ -428,7 +457,7 @@ def _build_vehicle_generation_config(config, vehicle_generation, demand_export_c
         "positions_set",
         default=vehicle_generation_demand.get(
             "positions_set",
-            export_demand_config.get("positions_set"),
+            export_demand_config.get("trip_location_set"),
         ),
     )
     if demand_config["positions_set"] is None:
@@ -770,18 +799,19 @@ if trip_time_sampling is not None and getattr(trip_time_sampling, "activated", F
 
 demand_export_config = None
 demand_export = getattr(config, "demand_export", None)
-if demand_export is not None and getattr(demand_export, "activated", False):
+if demand_export is not None:
     demand_export_config = _build_demand_export_config(config, demand_export, config_path.parent)
 
-    logging.info("Running demand export (demand_export)")
-    map_nodes = get_exported_map_nodes(demand_export_config)
+    if getattr(demand_export, "activated", False):
+        logging.info("Running demand export (demand_export)")
+        map_nodes = get_exported_map_nodes(demand_export_config)
 
-    generate_demand(
-        map_nodes,
-        demand_export_config,
-        None,
-        None,
-    )
+        generate_demand(
+            map_nodes,
+            demand_export_config,
+            None,
+            None,
+        )
 
 vehicle_generation = getattr(config, "vehicle_generation", None)
 if vehicle_generation is not None and getattr(vehicle_generation, "activated", False):

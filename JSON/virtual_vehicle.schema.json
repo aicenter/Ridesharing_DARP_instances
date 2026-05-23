@@ -4,10 +4,15 @@
     "type": "object",
     "title": "Virtual vehicles used in the solution",
     "required": [
+        "capacity",
         "time_to_start",
         "vehicle_count"
     ],
     "properties": {
+        "capacity": {
+            "type": "integer",
+            "title": "Capacity of the vehicle"
+        },
         "time_to_start": {
             "type": "integer",
             "title": "Time to reach the first request (seconds)"
