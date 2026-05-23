@@ -3,7 +3,8 @@
     "title": "Vehicle",
     "required": [
         "index",
-        "capacity"
+        "capacity",
+        "initial_location"
     ],
     "properties": {
         "index": {
@@ -13,6 +14,10 @@
         "capacity": {
             "type": "integer",
             "description": "Capacity of the vehicle"
+        },
+        "initial_location": {
+            "type": "integer",
+            "description": "Initial location of the vehicle"
         }
     }
 }
