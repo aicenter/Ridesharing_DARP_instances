@@ -7,9 +7,11 @@ from types import SimpleNamespace
 import yaml
 from roadgraphtool.config import parse_config_file, set_logging
 import roadgraphtool.db
+from roadgraphtool.distance_matrix_generator import resolve_dm_filepath
 import roadgraphtool.pipeline
 from darpinstances.instance_generation.demand import generate_demand
 from darpinstances.instance_generation.map import get_exported_map_nodes
+from darpinstances.instance_generation.short_trips_pruning import prune_short_trips
 from darpinstances.instance_generation.vehicles import generate_vehicles_from_db
 
 # from darpinstances.instance_generation.demand_positions import generate_positions
@@ -76,6 +78,24 @@ def _relative_path_string(value, base_dir):
     if path.is_absolute():
         return os.path.relpath(path, base_dir).replace("\\", "/")
     return str(value).replace("\\", "/")
+
+
+def _resolve_path(value, base_dir):
+    if value is None:
+        return None
+    filepath = Path(value)
+    if filepath.is_absolute():
+        return filepath
+    return Path(base_dir) / filepath
+
+
+def _resolve_instance_artifact_path(value, instance_dir, config_dir):
+    filepath = Path(value)
+    if filepath.is_absolute():
+        return filepath
+    if filepath.parent == Path("."):
+        return Path(instance_dir) / filepath
+    return Path(config_dir) / filepath
 
 
 def _relativize_config_paths(value, base_dir, key=None):
@@ -220,6 +240,98 @@ def _get_demand_export_request_filepath(demand_export_config, fallback_instance_
 
     instance_dir = demand_export_config.get("instance_dir", fallback_instance_dir)
     return Path(instance_dir) / "requests.csv"
+
+
+def _get_instance_config_value(instance_config, *keys):
+    value = instance_config
+    for key in keys:
+        if not isinstance(value, dict) or key not in value:
+            return None
+        value = value[key]
+    return value
+
+
+def _build_short_trips_pruning_config(
+    config,
+    short_trips_pruning,
+    config_dir,
+    demand_export_config,
+    instance_config_output_path=None,
+    instance_config=None,
+):
+    pruning_config = _config_to_dict(short_trips_pruning)
+
+    instance_dir = _get_first_config_value(short_trips_pruning, "instance_dir")
+    if instance_dir is None and demand_export_config is not None:
+        instance_dir = demand_export_config.get("instance_dir")
+    if instance_dir is None and instance_config_output_path is not None:
+        instance_dir = instance_config_output_path.parent
+    if instance_dir is None:
+        instance_dir = config_dir
+    instance_dir = _resolve_path(instance_dir, config_dir)
+
+    requests_filepath = _get_first_config_value(
+        short_trips_pruning,
+        "filepath",
+        "requests_filepath",
+        "requests_file",
+    )
+    if requests_filepath is not None:
+        requests_filepath = _resolve_instance_artifact_path(
+            requests_filepath,
+            instance_dir,
+            config_dir,
+        )
+    elif instance_config is not None and instance_config_output_path is not None:
+        requests_filepath = _get_instance_config_value(instance_config, "demand", "filepath")
+        if requests_filepath is not None:
+            requests_filepath = _resolve_path(requests_filepath, instance_config_output_path.parent)
+    if requests_filepath is None and demand_export_config is not None:
+        requests_filepath = _get_demand_export_request_filepath(demand_export_config, instance_dir)
+        requests_filepath = _resolve_instance_artifact_path(
+            requests_filepath,
+            instance_dir,
+            config_dir,
+        )
+    if requests_filepath is None:
+        requests_filepath = instance_dir / "requests.csv"
+
+    try:
+        dm_filepath = resolve_dm_filepath(config)
+    except ValueError as error:
+        logging.error(
+            "short_trips_pruning is activated but the RGT distance matrix path "
+            "could not be resolved: %s",
+            error,
+        )
+        sys.exit(1)
+
+    bins = pruning_config.get("bins")
+    if bins is None:
+        logging.error("short_trips_pruning is activated but missing required field: bins.")
+        sys.exit(1)
+
+    seed = _get_first_config_value(
+        short_trips_pruning,
+        "seed",
+        "random_seed",
+        default=0,
+    )
+
+    result = {
+        "requests_filepath": requests_filepath,
+        "dm_filepath": dm_filepath,
+        "bins": bins,
+        "seed": seed,
+    }
+    speed_mps = getattr(short_trips_pruning, "speed_mps", None)
+    speed_kmh = getattr(short_trips_pruning, "speed_kmh", None)
+    if speed_mps is not None:
+        result["speed_mps"] = speed_mps
+    if speed_kmh is not None:
+        result["speed_kmh"] = speed_kmh
+
+    return result
 
 
 def _build_vehicle_generation_config(config, vehicle_generation, demand_export_config, default_instance_dir):
@@ -684,6 +796,8 @@ if vehicle_generation is not None and getattr(vehicle_generation, "activated", F
     map_nodes = get_exported_map_nodes(vehicle_generation_config)
     generate_vehicles_from_db(map_nodes, vehicle_generation_config)
 
+instance_config_output_path = None
+exported_instance_config = None
 instance_config_export = getattr(config, "instance_config_export", None)
 if instance_config_export is not None and getattr(
     instance_config_export,
@@ -696,7 +810,23 @@ if instance_config_export is not None and getattr(
         config_path.parent,
         demand_export_config,
     )
+    instance_config_output_path = output_path
+    exported_instance_config = instance_config
     output_path.parent.mkdir(parents=True, exist_ok=True)
     logging.info("Writing instance config to %s", output_path)
     with open(output_path, "w", encoding="utf-8") as outfile:
         yaml.safe_dump(instance_config, outfile, sort_keys=False)
+
+short_trips_pruning = getattr(config, "short_trips_pruning", None)
+if short_trips_pruning is not None and getattr(short_trips_pruning, "activated", False):
+    pruning_config = _build_short_trips_pruning_config(
+        config,
+        short_trips_pruning,
+        config_path.parent,
+        demand_export_config,
+        instance_config_output_path,
+        exported_instance_config,
+    )
+
+    logging.info("Running short-trip pruning (short_trips_pruning)")
+    prune_short_trips(pruning_config)

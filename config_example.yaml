@@ -1,0 +1,133 @@
+# Unified pipeline configuration for Ridesharing DARP Instances.
+#
+# Used by: python python/scripts/main.py <path_to_this_file>
+#
+# For the configuration of the Road Graph Tool pipeline, refer to road-graph-tool/config_example.yaml.
+# https://github.com/aicenter/road-graph-tool#configuration
+
+# Sample origin/destination nodes per demand row (SQL: generate_demand_positions)
+demand_position_sampling: {
+    activated: false,
+
+    # area_id defaults to top-level area_id when omitted
+    demand_datasets: [1],
+    # Integer = existing trip_location_sets.id; string = create/use by description
+    trip_location_set: "example_trip_locations",
+
+    # Optional filters on demand.origin_time
+    # start_time: 2019-01-01 00:00:00,
+    # end_time: 2019-01-02 00:00:00,
+
+    # Optional zone filters (zone_types.id values); default uses all zone types in area
+    # zone_types: [1],
+    # ignored_zones: [],
+}
+
+# Sample request pickup times for rows with positions (SQL: generate_trip_times)
+trip_time_sampling: {
+    activated: false,
+
+    trip_location_set: 1,
+    trip_time_set: "example_trip_times",
+    distribution: uniform,
+
+    # time_mode: around_origin_time | between_times
+    time_mode: around_origin_time,
+    time_resolution_minutes: 60,
+
+    # Required for between_times mode:
+    # sample_start_time: 2019-01-01 08:00:00,
+    # sample_end_time: 2019-01-01 18:00:00,
+
+    # distribution: truncated_normal
+    # std_dev_minutes: 10,
+
+    # demand_datasets: [1],
+    # filter_start_time: 2019-01-01 00:00:00,
+    # filter_end_time: 2019-01-02 00:00:00,
+}
+
+# Export requests.csv from DB (uses trip_locations / trip_times)
+demand_export: {
+    activated: false,
+
+    instance_dir: ./Instances/Andorra/instances/start_08-00/duration_24_h/max_delay_03_min,
+    # filepath: ./requests.csv,
+
+    demand_datasets: [1],
+    trip_location_set: 1,
+    trip_time_set: 1,
+
+    filter_start_time: 2019-01-01 08:00:00,
+    filter_end_time: 2019-01-02 08:00:00,
+
+    finish_instance_file: true,
+}
+
+# Generate vehicles.csv from sampled demand origins (SQL + nodes.csv db_id mapping)
+vehicle_generation: {
+    activated: false,
+
+    # Inherits instance_dir, demand_datasets, trip_location_set, trip_time_set,
+    # filter times, and area_id from demand_export when not set here.
+
+    vehicle_count: 100,
+    vehicle_capacity: 4,
+    # vehicle_to_request_ratio: 0.05,
+    # zone_types: [1],
+    seed: 0.123,
+}
+
+# Write solver-ready instance config.yaml (paths relative to output file)
+instance_config_export: {
+    activated: false,
+
+    instance_dir: ./Instances/Andorra/instances/start_08-00/duration_24_h/max_delay_03_min,
+    filepath: ./config.yaml,
+
+    merge: {
+        area_dir: ../..,
+        dm_filepath: ../../dm.h5,
+        problem: DARP,
+        start_time: 2019-01-01 08:00:00,
+        max_travel_time_delay: {
+            mode: relative,
+            relative: 1.0,
+        },
+        max_pickup_delay: 180,
+        vehicles: {
+            filepath: ./vehicles.csv,
+            vehicle_capacity: 4,
+            start_time: 2019-01-01 08:00:00,
+        },
+        demand: {
+            filepath: ./requests.csv,
+            min_time: 2019-01-01 08:00:00,
+            max_time: 2019-01-02 08:00:00,
+        },
+        map: {
+            path: ../../map,
+            SRID: 4326,
+            SRID_plane: 32631,
+        },
+    },
+}
+
+short_trips_pruning: 
+    activated: false
+    # Runs after instance_config_export. Creates requests.csv.before_short_trip_pruning
+    # and fails if that backup already exists.
+    # The distance matrix path is resolved from the RGT root dm_filepath, or
+    # from export.dir plus dm_generator.output_format when dm_filepath is omitted.
+    seed: 0
+    bins: 
+      - 
+        threshold: 200
+        ratio: 1.0
+      - 
+        threshold: 1609
+        ratio: 0.81
+      - 
+        threshold: 8045
+        ratio: 0.19
+    

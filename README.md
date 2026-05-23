@@ -480,6 +480,36 @@ vehicle_generation:
 ```
 
 
+### Short-trip pruning
+`short_trips_pruning`
+
+Prunes short requests from `requests.csv` as a final file-based step. The step creates `requests.csv.before_short_trip_pruning` and then overwrites `requests.csv` with the pruned demand. If the backup already exists, the step fails to prevent repeated pruning of the same file.
+
+Trip distance is estimated from the distance matrix travel time using the same constant-speed fallback used when generating travel-time matrices without per-edge speed data: `distance_m = travel_time_seconds * 14`.
+
+Configurable parameters:
+
+- `bins`: ordered list of pruning bins. Each bin has `threshold` in meters and `ratio` of trips to discard.
+- `filepath`, `requests_filepath`, or `requests_file` (optional): request file to prune. If omitted, the step uses the exported instance config demand filepath, then demand export filepath, then `<instance_dir>/requests.csv`.
+- Distance matrix path is resolved by Road Graph Tool rules: root-level `dm_filepath`, or `<export.dir>/dm.csv` / `<export.dir>/dm.h5` based on `dm_generator.output_format`.
+- `seed` or `random_seed` (optional): random seed for reproducible pruning; default is `0`.
+- `speed_mps` or `speed_kmh` (optional): override for converting travel time to distance; default is `14 m/s`.
+
+Example:
+
+```yaml
+short_trips_pruning:
+  activated: true
+  bins:
+    - threshold: 200
+      ratio: 1.0
+    - threshold: 1609
+      ratio: 0.81
+    - threshold: 8045
+      ratio: 0.19
+```
+
+
 ### Instance config export
 `instance_config_export`
 

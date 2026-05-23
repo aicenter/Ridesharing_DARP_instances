@@ -26,6 +26,7 @@ from darpinstances.travel_time_provider import (
     MatrixTravelTimeProvider,
     GridTravelTimeProvider,
 )
+from roadgraphtool.distance_matrix_generator import resolve_dm_filepath
 
 
 class DARPInstanceConfiguration:
@@ -103,6 +104,7 @@ def load_instance_config(config_file_path: Path, set_defaults: bool = True) -> d
     logging.info(f"Loading instance config from {config_file_path_abs}")
     with open(config_file_path_abs, 'r') as config_file:
         config = yaml.load(config_file, Loader=DarpinstancesTimestampLoader)
+        config['config_dir'] = config_file_path.parent
 
         if set_defaults:
             defaults = {
@@ -510,12 +512,7 @@ def load_instance(
             travel_time_provider = GridTravelTimeProvider(size, distance)
             logging.info("Using grid travel time provider (size=%s, distance=%s)", size, distance)
         else:
-            if 'dm_filepath' in instance_config:
-                dm_filepath = Path(instance_config['dm_filepath'])
-            else:
-                dm_filepath = Path(instance_config['area_dir']) / 'dm.h5'
-                if not dm_filepath.exists():
-                    dm_filepath = Path(instance_config['area_dir']) / 'dm.csv'
+            dm_filepath = resolve_dm_filepath(instance_config)
             check_file_exists(dm_filepath)
             logging.info("Reading dm from: {}".format(os.path.realpath(dm_filepath)))
             travel_time_provider = MatrixTravelTimeProvider.read_from_file(dm_filepath)
