@@ -20,7 +20,7 @@ import json
 import plotly.express as px
 
 
-SOLUTION_PATH = Path(r"C:\\Workspaces\\AIC\\Ridesharing_DARP_instances\\path\\to\\solution.json")
+SOLUTION_PATH = Path(r"C:/Google Drive AIC/My Drive/AIC Experiment Data/DARP/Results/IH_benchmark/v1/length_32/output/config.yaml-solution.json")
 
 with SOLUTION_PATH.open("r", encoding="utf-8") as solution_file:
     solution = json.load(solution_file)

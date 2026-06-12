@@ -131,6 +131,16 @@
             "args": [
                 "C:/Google Drive AIC/My Drive/AIC Experiment Data/Line Planning/Instances/LODES/NYC_area.yaml"
             ]
+        },
+        {
+            "name": "Analyze IH Benchmarking Results",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "python/nb/single_solution_analysis.py",
+            "console": "integratedTerminal",
+            "args": [
+                "C:/Google Drive AIC/My Drive/AIC Experiment Data/DARP/Results/IH_benchmark/v1/length_32"
+            ]
         }
     ]
 }
