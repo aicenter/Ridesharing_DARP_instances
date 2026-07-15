@@ -7,6 +7,7 @@
 - added: unified extended instance format (all fields optional, legacy instances unchanged): `max_delay` (canonical name of `max_travel_time_delay`), boarding-anchored `max_travel_delay` (absolute/relative), per-request constraint override columns (inherit / override / disabled), composite demand (seats, wheelchair slots, child seats), named vehicle equipment, exclusive rides, per-request service times, required arrival times with a symmetric earliness bound, walking distance limits, per-vehicle driver rules (total/continuous drive time, minimum pause) and operation windows checked per stop, per-vehicle `return_to_depot`, and a distance matrix (`dist_filepath`) — see README "Extended instance format"
 - added: generalized weighted cost model (`cost` config section) whose defaults reproduce the legacy cost exactly
 - added: solution checker validates all new constraints and reports failures per constraint class in the JSON verdict
+- changed (breaking interpretation): the derived maximum drop-off time no longer includes the `max_pickup_delay` slack — a late pickup now eats into the delay budget (the window equals `desired pickup + min travel time + max_delay` exactly); re-checking pre-existing solutions may flag drop-offs that used the old slack
 - fixed: vehicles.json operation windows are timezone-aware and accept plain seconds; vehicles.json can specify `position` directly without a stations file
 
 - fixed: solution checker no longer adds `max_pickup_delay` to action max times a second time (it is already included on instance load)

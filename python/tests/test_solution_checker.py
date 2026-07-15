@@ -11,9 +11,9 @@ Tests for the solution checker fixes:
 The fixture instance (fixtures/basic) has 4 nodes and 2 requests:
 - travel times: 0->1: 100, 1->2: 200, 1->3: 60, 3->1: 60
 - R0: 1 -> 2, desired pickup t=1000, min travel time 200,
-      max pickup time 1120, max drop-off time 1620
+      max pickup time 1120, max drop-off time 1500
 - R1: 3 -> 1, desired pickup t=1100, min travel time 60,
-      max pickup time 1220, max drop-off time 1580
+      max pickup time 1220, max drop-off time 1460
 - one vehicle at node 0 with capacity 2
 """
 import copy
@@ -72,7 +72,7 @@ def two_request_solution() -> dict:
                         "departure_time": 1160,
                         "action": {
                             "id": 3, "request_index": 1, "type": "drop_off",
-                            "position": {"index": 1}, "max_time": 1580,
+                            "position": {"index": 1}, "max_time": 1460,
                             "service_duration": 0,
                         },
                     },
@@ -81,7 +81,7 @@ def two_request_solution() -> dict:
                         "departure_time": 1360,
                         "action": {
                             "id": 1, "request_index": 0, "type": "drop_off",
-                            "position": {"index": 2}, "max_time": 1620,
+                            "position": {"index": 2}, "max_time": 1500,
                             "service_duration": 0,
                         },
                     },
@@ -119,7 +119,7 @@ def single_request_solution(departure_time: int = 900) -> dict:
                         "departure_time": dropoff_arrival,
                         "action": {
                             "id": 1, "request_index": 0, "type": "drop_off",
-                            "position": {"index": 2}, "max_time": 1620,
+                            "position": {"index": 2}, "max_time": 1500,
                             "service_duration": 0,
                         },
                     },

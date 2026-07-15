@@ -72,7 +72,7 @@ def valid_solution() -> dict:
                         "departure_time": 1160,
                         "action": {
                             "id": 3, "request_index": 1, "type": "drop_off",
-                            "position": {"index": 1}, "max_time": 1520,
+                            "position": {"index": 1}, "max_time": 1460,
                             "service_duration": 0,
                         },
                     },
@@ -81,7 +81,7 @@ def valid_solution() -> dict:
                         "departure_time": 1370,
                         "action": {
                             "id": 1, "request_index": 0, "type": "drop_off",
-                            "position": {"index": 2}, "max_time": 1620,
+                            "position": {"index": 2}, "max_time": 1500,
                             "service_duration": 10,
                         },
                     },
@@ -137,7 +137,7 @@ def test_extended_valid_solution_passes(instance_dir):
 
 def test_relative_max_delay_mode(instance_dir):
     # delay = 1.5 * min_travel_time: R0 300 s (same windows as absolute),
-    # R1 90 s (drop-off window 1310, still met at 1160)
+    # R1 90 s (drop-off window 1250, still met at 1160)
     patch_config(instance_dir, "max_delay", {"mode": "relative", "relative": 1.5})
     ok, failures = check(instance_dir, valid_solution())
     assert ok, {failure.name: count for failure, count in failures.items() if count}
@@ -183,7 +183,7 @@ def test_exclusive_ride(instance_dir):
 def test_max_travel_delay_boarding_anchored(instance_dir):
     # idle the vehicle at D1 so R0's ride grows to 490 s: boarding-anchored
     # delay 290 s exceeds the 280 s limit, while the requested-time-anchored
-    # drop-off window (1620) is still met at arrival 1500
+    # drop-off window (1500) is still met exactly at arrival 1500
     solution = valid_solution()
     actions = solution["plans"][0]["actions"]
     actions[2]["departure_time"] = 1300

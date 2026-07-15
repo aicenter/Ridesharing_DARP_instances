@@ -394,12 +394,11 @@ def load_demand_legacy(
         max_pickup_delay = instance_config.get('max_pickup_delay', max_prolongation)
 
         max_pickup_time = request_datetime + timedelta(seconds=max_pickup_delay)
-        # min_drop_off_time = request_time + timedelta(seconds=int(min_travel_time))
+        # the drop-off window carries no extra pickup-delay slack: a late pickup
+        # eats into the delay budget (unified max_delay semantics)
         max_drop_off_time = request_datetime + timedelta(seconds=int(min_travel_time)) + timedelta(
             seconds=max_prolongation
-        ) + timedelta(seconds=instance_config.get('max_pickup_delay', 0))
-        if 'max_pickup_delay' in instance_config:
-            max_drop_off_time += timedelta(seconds=instance_config['max_pickup_delay'])
+        )
 
         vehicle_id = int(line[5]) if len(line) > 5 else None
         requests.append(
@@ -618,18 +617,19 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
         pickup_delay_baseline = max_pickup_delay_config if max_pickup_delay_config is not None else max_delay
         max_pickup_delay = _resolve_limit(pickup_delay_override, pickup_delay_baseline)
 
-        # derived action time windows; None = unbounded
+        # derived action time windows; None = unbounded. The drop-off window is
+        # the requested pickup time + minimal travel time + max_delay, with NO
+        # extra pickup-delay slack: a late pickup eats into the delay budget
+        # (the window is exactly `arrival - (request time + min travel time)
+        # <= max_delay`, matching the allocator's max-delay predicate)
         max_pickup_time = (
             request_time + timedelta(seconds=float(max_pickup_delay)) if max_pickup_delay is not None else None
         )
         if max_delay is None:
             max_drop_off_time = None
         else:
-            # the drop-off window includes the pickup delay slack: a request
-            # picked up at its max pickup time keeps its full delay budget
-            pickup_slack = _resolve_limit(pickup_delay_override, instance_config.get('max_pickup_delay', 0)) or 0
             max_drop_off_time = request_time + timedelta(
-                seconds=round(min_travel_time + max_delay + pickup_slack)
+                seconds=round(min_travel_time + max_delay)
             )
 
         # max_travel_delay: anchored to the actual pickup, checked during the

@@ -189,13 +189,10 @@ The *maximum delay* for each request should be interpreted as follows:
 
 The logic for the maximum time for each action is as follows:
 
-- **The maximum pickup time**: is equal to `max_pickup_delay` if provided, otherwise, it is equal to the *maximum delay* for the request.
-- **The maximum dropoff time**: is more compliacted. It is calculated as *desired pickup time* + *minimal travel time* + *maximum delay* + `max_pickup_delay` if provided. 
-  - The logic is as follows:
-    - If the `max_pickup_delay` is provided, we need to add it to the *maximum delay* as we consider *maximum delay* to be an extra time that can be added to the minimal travel time. Therefore, the *maximum dropoff time* is equal to the *maximum pickup time* + *minimal travel time* + *maximum delay*.
-      - This may seem counterintuitive, but it is necessary to enable combining the `relative`  mode for *maximum delay* with the `max_pickup_delay` parameter.
-    - If the `max_pickup_delay` is not provided, the *maximum dropoff time* is simply the *maximum pickup time* + *minimal travel time*, as the *maximum delay* is already included in the *maximum pickup time*.
-    - Finally, the *maximum dropoff time* is rounded up to the nearest second.
+- **The maximum pickup time**: is equal to *desired pickup time* + `max_pickup_delay` if provided, otherwise, it is equal to *desired pickup time* + the *maximum delay* for the request.
+- **The maximum dropoff time**: is equal to *desired pickup time* + *minimal travel time* + *maximum delay*, rounded to the nearest second.
+  - No `max_pickup_delay` slack is added: a late pickup eats into the delay budget. The window is therefore exactly equivalent to the constraint *actual dropoff* − (*desired pickup time* + *minimal travel time*) ≤ *maximum delay*.
+  - Note: before the unified format, the *maximum dropoff time* additionally included the `max_pickup_delay` value (a request picked up at its maximum pickup time kept its full delay budget). That interpretation existed to keep checking window-only and was dropped in favor of the more natural rule above; re-checking old solutions may therefore flag drop-offs that were previously within the extra slack.
 
 Apart from the configuration above, there can be other fields used for the instance generation. These fields has no effect on the instance itself, and can be safely ignored when using the instances.
 
