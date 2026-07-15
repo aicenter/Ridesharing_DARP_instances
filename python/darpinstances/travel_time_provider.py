@@ -47,8 +47,10 @@ class MatrixTravelTimeProvider(TravelTimeProvider):
     """Travel time from a precomputed distance/travel-time matrix."""
 
     @classmethod
-    def from_csv(cls, path_to_dm: Path):
-        dm = pd.read_csv(path_to_dm, header=None, dtype=np.int32)
+    def from_csv(cls, path_to_dm: Path, dtype=np.int32):
+        # travel time matrices are integer seconds; distance matrices may carry
+        # full-precision floats (metres), so the dtype is overridable
+        dm = pd.read_csv(path_to_dm, header=None, dtype=dtype)
         return cls(dm.values)
 
     @classmethod
@@ -69,9 +71,9 @@ class MatrixTravelTimeProvider(TravelTimeProvider):
         return self.dm[from_index][to_index]
 
     @classmethod
-    def read_from_file(cls, dm_filepath: Path):
+    def read_from_file(cls, dm_filepath: Path, dtype=np.int32):
         if dm_filepath.suffix == '.csv':
-            return cls.from_csv(dm_filepath)
+            return cls.from_csv(dm_filepath, dtype=dtype)
         else:
             return cls.from_hdf(dm_filepath)
 

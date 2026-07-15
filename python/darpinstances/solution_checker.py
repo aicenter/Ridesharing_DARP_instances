@@ -82,6 +82,9 @@ class SolutionChecker:
         config = instance.darp_instance_config
         vehicle = plan.vehicle
         cost_weights = config.cost_weights
+        # allocator-style accounting counts passenger components once per
+        # request and measures delay from the pickup departure (see CostWeights)
+        per_request_accounting = getattr(cost_weights, "accounting", "per_traveller") == "per_request"
 
         if config.start_time and plan.departure_time < config.start_time:
             fail(
@@ -345,13 +348,19 @@ class SolutionChecker:
             travel_time_total += travel_time
 
             # passenger delay cost component: drop-off delay versus the ideal
-            # direct ride starting at the desired pickup time
+            # direct ride starting at the desired pickup time. Under per-request
+            # accounting the delay is measured from the pickup DEPARTURE (the
+            # rider's own boarding service time is not delay) and counted once
+            # per request instead of per traveller.
             if is_drop_off:
                 min_drop_off_time = request.pickup_action.min_time + timedelta(
                     seconds=request.min_travel_time
                 )
                 drop_off_delay_seconds = (time - min_drop_off_time).total_seconds()
-                passenger_delay_total += drop_off_delay_seconds * demand.total_travellers
+                if per_request_accounting:
+                    passenger_delay_total += drop_off_delay_seconds - request.pickup_action.service_time
+                else:
+                    passenger_delay_total += drop_off_delay_seconds * demand.total_travellers
 
             # vehicle id check
             if not fleet_sizing and action_data.action.request.required_vehicle_id is not None:
@@ -422,17 +431,26 @@ class SolutionChecker:
                         )
                     else:
                         earliness = (required_arrival - time).total_seconds()
-                        # the earliness bound reuses the travel delay budget
-                        if max_travel_delay is not None and earliness > max_travel_delay:
+                        # the earliness bound defaults to the travel delay
+                        # budget; resolved instances may override it per request
+                        # via the max_earliness column (None = unbounded)
+                        if request.constraints.resolved:
+                            max_earliness = request.constraints.max_earliness
+                        else:
+                            max_earliness = max_travel_delay
+                        if max_earliness is not None and earliness > max_earliness:
                             fail(
                                 Failure.ARRIVAL_TOO_EARLY,
                                 "[{}. plan] Request {} arrived {} s before the required arrival time {}, more than {} s early.".format(
-                                    plan_counter, request.index, earliness, required_arrival, max_travel_delay
+                                    plan_counter, request.index, earliness, required_arrival, max_earliness
                                 ),
                             )
                         earliness_total += earliness
 
-                ride_time_total += ride_seconds * demand.total_travellers
+                if per_request_accounting:
+                    ride_time_total += ride_seconds
+                else:
+                    ride_time_total += ride_seconds * demand.total_travellers
 
             # service time
             time += timedelta(seconds=int(action_data.action.service_time))
@@ -474,47 +492,55 @@ class SolutionChecker:
             previous_action = action_data.action
 
         # return to init position; the instance-level setting can be overridden
-        # per vehicle
+        # per vehicle. A vehicle may also declare cost_return_to_depot: the leg
+        # is then priced (travel time, distance, plan duration) without being
+        # constraint-checked — the return is physical but not required by any
+        # constraint.
         return_to_depot = config.return_to_depot
         if vehicle is not None and vehicle.return_to_depot is not None:
             return_to_depot = vehicle.return_to_depot
+        include_return_leg = return_to_depot or (
+            vehicle is not None and getattr(vehicle, "cost_return_to_depot", False)
+        )
         if (
             not fleet_sizing
             and vehicle is not None
             and previous_action
-            and return_to_depot
+            and include_return_leg
         ):
             travel_time_to_depot = travel_time_provider.get_travel_time(
                 previous_action.node, vehicle.initial_position
             )
             travel_time_to_depot = travel_time_to_depot / travel_time_divider
             travel_time_total += travel_time_to_depot
-            total_drive_seconds += travel_time_to_depot
-            continuous_drive_seconds += travel_time_to_depot
             if distance_provider is not None:
                 distance_total += distance_provider.get_travel_time(
                     previous_action.node, vehicle.initial_position
                 )
             time += timedelta(seconds=int(travel_time_to_depot))
 
-            # the depot return leg must fit the operation window and driver rules
-            if operation_end is not None and time > operation_end:
-                fail(
-                    Failure.OPERATION_WINDOW,
-                    "[{}. plan] Depot return at {} is after the vehicle operation end {}.".format(
-                        plan_counter, time, operation_end
-                    ),
-                )
-            if (
-                vehicle.max_drive_time_without_pause is not None
-                and continuous_drive_seconds > vehicle.max_drive_time_without_pause
-            ):
-                fail(
-                    Failure.DRIVER_PAUSE,
-                    "[{}. plan] Continuous drive time {} s exceeds the vehicle limit {} s on the depot return leg.".format(
-                        plan_counter, continuous_drive_seconds, vehicle.max_drive_time_without_pause
-                    ),
-                )
+            if return_to_depot:
+                # the constrained return leg counts toward the driver rules and
+                # must fit the operation window
+                total_drive_seconds += travel_time_to_depot
+                continuous_drive_seconds += travel_time_to_depot
+                if operation_end is not None and time > operation_end:
+                    fail(
+                        Failure.OPERATION_WINDOW,
+                        "[{}. plan] Depot return at {} is after the vehicle operation end {}.".format(
+                            plan_counter, time, operation_end
+                        ),
+                    )
+                if (
+                    vehicle.max_drive_time_without_pause is not None
+                    and continuous_drive_seconds > vehicle.max_drive_time_without_pause
+                ):
+                    fail(
+                        Failure.DRIVER_PAUSE,
+                        "[{}. plan] Continuous drive time {} s exceeds the vehicle limit {} s on the depot return leg.".format(
+                            plan_counter, continuous_drive_seconds, vehicle.max_drive_time_without_pause
+                        ),
+                    )
 
         # per-vehicle total drive time
         if (

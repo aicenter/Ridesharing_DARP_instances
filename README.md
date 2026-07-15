@@ -247,7 +247,8 @@ Attribute columns:
 | `exclusive` | 0/1: an exclusive request may not share the vehicle with other requests (default 0) |
 | `required_equipment` | semicolon-separated equipment names the vehicle must carry (e.g. `ramp;low_floor`) |
 | `required_vehicle_id` | index of the only vehicle allowed to serve this request |
-| `required_arrival_time` | latest allowed drop-off arrival; arriving more than the `max_travel_delay` budget *before* it is also invalid (symmetric earliness bound) |
+| `required_arrival_time` | latest allowed drop-off arrival; arriving more than the earliness budget *before* it is also invalid (symmetric earliness bound) |
+| `max_earliness` | earliness budget before `required_arrival_time` (seconds); empty = inherit the request's `max_travel_delay` (the historical behaviour), `-1` = earliness unbounded (the deadline itself stays in force) |
 | `walk_to_origin_m`, `walk_from_dest_m` | walking distances checked against `max_walking_distance` (metres) |
 
 #### Per-vehicle fields (`vehicles.json`) additions
@@ -263,6 +264,7 @@ Vehicles may specify `position` (node index) directly instead of `station_index`
 | `max_drive_time_without_pause` | maximum continuous driving time (seconds) |
 | `min_pause` | idle time at a stop (waiting + service) that resets the continuous driving counter (seconds) |
 | `return_to_depot` | per-vehicle override of the instance-level setting (bool) |
+| `cost_return_to_depot` | the vehicle physically returns to its depot, so the return leg is included in the COST components (travel time, distance, plan duration), but no constraint requires the return — the leg is not checked against the operation window or driver rules (bool, default false; irrelevant when `return_to_depot` already applies) |
 
 #### Generalized cost model (`cost` config section)
 
@@ -276,9 +278,17 @@ cost:
   plan_duration_weight: 0.0   # per second of plan duration
   fixed_plan_cost: 0.0        # per non-empty plan
   vehicle_capital_cost: 0.0   # per plan
+  accounting: per_traveller   # or per_request, see below
 ```
 
 The defaults reproduce the legacy cost exactly: total travel time + `demand.relative_delay_cost` × drop-off delay + `vehicles.capital_cost` (the two legacy fields remain as the defaults of the corresponding weights).
+
+`accounting` selects how the passenger components accumulate:
+
+- `per_traveller` (default, legacy): ride time and drop-off delay are multiplied by the request's total travellers, and the delay is measured from the *desired pickup time* (so it includes the rider's own boarding service time).
+- `per_request` (allocator-style, used by real-time DRT allocator exports): ride time and delay are counted once per request, and the delay is measured from the pickup *departure* (net of the boarding service time) — exactly `pickup wait + (ride − minimal travel time)`.
+
+The distance matrix referenced by `dist_filepath` may contain full-precision floating-point values (metres); travel time matrices remain integer seconds.
 
 
 ### Instance metadata and supporting files

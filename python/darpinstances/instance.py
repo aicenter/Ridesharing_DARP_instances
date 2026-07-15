@@ -57,6 +57,7 @@ class CostWeights:
         plan_duration_weight: float = 0.0,
         fixed_plan_cost: float = 0.0,
         vehicle_capital_cost: float = 0.0,
+        accounting: str = "per_traveller",
     ):
         self.travel_time_weight = travel_time_weight
         self.distance_weight = distance_weight
@@ -66,6 +67,17 @@ class CostWeights:
         self.plan_duration_weight = plan_duration_weight
         self.fixed_plan_cost = fixed_plan_cost
         self.vehicle_capital_cost = vehicle_capital_cost
+        # how the passenger components accumulate:
+        # - 'per_traveller' (default, legacy): ride time and drop-off delay are
+        #   multiplied by the request's total travellers, and the delay is
+        #   measured from the desired pickup time (it includes the rider's own
+        #   boarding service time),
+        # - 'per_request' (allocator-style): ride time and delay are counted
+        #   once per request, and the delay is measured from the pickup
+        #   DEPARTURE (net of the boarding service time).
+        if accounting not in ("per_traveller", "per_request"):
+            raise ValueError(f"Unknown cost accounting mode: {accounting}")
+        self.accounting = accounting
 
 
 class DARPInstanceConfiguration:
@@ -283,6 +295,7 @@ def load_vehicles_from_json(vehicles_path: Path, stations_path: Optional[Path] =
                 max_drive_time_without_pause=veh.get("max_drive_time_without_pause"),
                 min_pause=veh.get("min_pause"),
                 return_to_depot=veh.get("return_to_depot"),
+                cost_return_to_depot=bool(veh.get("cost_return_to_depot", False)),
             )
         )
 
@@ -660,12 +673,25 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
             time_loader.load_time_field(required_arrival_raw) if required_arrival_raw is not None else None
         )
 
+        # max_earliness: the symmetric earliness bound before the required
+        # arrival time. The column defaults to the request's max_travel_delay
+        # (the historical behaviour); -1 makes the earliness unbounded while
+        # keeping the arrival deadline itself in force.
+        earliness_override = _parse_override(cell(row, 'max_earliness'))
+        if earliness_override is _DISABLED:
+            max_earliness = None
+        elif earliness_override is not None:
+            max_earliness = earliness_override
+        else:
+            max_earliness = max_travel_delay
+
         constraints = RequestConstraints(
             max_travel_delay=max_travel_delay,
             max_ride_time=int(max_ride_time) if max_ride_time is not None else None,
             max_walking_distance=max_walking_distance,
             required_arrival_time=required_arrival_time,
             resolved=True,
+            max_earliness=max_earliness,
         )
 
         demand = Demand(
@@ -726,6 +752,7 @@ def _load_cost_weights(instance_config: dict) -> CostWeights:
         plan_duration_weight=cost_config.get('plan_duration_weight', 0.0),
         fixed_plan_cost=cost_config.get('fixed_plan_cost', 0.0),
         vehicle_capital_cost=cost_config.get('vehicle_capital_cost', vehicle_capital_cost),
+        accounting=cost_config.get('accounting', 'per_traveller'),
     )
 
 
@@ -768,13 +795,15 @@ def load_instance(
     else:
         logging.info("Using provided travel time provider")
 
-    # optional distance matrix in metres, needed only for distance-based cost
+    # optional distance matrix in metres, needed only for distance-based cost;
+    # loaded as float64 so full-precision distances survive the round trip
+    # (integer-valued legacy matrices load identically)
     distance_provider = None
     if 'dist_filepath' in instance_config:
         dist_filepath = Path(instance_config['dist_filepath'])
         check_file_exists(dist_filepath)
         logging.info("Reading distance matrix from: {}".format(os.path.realpath(dist_filepath)))
-        distance_provider = MatrixTravelTimeProvider.read_from_file(dist_filepath)
+        distance_provider = MatrixTravelTimeProvider.read_from_file(dist_filepath, dtype=np.float64)
 
     logging.info("Reading DARP instance from: {}".format(os.path.realpath(demand_path)))
 

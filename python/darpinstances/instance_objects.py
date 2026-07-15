@@ -49,6 +49,7 @@ class RequestConstraints:
         max_walking_distance: Optional[float] = None,
         required_arrival_time: Optional[datetime] = None,
         resolved: bool = False,
+        max_earliness: Optional[float] = None,
     ):
         self.max_travel_delay = max_travel_delay
         self.max_ride_time = max_ride_time
@@ -57,6 +58,10 @@ class RequestConstraints:
         # True when the loader merged the config baseline into these values;
         # legacy loaders leave this False so instance-level limits still apply
         self.resolved = resolved
+        # symmetric earliness bound before required_arrival_time; resolved
+        # loaders default it to max_travel_delay (the historical behaviour),
+        # None with resolved=True means "earliness unbounded"
+        self.max_earliness = max_earliness
 
 
 class Coordinate(ABC):
@@ -166,6 +171,7 @@ class Vehicle:
         max_drive_time_without_pause: Optional[int] = None,
         min_pause: Optional[int] = None,
         return_to_depot: Optional[bool] = None,
+        cost_return_to_depot: bool = False,
     ):
         self.index = index
         self.initial_position = initial_position
@@ -185,6 +191,11 @@ class Vehicle:
         self.min_pause = min_pause
         # per-vehicle override of the instance-level return_to_depot setting
         self.return_to_depot = return_to_depot
+        # when True and the effective return_to_depot is False, the depot-return
+        # leg is INCLUDED in the cost components (travel time, distance, plan
+        # duration) but NOT constraint-checked — the vehicle physically returns
+        # even though no constraint requires it to make it back by shift end
+        self.cost_return_to_depot = bool(cost_return_to_depot)
 
 
 class VirtualVehicle(Vehicle):
