@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Code
+
+- fixed: solution checker no longer adds `max_pickup_delay` to action max times a second time (it is already included on instance load)
+- changed: solution checker now requires reported arrival times to exactly match the schedule recomputed from the travel time matrix (previously a warning with 1 s tolerance)
+- fixed: `max_ride_time`, `max_route_duration`, and `return_to_depot` are now loaded from the instance config (previously hard-coded to disabled for YAML instances)
+- fixed: solution loader reads dropped requests via the schema key `index` (`id` kept as fallback) and action service time via the schema key `service_duration` (`service_time` kept as fallback)
+- added: solution checker CLI exits with code 1 on failure, prints a machine-readable JSON verdict, and supports `--report <file>` and `--max-errors <n>`
+- added: pytest suite for the solution checker (`python/tests`)
+
 ## v1.1.2
 
 ### Code

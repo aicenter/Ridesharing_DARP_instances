@@ -1,8 +1,10 @@
 import argparse
 import copy
+import json
 import logging
 import os
 import os.path
+import sys
 from datetime import timedelta
 from enum import Enum, auto
 from pathlib import Path
@@ -23,6 +25,7 @@ from darpinstances.utils import TimeLoader
 
 class Failure(Enum):
     PLAN_DEPARTURE_TIME = auto()
+    ARRIVAL_TIME_MISMATCH = auto()
 
 
 class SolutionChecker:
@@ -150,18 +153,21 @@ class SolutionChecker:
 
             time += timedelta(seconds=int(travel_time))
 
-            # arrival time check
+            # arrival time check: the reported arrival must exactly match the schedule recomputed
+            # from the travel time matrix, otherwise a falsified schedule could mask violations
             if action_data.arrival_time is not None:
-                diff = action_data.arrival_time - time
-                if abs(diff) > timedelta(seconds=1):
+                if action_data.arrival_time != time:
                     logging.warning(
                         f"[{plan_counter}. plan, {action_index + 1}. Action] Arrival time mismatch (expected {time}, "
                         f"was {action_data.arrival_time}) when handling request {action_data.action.request.index}"
                     )
+                    failures[Failure.ARRIVAL_TIME_MISMATCH] += 1
+                    plan_ok = False
                     self._increment_error()
 
-            # max time check
-            max_time = action_data.action.max_time + timedelta(seconds=instance.darp_instance_config.max_pickup_delay)
+            # max time check. Note that max_pickup_delay is already included in the action max
+            # time, it is added to both max pickup time and max drop off time on instance load.
+            max_time = action_data.action.max_time
             if time > max_time:
                 logging.warning(
                     "[{}. plan, {}. Action] Action max time exceeded ({} > {}) when handling request {}.".format(
@@ -257,7 +263,7 @@ class SolutionChecker:
             #  max ride time check - dropoff
             if max_ride_time and is_drop_off:
                 ride_time = time - departure_times[request.index]
-                if ride_time > max_ride_time:
+                if ride_time > timedelta(seconds=int(max_ride_time)):
                     print(
                         "[{}. plan] Max ride time exceeded for request {}: ride time was {} while max ride time is {}".format(
                             plan_counter,
@@ -307,7 +313,11 @@ class SolutionChecker:
 
         # max route time check
         max_route_duration = instance.darp_instance_config.max_route_duration
-        if not fleet_sizing and max_route_duration and time - plan.departure_time > max_route_duration:
+        if (
+            not fleet_sizing
+            and max_route_duration
+            and time - plan.departure_time > timedelta(seconds=int(max_route_duration))
+        ):
             print(
                 "[{}. plan] Total max route duration exceeded: Duration is {} but maximum allowed route duration is {}".format(
                     plan_counter,
@@ -341,7 +351,7 @@ class SolutionChecker:
     def check_solution(
         self, instance: DARPInstance, solution: Solution, fleet_sizing: bool = False
     ) -> Tuple[bool, Dict[Failure, int]]:
-        failures = {Failure.PLAN_DEPARTURE_TIME: 0}
+        failures = {failure: 0 for failure in Failure}
 
         if not solution.feasible:
             logging.info("Solution is infeasible")
@@ -531,8 +541,25 @@ def load_instance(
     return instance, travel_time_provider, time_loader
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Scrip for checking DARP solutions')
+def build_verdict(
+    ok: bool,
+    plans_checked: int,
+    failures: Dict[Failure, int],
+    error_count: int,
+    aborted: bool = False,
+) -> Dict:
+    """Machine-readable check result, printed as one JSON line by the CLI."""
+    return {
+        "ok": bool(ok) and not aborted,
+        "plans_checked": plans_checked,
+        "failures": {failure.name: count for failure, count in failures.items() if count > 0},
+        "error_count": error_count,
+        "aborted": aborted,
+    }
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description='Script for checking DARP solutions')
     parser.add_argument('solution', type=Path, help='Path to solution file (JSON)')
     parser.add_argument('-i', '--instance', type=str, help='Path to instance config file (YAML)', required=False)
     parser.add_argument(
@@ -544,8 +571,17 @@ if __name__ == '__main__':
             'Passing this flag forces fleet-sizing even if problem in YAML is DARP.'
         ),
     )
+    parser.add_argument(
+        '--report', type=Path, required=False, help='Write the JSON verdict to this file in addition to stdout'
+    )
+    parser.add_argument(
+        '--max-errors',
+        type=int,
+        default=10,
+        help='Abort the check after this many accumulated errors (default: 10)',
+    )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     solution_file_path = args.solution
     logging.info("Checking solution: %s", solution_file_path)
@@ -569,5 +605,28 @@ if __name__ == '__main__':
     instance, solution, fleet_sizing = load_data(
         solution_file_path, instance_path, fleet_sizing=args.fleet_sizing
     )
-    solution_checker = SolutionChecker()
-    solution_checker.check_solution(instance, solution, fleet_sizing=fleet_sizing)
+    solution_checker = SolutionChecker(max_error_count=args.max_errors)
+
+    ok = False
+    aborted = False
+    failures: Dict[Failure, int] = {failure: 0 for failure in Failure}
+    try:
+        ok, failures = solution_checker.check_solution(instance, solution, fleet_sizing=fleet_sizing)
+    except RuntimeError as ex:
+        # the error limit was exceeded; the solution is invalid even though the check is incomplete
+        logging.error("Check aborted: %s", ex)
+        aborted = True
+
+    verdict = build_verdict(
+        ok, len(solution.vehicle_plans), failures, solution_checker.error_count, aborted
+    )
+    print(json.dumps(verdict))
+    if args.report:
+        with open(args.report, 'w', encoding='utf-8') as report_file:
+            json.dump(verdict, report_file, indent=2)
+
+    return 0 if verdict["ok"] else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -566,10 +566,16 @@ def load_instance(
     relative_delay_cost = instance_config.get('demand', {}).get('relative_delay_cost', 0)
     problem = instance_problem_from_config(instance_config)
 
+    # route/ride limits and the depot-return rule come from the instance config (in seconds);
+    # they default to disabled to keep legacy instances unchanged
+    max_route_duration = instance_config.get('max_route_duration', 0)
+    max_ride_time = instance_config.get('max_ride_time', 0)
+    return_to_depot = instance_config.get('return_to_depot', False)
+
     darp_instance_config = DARPInstanceConfiguration(
-        0,
-        0,
-        False,
+        max_route_duration,
+        max_ride_time,
+        return_to_depot,
         False,
         start_time,
         min_pause_length,

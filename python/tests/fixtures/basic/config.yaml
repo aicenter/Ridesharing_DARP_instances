@@ -1,0 +1,7 @@
+demand:
+  filepath: ./requests.csv
+dm_filepath: ./dm.csv
+max_travel_time_delay:
+  mode: absolute
+  seconds: 300
+max_pickup_delay: 120

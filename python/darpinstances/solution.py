@@ -136,7 +136,9 @@ class SolutionLoader:
 
         dropped_requests = set()
         for request in json_data["dropped_requests"]:
-            dropped_requests.add(int(request["id"]))
+            # the schema requires "index"; "id" is accepted for backward compatibility
+            key = "index" if "index" in request else "id"
+            dropped_requests.add(int(request[key]))
         return Solution(vehicle_plans, json_data["cost"], dropped_requests)
 
     def load_csv_solution(self, filepath, request_map, simulation_start_time: datetime, vehicle_capacity: int) \
@@ -323,8 +325,9 @@ class SolutionLoader:
         if "max_time" in action_dict:
             max_time = self.time_loader.load_time_field(action_dict["max_time"])
         
-        # Get service time (default to 0 if not specified)
-        service_time = action_dict.get("service_time", 0)
+        # Get service time (default to 0 if not specified). The schema names the field
+        # "service_duration"; "service_time" is accepted for backward compatibility.
+        service_time = action_dict.get("service_duration", action_dict.get("service_time", 0))
         
         # Create Action object
         action_id = request.pickup_action.id if action_type == ActionType.PICKUP else request.drop_off_action.id
