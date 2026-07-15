@@ -1,0 +1,16 @@
+[
+  {
+    "id": 0,
+    "position": 0,
+    "capacity": 3,
+    "wheelchair_slots": 1,
+    "child_seats": 1,
+    "equipment": ["ramp"],
+    "operation_start": 800,
+    "operation_end": 2000,
+    "max_drive_time": 600,
+    "max_drive_time_without_pause": 400,
+    "min_pause": 30,
+    "return_to_depot": false
+  }
+]

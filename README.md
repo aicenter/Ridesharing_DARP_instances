@@ -206,6 +206,84 @@ The vehicle *operation time* is defined as follows:
 - **operation end time**: is equal to `operation_end` if provided, otherwise unrestricted
 
 
+### Extended instance format
+
+All fields in this section are **optional**: instances that omit them behave exactly as described in the previous sections. Together they form the unified format shared with real-time DRT allocators (per-request constraint overrides, composite demand, typed vehicle resources, driver rules, and a generalized cost model).
+
+#### Constraint semantics
+
+Two delay constraints coexist; when both are enabled, the more restrictive one binds:
+
+- **`max_delay`** (canonical name of the deprecated `max_travel_time_delay`): anchored to the **requested pickup time**. It is expressed through the derived per-action maximum times as described above (window-based).
+- **`max_travel_delay`** (new): anchored to the **actual pickup**. It bounds `ride time − minimal travel time`, where the ride is measured from the pickup *departure* (after service) to the drop-off *arrival*. Because the bound moves with the actual boarding time, it is checked during the plan walk and cannot be expressed as a static window. Same structure as `max_delay`: `{mode: absolute, seconds: <s>}` or `{mode: relative, relative: <factor>}` (the factor multiplies the minimal travel time to give the allowed delay).
+
+#### Instance config (`config.yaml`) additions
+
+| field | meaning |
+|---|---|
+| `max_delay` | requested-time-anchored delay budget (see above); `max_travel_time_delay` and `max_prolongation` remain as deprecated aliases |
+| `max_travel_delay` | boarding-anchored delay budget (see above) |
+| `max_pickup_delay` | maximum wait between the desired and actual pickup (seconds) |
+| `max_ride_time` | maximum ride duration per request (seconds) |
+| `max_route_duration` | maximum plan duration per vehicle (seconds) |
+| `max_walking_distance` | maximum walking distance to origin / from destination (metres) |
+| `return_to_depot` | vehicles must return to their initial position (bool) |
+| `dist_filepath` | node-to-node distance matrix in metres (same format as `dm`), needed only for distance-based cost |
+| `cost` | generalized cost weights, see below |
+
+#### Per-request columns (`requests.csv`) additions
+
+Constraint override columns — `max_delay`, `max_travel_delay`, `max_pickup_delay`, `max_ride_time`, `max_walking_distance` — use this convention per cell:
+
+- empty: inherit the config baseline,
+- a number: override the baseline for this request (0 is a legitimate limit); interpreted in the baseline's mode (seconds for absolute, factor for relative),
+- `-1` (or `off`): the constraint is disabled for this request.
+
+Attribute columns:
+
+| column | meaning |
+|---|---|
+| `service_time` | boarding/alighting time at both stops of this request (seconds, default 0) |
+| `demand_standard` | standard passengers, 1 regular seat each (default 1) |
+| `demand_wheelchairs` | wheelchair passengers, 1 wheelchair slot each (default 0) |
+| `demand_children_in_seat` | children requiring a child seat: each occupies 1 regular seat AND 1 child seat unit (default 0) |
+| `exclusive` | 0/1: an exclusive request may not share the vehicle with other requests (default 0) |
+| `required_equipment` | semicolon-separated equipment names the vehicle must carry (e.g. `ramp;low_floor`) |
+| `required_vehicle_id` | index of the only vehicle allowed to serve this request |
+| `required_arrival_time` | latest allowed drop-off arrival; arriving more than the `max_travel_delay` budget *before* it is also invalid (symmetric earliness bound) |
+| `walk_to_origin_m`, `walk_from_dest_m` | walking distances checked against `max_walking_distance` (metres) |
+
+#### Per-vehicle fields (`vehicles.json`) additions
+
+Vehicles may specify `position` (node index) directly instead of `station_index`. Operation window bounds accept plain integers (seconds, same timestamp convention as request times) in addition to datetime strings.
+
+| field | meaning |
+|---|---|
+| `wheelchair_slots` | wheelchair slots, independent of regular seats (default 0) |
+| `child_seats` | child seat equipment units; each occupies a regular seat when used (default 0) |
+| `equipment` | list of named equipment flags matched against `required_equipment` (superset check, not consumed) |
+| `max_drive_time` | maximum total driving time over the plan (seconds) |
+| `max_drive_time_without_pause` | maximum continuous driving time (seconds) |
+| `min_pause` | idle time at a stop (waiting + service) that resets the continuous driving counter (seconds) |
+| `return_to_depot` | per-vehicle override of the instance-level setting (bool) |
+
+#### Generalized cost model (`cost` config section)
+
+```yaml
+cost:
+  travel_time_weight: 1.0     # per second of vehicle travel
+  distance_weight: 0.0        # per metre of vehicle travel (requires dist_filepath)
+  ride_time_weight: 0.0       # per passenger-second of riding
+  passenger_delay_weight: 0.0 # per passenger-second of drop-off delay vs the ideal direct ride
+  earliness_weight: 0.0       # per second of arrival before required_arrival_time
+  plan_duration_weight: 0.0   # per second of plan duration
+  fixed_plan_cost: 0.0        # per non-empty plan
+  vehicle_capital_cost: 0.0   # per plan
+```
+
+The defaults reproduce the legacy cost exactly: total travel time + `demand.relative_delay_cost` × drop-off delay + `vehicles.capital_cost` (the two legacy fields remain as the defaults of the corresponding weights).
+
+
 ### Instance metadata and supporting files
   
 In addition to the main instance files, the instance and area folders contain several additional files holding metadata about the instance used for instance generation, visualization, or analysis. The list of the files with their location in the directory tree is below. 

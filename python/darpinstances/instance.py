@@ -18,7 +18,7 @@ from tqdm.autonotebook import tqdm
 
 import darpinstances.log
 from darpinstances.inout import check_file_exists
-from darpinstances.instance_objects import Coordinate, Request, Vehicle
+from darpinstances.instance_objects import Coordinate, Demand, Request, RequestConstraints, Vehicle
 from darpinstances.utils import TimeLoader, DarpinstancesTimestampLoader
 from darpinstances.travel_time_provider import (
     TravelTimeProvider,
@@ -27,6 +27,45 @@ from darpinstances.travel_time_provider import (
     GridTravelTimeProvider,
 )
 from roadgraphtool.distance_matrix_generator import resolve_dm_filepath
+
+
+class CostWeights:
+    """
+    Weights of the generalized solution cost model:
+
+        cost = travel_time_weight * total_travel_time [s]
+             + distance_weight * total_distance [m]
+             + ride_time_weight * sum of passenger ride times [s]
+             + passenger_delay_weight * sum of passenger delays [s]
+             + earliness_weight * sum of arrival earliness before required arrival times [s]
+             + plan_duration_weight * plan duration [s]
+             + fixed_plan_cost (for each non-empty plan)
+             + vehicle_capital_cost (for each non-empty plan)
+
+    The defaults reproduce the original DARP cost exactly: total travel time,
+    plus drop-off delay weighted by the legacy relative_delay_cost, plus the
+    vehicle capital cost.
+    """
+
+    def __init__(
+        self,
+        travel_time_weight: float = 1.0,
+        distance_weight: float = 0.0,
+        ride_time_weight: float = 0.0,
+        passenger_delay_weight: float = 0.0,
+        earliness_weight: float = 0.0,
+        plan_duration_weight: float = 0.0,
+        fixed_plan_cost: float = 0.0,
+        vehicle_capital_cost: float = 0.0,
+    ):
+        self.travel_time_weight = travel_time_weight
+        self.distance_weight = distance_weight
+        self.ride_time_weight = ride_time_weight
+        self.passenger_delay_weight = passenger_delay_weight
+        self.earliness_weight = earliness_weight
+        self.plan_duration_weight = plan_duration_weight
+        self.fixed_plan_cost = fixed_plan_cost
+        self.vehicle_capital_cost = vehicle_capital_cost
 
 
 class DARPInstanceConfiguration:
@@ -46,6 +85,8 @@ class DARPInstanceConfiguration:
         vehicle_capital_cost: Optional[float] = None,
         relative_delay_cost: float = 0,
         problem: str = "DARP",
+        max_walking_distance: Optional[float] = None,
+        cost_weights: Optional[CostWeights] = None,
     ):
         self.max_route_duration = max_route_duration
         self.max_ride_time = max_ride_time
@@ -61,6 +102,14 @@ class DARPInstanceConfiguration:
         self.vehicle_capital_cost = vehicle_capital_cost
         self.relative_delay_cost = relative_delay_cost
         self.problem = problem
+        self.max_walking_distance = max_walking_distance
+        if cost_weights is None:
+            # legacy cost model expressed in the generalized weights
+            cost_weights = CostWeights(
+                passenger_delay_weight=relative_delay_cost,
+                vehicle_capital_cost=vehicle_capital_cost if vehicle_capital_cost else 0.0,
+            )
+        self.cost_weights = cost_weights
 
     @property
     def is_fleet_sizing(self) -> bool:
@@ -74,12 +123,16 @@ class DARPInstance:
         requests: Iterable[Request],
         vehicles: Sequence[Vehicle],
         travel_time_provider: TravelTimeProvider,
-        darp_instance_config: DARPInstanceConfiguration
+        darp_instance_config: DARPInstanceConfiguration,
+        distance_provider: Optional[MatrixTravelTimeProvider] = None,
     ):
         self.requests = requests
         self.vehicles: Sequence[Vehicle] = vehicles
         self.travel_time_provider = travel_time_provider
         self.darp_instance_config = darp_instance_config
+        # optional node-to-node distance matrix in metres, needed only when the
+        # cost model has a non-zero distance weight
+        self.distance_provider = distance_provider
         self.request_map = {r.index: r for r in requests}
 
 
@@ -161,12 +214,26 @@ def _load_datetime(string: str):
     return datetime.strptime(string, '%Y-%m-%d %H:%M:%S')
 
 
-def load_vehicles_from_json(vehicles_path: Path, stations_path: Path) -> List[Vehicle]:
+def _load_operation_time(value) -> datetime:
+    """
+    Load a vehicle operation window bound. Accepts either an integer (seconds,
+    interpreted as a timestamp like the request times) or a datetime string.
+    Always returns a timezone-aware datetime (UTC) so comparisons against the
+    request times loaded by TimeLoader never mix naive and aware datetimes.
+    """
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(int(value), tz=timezone.utc)
+    parsed = _load_datetime(value)
+    return parsed.replace(tzinfo=timezone.utc)
+
+
+def load_vehicles_from_json(vehicles_path: Path, stations_path: Optional[Path] = None) -> List[Vehicle]:
     veh_data = darpinstances.inout.load_json(vehicles_path)
-    station_data = darpinstances.inout.load_csv(stations_path, "\t")
     stations = []
-    for index, station in enumerate(station_data):
-        stations.append(int(station[0]))
+    if stations_path is not None and check_file_exists(stations_path, raise_ex=False):
+        station_data = darpinstances.inout.load_csv(stations_path, "\t")
+        for index, station in enumerate(station_data):
+            stations.append(int(station[0]))
     vehicles = []
     for index, veh in enumerate(veh_data):
         configurations = []
@@ -191,11 +258,32 @@ def load_vehicles_from_json(vehicles_path: Path, stations_path: Path) -> List[Ve
         config_capacities = [len(config) for config in configurations]
         max_capacity = max(config_capacities) if config_capacities else 0
         capacity = veh["capacity"] if "capacity" in veh else max_capacity
-        operation_start = _load_datetime(veh["operation_start"]) if "operation_start" in veh else None
-        operation_end = _load_datetime(veh["operation_end"]) if "operation_end" in veh else None
-        initial_position = stations[int(veh["station_index"])]
+        operation_start = _load_operation_time(veh["operation_start"]) if "operation_start" in veh else None
+        operation_end = _load_operation_time(veh["operation_end"]) if "operation_end" in veh else None
+
+        # position can be given directly as a node index, or via a station index
+        # into station_positions.csv (legacy)
+        if "position" in veh:
+            initial_position = int(veh["position"])
+        else:
+            initial_position = stations[int(veh["station_index"])]
+
         vehicles.append(
-            Vehicle(int(veh["id"]), initial_position, capacity, configurations, operation_start, operation_end)
+            Vehicle(
+                int(veh["id"]) if "id" in veh else index,
+                initial_position,
+                capacity,
+                configurations,
+                operation_start,
+                operation_end,
+                wheelchair_slots=int(veh.get("wheelchair_slots", 0)),
+                child_seats=int(veh.get("child_seats", 0)),
+                equipment=set(veh.get("equipment", [])),
+                max_drive_time=veh.get("max_drive_time"),
+                max_drive_time_without_pause=veh.get("max_drive_time_without_pause"),
+                min_pause=veh.get("min_pause"),
+                return_to_depot=veh.get("return_to_depot"),
+            )
         )
 
     return vehicles
@@ -215,9 +303,10 @@ def load_vehicles(instance_dir_path: Path, instance_config: Dict) -> List[Vehicl
     stations_path_csv = instance_dir_path / 'station_positions.csv'
     csv_exists = check_file_exists(vehicles_path_csv, raise_ex=False)
     json_exists = check_file_exists(vehicles_path_json, raise_ex=False)
-    stations_csv_exists = check_file_exists(vehicles_path_json, raise_ex=False)
 
-    if json_exists and stations_csv_exists:
+    if json_exists:
+        # station_positions.csv is only needed when vehicles reference stations
+        # by index instead of carrying a position directly
         return load_vehicles_from_json(vehicles_path_json, stations_path_csv)
     elif csv_exists:
         return load_vehicles_csv(vehicles_path_csv)
@@ -225,13 +314,36 @@ def load_vehicles(instance_dir_path: Path, instance_config: Dict) -> List[Vehicl
         raise ValueError("Vehicles file .json or .csv was not found")
 
 
+def _get_delay_config(instance_config: dict, canonical_key: str, alias_keys: Sequence[str] = ()) -> Optional[dict]:
+    """
+    Read a delay constraint config ({mode: absolute|relative, seconds|relative})
+    by its canonical key, falling back to deprecated aliases.
+    """
+    for key in (canonical_key, *alias_keys):
+        if key in instance_config:
+            value = instance_config[key]
+            if key != canonical_key:
+                logging.warning("Config key '%s' is deprecated, use '%s' instead", key, canonical_key)
+            return value
+    return None
+
+
+def _delay_seconds(delay_config: dict, min_travel_time: int | float) -> float:
+    """
+    Resolve a delay constraint config to seconds for one request. In relative
+    mode, the configured factor multiplies the request's minimum travel time.
+    """
+    if delay_config['mode'] == 'absolute':
+        return delay_config['seconds']
+    return min_travel_time * delay_config['relative']
+
+
 def _compute_max_delay(instance_config: dict, min_travel_time: int|float) -> float:
-    if 'max_prolongation' in instance_config:
+    # max_prolongation is the oldest alias: a plain absolute value
+    if 'max_prolongation' in instance_config and 'max_delay' not in instance_config:
         return int(instance_config['max_prolongation'])
-    elif instance_config['max_travel_time_delay']['mode'] == 'absolute':
-        return instance_config['max_travel_time_delay']['seconds']
-    else:
-        return min_travel_time * instance_config['max_travel_time_delay']['relative']
+    delay_config = _get_delay_config(instance_config, 'max_delay', ('max_travel_time_delay',))
+    return _delay_seconds(delay_config, min_travel_time)
 
 
 def load_demand_legacy(
@@ -313,6 +425,48 @@ def load_demand_legacy(
         index += 1
 
     return requests
+
+
+# sentinel: a per-request override column explicitly disables the constraint
+_DISABLED = object()
+
+
+def _parse_override(value):
+    """
+    Parse one cell of a per-request constraint override column:
+    - empty / NaN -> None (inherit the config baseline),
+    - -1 or 'off' -> disabled for this request,
+    - any other number -> override value (0 is a legitimate limit).
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip().lower()
+        if stripped == '':
+            return None
+        if stripped == 'off':
+            return _DISABLED
+        value = float(stripped)
+    if pd.isna(value):
+        return None
+    if value == -1:
+        return _DISABLED
+    return value
+
+
+def _resolve_limit(override, baseline):
+    """Merge one override with its baseline: inherit, disable, or replace."""
+    if override is _DISABLED:
+        return None
+    if override is None:
+        return baseline
+    return override
+
+
+def _optional_int(value) -> Optional[int]:
+    if value is None or pd.isna(value):
+        return None
+    return int(value)
 
 
 def _compute_min_pickup_time(instance_config: dict, desired_pickup_time: datetime) -> datetime:
@@ -411,21 +565,6 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
     request_data['min_travel_time'] = [travel_time_provider.get_travel_time(start_node, end_node) / travel_time_divider
         for start_node, end_node in zip(request_data['start_node'], request_data['end_node'])]
 
-    # max time computations
-    request_data['max_delay'] = [_compute_max_delay(instance_config, min_travel_time) for min_travel_time in
-        request_data['min_travel_time']]
-    if 'max_pickup_delay' in instance_config:
-        request_data['max_pickup_delay'] = instance_config['max_pickup_delay']
-    else:
-        request_data['max_pickup_delay'] = request_data['max_delay']
-
-    request_data['max_pickup_time'] = request_data['time'] + pd.to_timedelta(request_data['max_pickup_delay'], unit='s')
-
-    request_data['max_drop_off_time'] = request_data['time'] + pd.to_timedelta(
-        (request_data['min_travel_time'] + request_data['max_delay'] + instance_config.get('max_pickup_delay', 0)).round(),
-        unit='s'
-    )
-
     # required vehicle id, if not present, set to -1
     if 'required_vehicle_id' not in request_data:
         request_data['required_vehicle_id'] = None
@@ -434,50 +573,160 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
     request_data['pickup_action_id'] = request_data.index * 2
     request_data['drop_off_action_id'] = request_data.index * 2 + 1
 
-    # travel time rounding
-    request_data['min_travel_time'] = request_data['min_travel_time'].apply(np.ceil)
+    def cell(row, name, default=None):
+        """Read an optional column from a row."""
+        value = getattr(row, name, None)
+        if value is None or (not isinstance(value, str) and pd.isna(value)):
+            return default
+        return value
 
-    return [
-        Request(
-            request_id,
-            pickup_action_id,
-            start_node,
-            min_pickup_time,
-            max_pickup_time,
-            drop_off_action_id,
-            end_node,
-            max_drop_off_time,
-            math.ceil(min_travel_time),
-            0,
-            0,
-            equipment,
-            required_vehicle_id
-        ) for
-            request_id,
-            pickup_action_id,
-            start_node,
-            min_pickup_time,
-            max_pickup_time,
-            drop_off_action_id,
-            end_node,
-            max_drop_off_time,
-            min_travel_time,
-            equipment,
-            required_vehicle_id
-        in zip(
-            request_data['id'],
-            request_data['pickup_action_id'],
-            request_data['start_node'],
-            request_data['min_pickup_time'],
-            request_data['max_pickup_time'],
-            request_data['drop_off_action_id'],
-            request_data['end_node'],
-            request_data['max_drop_off_time'],
-            request_data['min_travel_time'],
-            request_data['equipment'],
-            request_data['required_vehicle_id']
+    # config baselines for the per-request overridable constraints
+    max_pickup_delay_config = instance_config.get('max_pickup_delay')
+    max_ride_time_config = instance_config.get('max_ride_time')
+    max_walking_distance_config = instance_config.get('max_walking_distance')
+    max_travel_delay_config = _get_delay_config(instance_config, 'max_travel_delay')
+    has_max_delay_config = (
+        'max_delay' in instance_config
+        or 'max_travel_time_delay' in instance_config
+        or 'max_prolongation' in instance_config
+    )
+
+    requests = []
+    for row in request_data.itertuples(index=False):
+        min_travel_time = row.min_travel_time
+        request_time = row.time
+
+        # max_delay: anchored to the requested pickup time, expressed as the
+        # derived action max times (window-based)
+        max_delay_override = _parse_override(cell(row, 'max_delay'))
+        if max_delay_override is _DISABLED:
+            max_delay = None
+        elif max_delay_override is not None:
+            # a numeric override is interpreted in the mode of the config baseline
+            delay_config = _get_delay_config(instance_config, 'max_delay', ('max_travel_time_delay',))
+            if delay_config is not None and delay_config.get('mode') == 'relative':
+                max_delay = min_travel_time * max_delay_override
+            else:
+                max_delay = max_delay_override
+        elif has_max_delay_config:
+            max_delay = _compute_max_delay(instance_config, min_travel_time)
+        else:
+            max_delay = None
+
+        # max_pickup_delay: bounds the pickup time; legacy fallback is max_delay
+        pickup_delay_override = _parse_override(cell(row, 'max_pickup_delay'))
+        pickup_delay_baseline = max_pickup_delay_config if max_pickup_delay_config is not None else max_delay
+        max_pickup_delay = _resolve_limit(pickup_delay_override, pickup_delay_baseline)
+
+        # derived action time windows; None = unbounded
+        max_pickup_time = (
+            request_time + timedelta(seconds=float(max_pickup_delay)) if max_pickup_delay is not None else None
         )
-    ]
+        if max_delay is None:
+            max_drop_off_time = None
+        else:
+            # the drop-off window includes the pickup delay slack: a request
+            # picked up at its max pickup time keeps its full delay budget
+            pickup_slack = _resolve_limit(pickup_delay_override, instance_config.get('max_pickup_delay', 0)) or 0
+            max_drop_off_time = request_time + timedelta(
+                seconds=round(min_travel_time + max_delay + pickup_slack)
+            )
+
+        # max_travel_delay: anchored to the actual pickup, checked during the
+        # plan walk; resolved to seconds per request here
+        travel_delay_override = _parse_override(cell(row, 'max_travel_delay'))
+        if travel_delay_override is _DISABLED:
+            max_travel_delay = None
+        elif travel_delay_override is not None:
+            if max_travel_delay_config is not None and max_travel_delay_config.get('mode') == 'relative':
+                max_travel_delay = min_travel_time * travel_delay_override
+            else:
+                max_travel_delay = travel_delay_override
+        elif max_travel_delay_config is not None:
+            max_travel_delay = _delay_seconds(max_travel_delay_config, min_travel_time)
+        else:
+            max_travel_delay = None
+
+        max_ride_time = _resolve_limit(_parse_override(cell(row, 'max_ride_time')), max_ride_time_config)
+        if not max_ride_time:
+            max_ride_time = None
+
+        max_walking_distance = _resolve_limit(
+            _parse_override(cell(row, 'max_walking_distance')), max_walking_distance_config
+        )
+
+        required_arrival_raw = cell(row, 'required_arrival_time')
+        required_arrival_time = (
+            time_loader.load_time_field(required_arrival_raw) if required_arrival_raw is not None else None
+        )
+
+        constraints = RequestConstraints(
+            max_travel_delay=max_travel_delay,
+            max_ride_time=int(max_ride_time) if max_ride_time is not None else None,
+            max_walking_distance=max_walking_distance,
+            required_arrival_time=required_arrival_time,
+            resolved=True,
+        )
+
+        demand = Demand(
+            standard=int(cell(row, 'demand_standard', 1)),
+            wheelchairs=int(cell(row, 'demand_wheelchairs', 0)),
+            children_in_seat=int(cell(row, 'demand_children_in_seat', 0)),
+        )
+
+        required_equipment_raw = cell(row, 'required_equipment', '')
+        required_equipment = {
+            token.strip() for token in str(required_equipment_raw).split(';') if token.strip()
+        }
+
+        service_time = int(cell(row, 'service_time', 0))
+
+        requests.append(
+            Request(
+                row.id,
+                row.pickup_action_id,
+                row.start_node,
+                row.min_pickup_time,
+                max_pickup_time,
+                row.drop_off_action_id,
+                row.end_node,
+                max_drop_off_time,
+                math.ceil(min_travel_time),
+                service_time,
+                service_time,
+                row.equipment,
+                _optional_int(row.required_vehicle_id),
+                demand=demand,
+                exclusive=bool(int(cell(row, 'exclusive', 0))),
+                required_equipment=required_equipment,
+                constraints=constraints,
+                walk_to_origin=float(cell(row, 'walk_to_origin_m', 0.0)),
+                walk_from_destination=float(cell(row, 'walk_from_dest_m', 0.0)),
+            )
+        )
+
+    return requests
+
+
+def _load_cost_weights(instance_config: dict) -> CostWeights:
+    """
+    Load the generalized cost model weights. The defaults reproduce the legacy
+    cost exactly: travel time, plus drop-off delay weighted by
+    demand.relative_delay_cost, plus vehicles.capital_cost per used vehicle.
+    """
+    cost_config = instance_config.get('cost', {})
+    relative_delay_cost = instance_config.get('demand', {}).get('relative_delay_cost', 0)
+    vehicle_capital_cost = instance_config.get('vehicles', {}).get('capital_cost', 0) or 0
+    return CostWeights(
+        travel_time_weight=cost_config.get('travel_time_weight', 1.0),
+        distance_weight=cost_config.get('distance_weight', 0.0),
+        ride_time_weight=cost_config.get('ride_time_weight', 0.0),
+        passenger_delay_weight=cost_config.get('passenger_delay_weight', relative_delay_cost),
+        earliness_weight=cost_config.get('earliness_weight', 0.0),
+        plan_duration_weight=cost_config.get('plan_duration_weight', 0.0),
+        fixed_plan_cost=cost_config.get('fixed_plan_cost', 0.0),
+        vehicle_capital_cost=cost_config.get('vehicle_capital_cost', vehicle_capital_cost),
+    )
 
 
 def load_instance(
@@ -518,6 +767,14 @@ def load_instance(
             travel_time_provider = MatrixTravelTimeProvider.read_from_file(dm_filepath)
     else:
         logging.info("Using provided travel time provider")
+
+    # optional distance matrix in metres, needed only for distance-based cost
+    distance_provider = None
+    if 'dist_filepath' in instance_config:
+        dist_filepath = Path(instance_config['dist_filepath'])
+        check_file_exists(dist_filepath)
+        logging.info("Reading distance matrix from: {}".format(os.path.realpath(dist_filepath)))
+        distance_provider = MatrixTravelTimeProvider.read_from_file(dist_filepath)
 
     logging.info("Reading DARP instance from: {}".format(os.path.realpath(demand_path)))
 
@@ -587,8 +844,12 @@ def load_instance(
         vehicle_capital_cost,
         relative_delay_cost,
         problem,
+        max_walking_distance=instance_config.get('max_walking_distance'),
+        cost_weights=_load_cost_weights(instance_config),
     )
-        
-    darp_instance = DARPInstance(requests, vehicles, travel_time_provider, darp_instance_config)
-    
+
+    darp_instance = DARPInstance(
+        requests, vehicles, travel_time_provider, darp_instance_config, distance_provider
+    )
+
     return darp_instance, time_loader

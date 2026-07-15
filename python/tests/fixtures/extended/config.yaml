@@ -1,0 +1,22 @@
+demand:
+  filepath: ./requests.csv
+dm_filepath: ./dm.csv
+dist_filepath: ./dist.csv
+max_delay:
+  mode: absolute
+  seconds: 300
+max_travel_delay:
+  mode: absolute
+  seconds: 280
+max_pickup_delay: 120
+max_ride_time: 500
+max_walking_distance: 100
+cost:
+  travel_time_weight: 1.0
+  distance_weight: 0.01
+  ride_time_weight: 0.5
+  passenger_delay_weight: 0.2
+  earliness_weight: 0.1
+  plan_duration_weight: 0.05
+  fixed_plan_cost: 10
+  vehicle_capital_cost: 25

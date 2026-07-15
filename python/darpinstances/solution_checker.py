@@ -26,6 +26,29 @@ from darpinstances.utils import TimeLoader
 class Failure(Enum):
     PLAN_DEPARTURE_TIME = auto()
     ARRIVAL_TIME_MISMATCH = auto()
+    DEPARTURE_TIME = auto()
+    VEHICLE_REUSED = auto()
+    OPERATION_WINDOW = auto()
+    PRECEDENCE = auto()
+    MAX_TIME = auto()
+    CAPACITY = auto()
+    WHEELCHAIR_CAPACITY = auto()
+    CHILD_SEAT_CAPACITY = auto()
+    EQUIPMENT = auto()
+    REQUIRED_VEHICLE = auto()
+    DRIVER_PAUSE = auto()
+    MAX_DRIVE_TIME = auto()
+    MAX_RIDE_TIME = auto()
+    MAX_TRAVEL_DELAY = auto()
+    ARRIVAL_DEADLINE = auto()
+    ARRIVAL_TOO_EARLY = auto()
+    EXCLUSIVE_RIDE = auto()
+    MAX_WALKING_DISTANCE = auto()
+    MAX_ROUTE_DURATION = auto()
+    PLAN_COST = auto()
+    SOLUTION_COST = auto()
+    REQUEST_SERVED_TWICE = auto()
+    REQUEST_NOT_SERVED = auto()
 
 
 class SolutionChecker:
@@ -48,71 +71,88 @@ class SolutionChecker:
         fleet_sizing: bool = False,
     ) -> Tuple[int, bool, Set[Request]]:
         plan_ok = True
-        cost = 0.0
 
-        if instance.darp_instance_config.start_time and plan.departure_time < instance.darp_instance_config.start_time:
+        def fail(failure: Failure, message: str):
+            nonlocal plan_ok
+            logging.warning(message)
+            failures[failure] += 1
             plan_ok = False
-            failures[Failure.PLAN_DEPARTURE_TIME] += 1
-            print(
-                "[{}. plan]: departure time {} is smaller then the instance start time ({})".format(
-                    plan_counter,
-                    plan.departure_time,
-                    instance.darp_instance_config.start_time
-                )
-            )
             self._increment_error()
 
+        config = instance.darp_instance_config
+        vehicle = plan.vehicle
+        cost_weights = config.cost_weights
+
+        if config.start_time and plan.departure_time < config.start_time:
+            fail(
+                Failure.PLAN_DEPARTURE_TIME,
+                "[{}. plan]: departure time {} is smaller then the instance start time ({})".format(
+                    plan_counter, plan.departure_time, config.start_time
+                ),
+            )
+
         time = plan.departure_time
-        free_capacity = plan.vehicle.capacity if plan.vehicle is not None else None
         previous_action: Optional[Action] = None
         onboard_requests = set()
         departure_times = dict()
-        vehicle_index = plan.vehicle.index if plan.vehicle is not None else plan_counter
+        vehicle_index = vehicle.index if vehicle is not None else plan_counter
         travel_time_provider = instance.travel_time_provider
+        distance_provider = instance.distance_provider
         served_requests = set()
         vehicle_configurations = (
-            copy.deepcopy(plan.vehicle.configurations)
-            if plan.vehicle is not None
+            copy.deepcopy(vehicle.configurations)
+            if vehicle is not None
             else []
         )
         used_equipment = []
-        min_pause_length = instance.darp_instance_config.min_pause_length * 60
-        max_pause_interval = instance.darp_instance_config.max_pause_interval * 60
+        min_pause_length = config.min_pause_length * 60
+        max_pause_interval = config.max_pause_interval * 60
         driving_start = time
 
-        if not fleet_sizing and not instance.darp_instance_config.virtual_vehicles:
+        # typed resource loads for the multi-seat demand model: a standard
+        # passenger holds a regular seat, a wheelchair user holds a wheelchair
+        # slot, a child in a child seat holds a regular seat AND a child seat unit
+        seat_load = 0
+        wheelchair_load = 0
+        child_seat_load = 0
+
+        # per-vehicle driver rules, in seconds
+        total_drive_seconds = 0.0
+        continuous_drive_seconds = 0.0
+
+        # components of the generalized weighted cost model
+        travel_time_total = 0.0
+        distance_total = 0.0
+        ride_time_total = 0.0
+        passenger_delay_total = 0.0
+        earliness_total = 0.0
+
+        if not fleet_sizing and not config.virtual_vehicles:
             if vehicle_index in used_vehicles:
-                print("[{}. plan]: Vehicle {} already used".format(plan_counter, vehicle_index))
-                plan_ok = False
-                self._increment_error()
+                fail(Failure.VEHICLE_REUSED, "[{}. plan]: Vehicle {} already used".format(plan_counter, vehicle_index))
             used_vehicles.add(vehicle_index)
 
-        # operation time check
-        if not fleet_sizing and plan.vehicle is not None:
-            operation_start = plan.vehicle.operation_start
-            operation_end = plan.vehicle.operation_end
-            if (operation_start and (plan.departure_time < operation_start)):
-                print(
-                    "{} plan starts at {}. operation starts at {}, plan should not start before operation".format(
-                        plan_counter,
-                        plan.departure_time,
-                        operation_start
-                    )
-                )
-                plan_ok = False
-                self._increment_error()
-            if (operation_end and (plan.arrival_time > operation_end)):
-                print(
-                    "{} plan ends at {}. operation ends at {}, plan should not end after operation".format(
-                        plan_counter,
-                        plan.arrival_time,
-                        operation_end
-                    )
-                )
-                plan_ok = False
-                self._increment_error()
+        operation_start = vehicle.operation_start if vehicle is not None else None
+        operation_end = vehicle.operation_end if vehicle is not None else None
 
-        travel_time_divider = instance.darp_instance_config.travel_time_divider
+        # operation time check
+        if not fleet_sizing and vehicle is not None:
+            if (operation_start and (plan.departure_time < operation_start)):
+                fail(
+                    Failure.OPERATION_WINDOW,
+                    "{} plan starts at {}. operation starts at {}, plan should not start before operation".format(
+                        plan_counter, plan.departure_time, operation_start
+                    ),
+                )
+            if (operation_end and (plan.arrival_time > operation_end)):
+                fail(
+                    Failure.OPERATION_WINDOW,
+                    "{} plan ends at {}. operation ends at {}, plan should not end after operation".format(
+                        plan_counter, plan.arrival_time, operation_end
+                    ),
+                )
+
+        travel_time_divider = config.travel_time_divider
 
         for action_index, action_data in enumerate(plan.actions):
             action = action_data.action
@@ -120,125 +160,206 @@ class SolutionChecker:
             request = action.request
             is_drop_off = action.action_type == ActionType.DROP_OFF
             is_pickup = action.action_type == ActionType.PICKUP
+            demand = request.demand
 
-            # onboard check
+            # onboard check; exclusive-ride conflicts are evaluated against the
+            # onboard set BEFORE this action is applied
             if is_pickup:
+                if request.exclusive and onboard_requests:
+                    fail(
+                        Failure.EXCLUSIVE_RIDE,
+                        "[{}. plan] Exclusive request {} picked up while other requests are onboard.".format(
+                            plan_counter, request.index
+                        ),
+                    )
+                elif any(onboard.exclusive for onboard in onboard_requests):
+                    fail(
+                        Failure.EXCLUSIVE_RIDE,
+                        "[{}. plan] Request {} picked up while an exclusive request is onboard.".format(
+                            plan_counter, request.index
+                        ),
+                    )
                 onboard_requests.add(request)
             else:
                 if request in onboard_requests:
                     onboard_requests.remove(request)
                     served_requests.add(request)
                 else:
-                    print(
+                    fail(
+                        Failure.PRECEDENCE,
                         "[{}. plan] Request {} dropped off while not being picked up first.".format(
                             plan_counter, request.index
-                        )
+                        ),
                     )
-                    plan_ok = False
-                    self._increment_error()
 
+            leg_from_node = None
             if previous_action:
                 travel_time = travel_time_provider.get_travel_time(previous_action.node, action_data.action.node)
+                leg_from_node = previous_action.node
             else:
-                if fleet_sizing or plan.vehicle is None:
+                if fleet_sizing or vehicle is None:
                     travel_time = 0
-                elif instance.darp_instance_config.virtual_vehicles:
-                    travel_time = plan.vehicle.time_to_start
+                elif config.virtual_vehicles:
+                    travel_time = vehicle.time_to_start
                 else:
                     travel_time = travel_time_provider.get_travel_time(
-                        plan.vehicle.initial_position, action_data.action.node
+                        vehicle.initial_position, action_data.action.node
                     )
+                    leg_from_node = vehicle.initial_position
             # adjust travel time if the provider is not in seconds
             travel_time = travel_time / travel_time_divider
 
+            if distance_provider is not None and leg_from_node is not None:
+                distance_total += distance_provider.get_travel_time(leg_from_node, action_data.action.node)
+
+            total_drive_seconds += travel_time
+            continuous_drive_seconds += travel_time
+
             time += timedelta(seconds=int(travel_time))
+            arrival_time = time
+
+            # per-vehicle continuous drive limit: checked on arrival, before any
+            # pause at this stop can reset the counter
+            if (
+                not fleet_sizing
+                and vehicle is not None
+                and vehicle.max_drive_time_without_pause is not None
+                and continuous_drive_seconds > vehicle.max_drive_time_without_pause
+            ):
+                fail(
+                    Failure.DRIVER_PAUSE,
+                    "[{}. plan] Continuous drive time {} s exceeds the vehicle limit {} s at request {}.".format(
+                        plan_counter, continuous_drive_seconds, vehicle.max_drive_time_without_pause, request.index
+                    ),
+                )
 
             # arrival time check: the reported arrival must exactly match the schedule recomputed
             # from the travel time matrix, otherwise a falsified schedule could mask violations
             if action_data.arrival_time is not None:
                 if action_data.arrival_time != time:
-                    logging.warning(
+                    fail(
+                        Failure.ARRIVAL_TIME_MISMATCH,
                         f"[{plan_counter}. plan, {action_index + 1}. Action] Arrival time mismatch (expected {time}, "
-                        f"was {action_data.arrival_time}) when handling request {action_data.action.request.index}"
+                        f"was {action_data.arrival_time}) when handling request {action_data.action.request.index}",
                     )
-                    failures[Failure.ARRIVAL_TIME_MISMATCH] += 1
-                    plan_ok = False
-                    self._increment_error()
 
             # max time check. Note that max_pickup_delay is already included in the action max
             # time, it is added to both max pickup time and max drop off time on instance load.
+            # A max time of None means the constraint is disabled for this request.
             max_time = action_data.action.max_time
-            if time > max_time:
-                logging.warning(
+            if max_time is not None and time > max_time:
+                fail(
+                    Failure.MAX_TIME,
                     "[{}. plan, {}. Action] Action max time exceeded ({} > {}) when handling request {}.".format(
                         plan_counter, action_index, time, action_data.action.max_time, action_data.action.request.index
-                    )
+                    ),
                 )
-                plan_ok = False
-                self._increment_error()
 
-            # capacity check
-            if not fleet_sizing and not vehicle_configurations:
-                if is_pickup:
-                    if free_capacity == 0:
-                        print(
-                            "[{}. plan] Pickup action performed when vehicle was already full when handling request {}".format(
-                                plan_counter, action_data.action.request.index
-                            )
+            # capacity checks over the three typed resources; the regular seat
+            # check is skipped for vehicles with legacy slot configurations, as
+            # their capacity is expressed by the configurations instead
+            if is_pickup:
+                if not fleet_sizing and vehicle is not None:
+                    if not vehicle_configurations and seat_load + demand.seats_needed > vehicle.capacity:
+                        fail(
+                            Failure.CAPACITY,
+                            "[{}. plan] Seat capacity exceeded when handling request {}: {} occupied + {} needed > {}".format(
+                                plan_counter, request.index, seat_load, demand.seats_needed, vehicle.capacity
+                            ),
                         )
-                        plan_ok = False
-                        self._increment_error()
-                    free_capacity -= 1
-                else:
-                    free_capacity += 1
+                    if demand.wheelchairs and wheelchair_load + demand.wheelchairs > vehicle.wheelchair_slots:
+                        fail(
+                            Failure.WHEELCHAIR_CAPACITY,
+                            "[{}. plan] Wheelchair slots exceeded when handling request {}: {} occupied + {} needed > {}".format(
+                                plan_counter, request.index, wheelchair_load, demand.wheelchairs, vehicle.wheelchair_slots
+                            ),
+                        )
+                    if demand.children_in_seat and child_seat_load + demand.children_in_seat > vehicle.child_seats:
+                        fail(
+                            Failure.CHILD_SEAT_CAPACITY,
+                            "[{}. plan] Child seats exceeded when handling request {}: {} occupied + {} needed > {}".format(
+                                plan_counter, request.index, child_seat_load, demand.children_in_seat, vehicle.child_seats
+                            ),
+                        )
+                seat_load += demand.seats_needed
+                wheelchair_load += demand.wheelchairs
+                child_seat_load += demand.children_in_seat
+            else:
+                seat_load -= demand.seats_needed
+                wheelchair_load -= demand.wheelchairs
+                child_seat_load -= demand.children_in_seat
 
-            # equipment check
+            # legacy slot-configuration equipment check (integer equipment types
+            # consuming vehicle configuration slots)
             if not fleet_sizing:
-                matching_configurations = [config for config in vehicle_configurations if
-                                          any(num in used_equipment for num in config)]
+                matching_configurations = [configuration for configuration in vehicle_configurations if
+                                          any(num in used_equipment for num in configuration)]
                 available_configurations = copy.deepcopy(vehicle_configurations) if not used_equipment else copy.deepcopy(
                     matching_configurations
                 )
-                for config in available_configurations:
+                for configuration in available_configurations:
                     for item in used_equipment:
-                        if item in config:
-                            config.remove(item)
+                        if item in configuration:
+                            configuration.remove(item)
 
                 equipment = action_data.action.request.equipment
                 if equipment != 0:
                     if is_pickup:
-                        if not any(equipment in config for config in available_configurations):
-                            print(
+                        if not any(equipment in configuration for configuration in available_configurations):
+                            fail(
+                                Failure.EQUIPMENT,
                                 "Request {}, Equipment {} not available in vehicle equipment list. Vehicle: {}".format(
                                     action_data.action.request.index,
                                     equipment,
                                     vehicle_index
-                                )
+                                ),
                             )
-                            plan_ok = False
-                            self._increment_error()
                         used_equipment.append(equipment)
                     elif is_drop_off:
                         used_equipment.remove(equipment)
 
-            cost += travel_time
-
-            # delay cost (drop off delay * relative_delay_cost)
-            if is_drop_off:
-                relative_delay_cost = instance.darp_instance_config.relative_delay_cost
-                if relative_delay_cost != 0:
-                    min_drop_off_time = request.pickup_action.min_time + timedelta(
-                        seconds=request.min_travel_time
+            # named equipment flags: the vehicle must carry a superset of the
+            # request's required equipment (not consumed, unlike configurations)
+            if is_pickup and request.required_equipment and vehicle is not None:
+                if not request.required_equipment.issubset(vehicle.equipment):
+                    fail(
+                        Failure.EQUIPMENT,
+                        "[{}. plan] Request {} requires equipment {} but vehicle {} only has {}.".format(
+                            plan_counter, request.index, sorted(request.required_equipment),
+                            vehicle_index, sorted(vehicle.equipment)
+                        ),
                     )
-                    drop_off_delay_seconds = (time - min_drop_off_time).total_seconds()
-                    cost += drop_off_delay_seconds * relative_delay_cost
+
+            # walking distance: a static per-request check, validated at pickup
+            if is_pickup and request.constraints.max_walking_distance is not None:
+                walk_limit = request.constraints.max_walking_distance
+                if request.walk_to_origin > walk_limit or request.walk_from_destination > walk_limit:
+                    fail(
+                        Failure.MAX_WALKING_DISTANCE,
+                        "[{}. plan] Request {} walking distance ({} m to origin, {} m from destination) exceeds {} m.".format(
+                            plan_counter, request.index, request.walk_to_origin,
+                            request.walk_from_destination, walk_limit
+                        ),
+                    )
+
+            travel_time_total += travel_time
+
+            # passenger delay cost component: drop-off delay versus the ideal
+            # direct ride starting at the desired pickup time
+            if is_drop_off:
+                min_drop_off_time = request.pickup_action.min_time + timedelta(
+                    seconds=request.min_travel_time
+                )
+                drop_off_delay_seconds = (time - min_drop_off_time).total_seconds()
+                passenger_delay_total += drop_off_delay_seconds * demand.total_travellers
 
             # vehicle id check
             if not fleet_sizing and action_data.action.request.required_vehicle_id is not None:
                 if action_data.action.request.required_vehicle_id != vehicle_index:
-                    logging.warning("Request {} is not for vehicle {}.".format(action_data.action.request.index, vehicle_index))
-                    plan_ok = False
-                    self._increment_error()
+                    fail(
+                        Failure.REQUIRED_VEHICLE,
+                        "Request {} is not for vehicle {}.".format(action_data.action.request.index, vehicle_index),
+                    )
 
             # waiting to min time
             if action.action_type == ActionType.PICKUP and time < action_data.action.min_time:
@@ -247,33 +368,71 @@ class SolutionChecker:
                 if not fleet_sizing and (pause_duration > timedelta(seconds=min_pause_length)):
                     driving_start = time
 
+            # legacy instance-level pause rule (configured in minutes, wall time
+            # since the last qualifying pause)
             if not fleet_sizing and (max_pause_interval and time - driving_start > timedelta(seconds=max_pause_interval)):
-                print(
+                fail(
+                    Failure.DRIVER_PAUSE,
                     "in Request {} driver is active {} min, max is {}.".format(
                         action_data.action.request.index,
                         time - driving_start,
                         max_pause_interval
-                        )
+                        ),
                 )
-                plan_ok = False
-                self._increment_error()
 
-            max_ride_time = instance.darp_instance_config.max_ride_time
-
-            #  max ride time check - dropoff
-            if max_ride_time and is_drop_off:
+            # per-request checks anchored to the actual pickup: ride time,
+            # travel delay, and the required arrival time (with its symmetric
+            # earliness bound). The ride is measured from the pickup departure
+            # (after service) to the drop-off arrival.
+            if is_drop_off and request.index in departure_times:
                 ride_time = time - departure_times[request.index]
-                if ride_time > timedelta(seconds=int(max_ride_time)):
-                    print(
-                        "[{}. plan] Max ride time exceeded for request {}: ride time was {} while max ride time is {}".format(
-                            plan_counter,
-                            request.index,
-                            ride_time,
-                            max_ride_time
-                        )
+                ride_seconds = ride_time.total_seconds()
+
+                max_ride_time = request.constraints.max_ride_time
+                if not request.constraints.resolved and max_ride_time is None and config.max_ride_time:
+                    # legacy instances without per-request constraints fall back
+                    # to the instance-level limit; for resolved constraints None
+                    # means the constraint is disabled for this request
+                    max_ride_time = config.max_ride_time
+                if max_ride_time is not None and ride_seconds > max_ride_time:
+                    fail(
+                        Failure.MAX_RIDE_TIME,
+                        "[{}. plan] Max ride time exceeded for request {}: ride time was {} s while max ride time is {} s".format(
+                            plan_counter, request.index, ride_seconds, max_ride_time
+                        ),
                     )
-                    plan_ok = False
-                    self._increment_error()
+
+                max_travel_delay = request.constraints.max_travel_delay
+                if max_travel_delay is not None and ride_seconds - request.min_travel_time > max_travel_delay:
+                    fail(
+                        Failure.MAX_TRAVEL_DELAY,
+                        "[{}. plan] Max travel delay exceeded for request {}: ride time {} s exceeds the minimum {} s by more than {} s".format(
+                            plan_counter, request.index, ride_seconds, request.min_travel_time, max_travel_delay
+                        ),
+                    )
+
+                required_arrival = request.constraints.required_arrival_time
+                if required_arrival is not None:
+                    if time > required_arrival:
+                        fail(
+                            Failure.ARRIVAL_DEADLINE,
+                            "[{}. plan] Request {} arrived at {} after the required arrival time {}.".format(
+                                plan_counter, request.index, time, required_arrival
+                            ),
+                        )
+                    else:
+                        earliness = (required_arrival - time).total_seconds()
+                        # the earliness bound reuses the travel delay budget
+                        if max_travel_delay is not None and earliness > max_travel_delay:
+                            fail(
+                                Failure.ARRIVAL_TOO_EARLY,
+                                "[{}. plan] Request {} arrived {} s before the required arrival time {}, more than {} s early.".format(
+                                    plan_counter, request.index, earliness, required_arrival, max_travel_delay
+                                ),
+                            )
+                        earliness_total += earliness
+
+                ride_time_total += ride_seconds * demand.total_travellers
 
             # service time
             time += timedelta(seconds=int(action_data.action.service_time))
@@ -281,15 +440,32 @@ class SolutionChecker:
             # departure time check.
             # We can departure after the current time, but not before
             if action_data.departure_time < time:
-                print(
+                fail(
+                    Failure.DEPARTURE_TIME,
                     "[{}. plan, {}. action] Departure time mismatch (was {}, must be higher than current time {}) when handling request {}".format(
                         plan_counter, action_index + 1, action_data.departure_time, time, action_data.action.request.index
-                                  )
+                                  ),
                 )
-                plan_ok = False
-                self._increment_error()
+
+            # per-vehicle driver pause: idle time at this stop (waiting, service,
+            # and any extra slack before the reported departure) resets the
+            # continuous drive counter when it reaches the vehicle's minimum pause
+            if vehicle is not None and vehicle.min_pause is not None:
+                idle_seconds = (action_data.departure_time - arrival_time).total_seconds()
+                if idle_seconds >= vehicle.min_pause:
+                    continuous_drive_seconds = 0.0
 
             time = action_data.departure_time
+
+            # per-stop operation window: every departure must fit the window
+            # (arrivals precede departures, so they are covered by this check)
+            if not fleet_sizing and operation_end is not None and time > operation_end:
+                fail(
+                    Failure.OPERATION_WINDOW,
+                    "[{}. plan] Departure at {} is after the vehicle operation end {} when handling request {}.".format(
+                        plan_counter, time, operation_end, request.index
+                    ),
+                )
 
             #  max ride time check - pickup
             if is_pickup:
@@ -297,49 +473,101 @@ class SolutionChecker:
 
             previous_action = action_data.action
 
-        # return to init position
+        # return to init position; the instance-level setting can be overridden
+        # per vehicle
+        return_to_depot = config.return_to_depot
+        if vehicle is not None and vehicle.return_to_depot is not None:
+            return_to_depot = vehicle.return_to_depot
         if (
             not fleet_sizing
-            and plan.vehicle is not None
+            and vehicle is not None
             and previous_action
-            and instance.darp_instance_config.return_to_depot
+            and return_to_depot
         ):
             travel_time_to_depot = travel_time_provider.get_travel_time(
-                previous_action.node, plan.vehicle.initial_position
+                previous_action.node, vehicle.initial_position
             )
             travel_time_to_depot = travel_time_to_depot / travel_time_divider
-            cost += travel_time_to_depot
+            travel_time_total += travel_time_to_depot
+            total_drive_seconds += travel_time_to_depot
+            continuous_drive_seconds += travel_time_to_depot
+            if distance_provider is not None:
+                distance_total += distance_provider.get_travel_time(
+                    previous_action.node, vehicle.initial_position
+                )
             time += timedelta(seconds=int(travel_time_to_depot))
 
+            # the depot return leg must fit the operation window and driver rules
+            if operation_end is not None and time > operation_end:
+                fail(
+                    Failure.OPERATION_WINDOW,
+                    "[{}. plan] Depot return at {} is after the vehicle operation end {}.".format(
+                        plan_counter, time, operation_end
+                    ),
+                )
+            if (
+                vehicle.max_drive_time_without_pause is not None
+                and continuous_drive_seconds > vehicle.max_drive_time_without_pause
+            ):
+                fail(
+                    Failure.DRIVER_PAUSE,
+                    "[{}. plan] Continuous drive time {} s exceeds the vehicle limit {} s on the depot return leg.".format(
+                        plan_counter, continuous_drive_seconds, vehicle.max_drive_time_without_pause
+                    ),
+                )
+
+        # per-vehicle total drive time
+        if (
+            not fleet_sizing
+            and vehicle is not None
+            and vehicle.max_drive_time is not None
+            and total_drive_seconds > vehicle.max_drive_time
+        ):
+            fail(
+                Failure.MAX_DRIVE_TIME,
+                "[{}. plan] Total drive time {} s exceeds the vehicle limit {} s.".format(
+                    plan_counter, total_drive_seconds, vehicle.max_drive_time
+                ),
+            )
+
         # max route time check
-        max_route_duration = instance.darp_instance_config.max_route_duration
+        max_route_duration = config.max_route_duration
         if (
             not fleet_sizing
             and max_route_duration
             and time - plan.departure_time > timedelta(seconds=int(max_route_duration))
         ):
-            print(
+            fail(
+                Failure.MAX_ROUTE_DURATION,
                 "[{}. plan] Total max route duration exceeded: Duration is {} but maximum allowed route duration is {}".format(
                     plan_counter,
                     time - plan.departure_time,
                     max_route_duration
-                    )
+                    ),
             )
-            plan_ok = False
-            self._increment_error()
 
-        # add vehicle capital cost to plan cost
-        vehicle_capital_cost = instance.darp_instance_config.vehicle_capital_cost
-        if vehicle_capital_cost is not None and vehicle_capital_cost != 0:
-            cost += vehicle_capital_cost
+        # generalized weighted cost; the default weights reproduce the legacy
+        # cost exactly (total travel time + weighted drop-off delay + capital cost)
+        plan_duration_seconds = (time - plan.departure_time).total_seconds() if plan.actions else 0.0
+        cost = (
+            cost_weights.travel_time_weight * travel_time_total
+            + cost_weights.distance_weight * distance_total
+            + cost_weights.ride_time_weight * ride_time_total
+            + cost_weights.passenger_delay_weight * passenger_delay_total
+            + cost_weights.earliness_weight * earliness_total
+            + cost_weights.plan_duration_weight * plan_duration_seconds
+        )
+        if plan.actions:
+            cost += cost_weights.fixed_plan_cost
+        # legacy behavior: the capital cost applies to every plan in the solution
+        cost += cost_weights.vehicle_capital_cost
 
         # cost check
         if plan.cost is not None and abs(cost - plan.cost) > 1:
-            logging.warning(
-                "{} plan cost mismatch. expected: {}, computed: {}".format(plan_counter, plan.cost, cost)
+            fail(
+                Failure.PLAN_COST,
+                "{} plan cost mismatch. expected: {}, computed: {}".format(plan_counter, plan.cost, cost),
             )
-            plan_ok = False
-            self._increment_error()
 
         if plan_ok:
             logging.debug("[{}. plan] with {} actions OK".format(plan_counter, len(plan.actions)))
@@ -376,6 +604,7 @@ class SolutionChecker:
             for request in plan_served_requests:
                 if request in served_requests:
                     logging.warning("Request {} served twice.".format(request.index))
+                    failures[Failure.REQUEST_SERVED_TWICE] += 1
                     solution_ok = False
                     self._increment_error()
                 else:
@@ -386,18 +615,20 @@ class SolutionChecker:
         # all request served check
         for request in instance.requests:
             if request not in served_requests and request.index not in solution.dropped_requests:
-                print("Request {} not served while not being in dropped requests list.".format(request.index))
+                logging.warning("Request {} not served while not being in dropped requests list.".format(request.index))
+                failures[Failure.REQUEST_NOT_SERVED] += 1
                 solution_ok = False
                 self._increment_error()
 
         # total cost check
         if solution.cost is not None:
             if abs(total_cost - solution.cost) > 1:
-                print(
+                logging.warning(
                     "Solution cost not computed correctly. Solution cost: {}, total cost of all plans: {}".format(
                         solution.cost, total_cost
                     )
                 )
+                failures[Failure.SOLUTION_COST] += 1
                 solution_ok = False
                 self._increment_error()
 
