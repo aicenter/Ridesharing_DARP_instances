@@ -48,8 +48,9 @@ class MatrixTravelTimeProvider(TravelTimeProvider):
 
     @classmethod
     def from_csv(cls, path_to_dm: Path, dtype=np.int32):
-        # travel time matrices are integer seconds; distance matrices may carry
-        # full-precision floats (metres), so the dtype is overridable
+        # both matrix kinds are integers (travel times in seconds, distances in
+        # metres, quantized at the source); the dtype stays overridable for
+        # narrower integer matrices (e.g. int16)
         dm = pd.read_csv(path_to_dm, header=None, dtype=dtype)
         return cls(dm.values)
 

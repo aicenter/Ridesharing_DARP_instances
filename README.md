@@ -288,7 +288,7 @@ The defaults reproduce the legacy cost exactly: total travel time + `demand.rela
 - `per_traveller` (default, legacy): ride time and drop-off delay are multiplied by the request's total travellers, and the delay is measured from the *desired pickup time* (so it includes the rider's own boarding service time).
 - `per_request` (allocator-style, used by real-time DRT allocator exports): ride time and delay are counted once per request, and the delay is measured from the pickup *departure* (net of the boarding service time) — exactly `pickup wait + (ride − minimal travel time)`.
 
-The distance matrix referenced by `dist_filepath` may contain full-precision floating-point values (metres); travel time matrices remain integer seconds.
+The distance matrix referenced by `dist_filepath` contains integer metres, quantized once at the source that generated it (mirroring the integer seconds of the travel time matrix), so all consumers see identical distances.
 
 
 ### Instance metadata and supporting files

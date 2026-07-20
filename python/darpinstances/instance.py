@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Iterable, Dict, List, Optional, Sequence, TextIO, Tuple, Union
 
 import geojson
-import numpy as np
 import pandas as pd
 import yaml
 from pyproj import Transformer
@@ -796,14 +795,14 @@ def load_instance(
         logging.info("Using provided travel time provider")
 
     # optional distance matrix in metres, needed only for distance-based cost;
-    # loaded as float64 so full-precision distances survive the round trip
-    # (integer-valued legacy matrices load identically)
+    # integer metres quantized at the source (like dm.csv is integer seconds),
+    # so the default integer dtype applies
     distance_provider = None
     if 'dist_filepath' in instance_config:
         dist_filepath = Path(instance_config['dist_filepath'])
         check_file_exists(dist_filepath)
         logging.info("Reading distance matrix from: {}".format(os.path.realpath(dist_filepath)))
-        distance_provider = MatrixTravelTimeProvider.read_from_file(dist_filepath, dtype=np.float64)
+        distance_provider = MatrixTravelTimeProvider.read_from_file(dist_filepath)
 
     logging.info("Reading DARP instance from: {}".format(os.path.realpath(demand_path)))
 
