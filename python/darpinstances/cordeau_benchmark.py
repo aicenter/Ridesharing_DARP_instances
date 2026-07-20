@@ -48,7 +48,7 @@ def load(filepath: str) -> DARPInstance:
 		depot_node = CordeauNode(depot_x, depot_y)
 
 		for index in range(num_vehicles):
-			vehicles.append(darpinstances.instance.Vehicle(index, depot_node, vehicle_capacity))
+			vehicles.append(darpinstances.instance.Vehicle(index, depot_node, [{"standard": vehicle_capacity}]))
 
 		origin_actions: List[Tuple[int, CordeauNode, int, int, int]] = []
 

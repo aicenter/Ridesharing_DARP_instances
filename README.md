@@ -241,9 +241,11 @@ Attribute columns:
 | column | meaning |
 |---|---|
 | `service_time` | boarding/alighting time at both stops of this request (seconds, default 0) |
-| `demand_standard` | standard passengers, 1 regular seat each (default 1) |
-| `demand_wheelchairs` | wheelchair passengers, 1 wheelchair slot each (default 0) |
-| `demand_children_in_seat` | children requiring a child seat: each occupies 1 regular seat AND 1 child seat unit (default 0) |
+| `passengers_standard` | passengers occupying one `standard` slot each (default 1) |
+| `passengers_wheelchair` | passengers occupying one `wheelchair` slot each (default 0) |
+| `passengers_electric_wheelchair` | passengers occupying one `electric_wheelchair` slot each (default 0) |
+| `passengers_stroller` | passengers occupying one `stroller` slot each (default 0) |
+| `passengers_children_in_seat` | children in child seats: each occupies one `standard` slot AND one child-seat unit (default 0) |
 | `exclusive` | 0/1: an exclusive request may not share the vehicle with other requests (default 0) |
 | `required_equipment` | semicolon-separated equipment names the vehicle must carry (e.g. `ramp;low_floor`) |
 | `required_vehicle_id` | index of the only vehicle allowed to serve this request |
@@ -255,10 +257,26 @@ Attribute columns:
 
 Vehicles may specify `position` (node index) directly instead of `station_index`. Operation window bounds accept plain integers (seconds, same timestamp convention as request times) in addition to datetime strings.
 
+Seating is described by **configurations**: alternative interior layouts, each a mapping of slot type (`standard`, `wheelchair`, `electric_wheelchair`, `stroller`) to the number of slots. Every passenger occupies one slot of their exact type; at every stop the onboard load must fit within at least one configuration. The fitting configuration may differ from stop to stop — configurations model shared physical spots (e.g. one bay taking either a stroller or a wheelchair), so the active layout can change mid-operation as passengers board and alight (a rider may be asked to take a different seat of the same type). Substitutability is expressed by listing the alternatives explicitly: a bay that takes a manual wheelchair as well as an electric one is two configurations, `{"wheelchair": 1}` and `{"electric_wheelchair": 1}`.
+
+```json
+{
+  "id": 0,
+  "position": 3,
+  "configurations": [
+    {"standard": 4},
+    {"standard": 2, "wheelchair": 1}
+  ],
+  "child_seats": 1,
+  "equipment": ["ramp"]
+}
+```
+
 | field | meaning |
 |---|---|
-| `wheelchair_slots` | wheelchair slots, independent of regular seats (default 0) |
-| `child_seats` | child seat equipment units; each occupies a regular seat when used (default 0) |
+| `configurations` | alternative seating layouts as slot-type → count mappings (see above) |
+| `capacity` | sugar for a single all-`standard` configuration `[{"standard": N}]`; mutually exclusive with `configurations` |
+| `child_seats` | child-seat equipment units; a child seat mounts on a `standard` slot, so each child in a seat consumes one standard slot and one unit (default 0) |
 | `equipment` | list of named equipment flags matched against `required_equipment` (superset check, not consumed) |
 | `max_drive_time` | maximum total driving time over the plan (seconds) |
 | `max_drive_time_without_pause` | maximum continuous driving time (seconds) |

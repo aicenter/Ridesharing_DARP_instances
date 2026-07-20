@@ -256,7 +256,7 @@ class SolutionLoader:
         if fleet_sizing:
             v = json_data["vehicle"]
             vid = int(v.get("index", v.get("id", 0)))
-            vehicle = Vehicle(vid, 0, 999, [], None, None)
+            vehicle = Vehicle(vid, 0, [{"standard": 999}], None, None)
         elif use_virtual_vehicles:
             vehicle = vehicle_map[0]
         else:
@@ -452,7 +452,7 @@ class SolutionLoader:
 
 def _load_vehicle_from_csv(vehicle_row: pd.Series, simulation_start_time: datetime, vehicle_capacity: int) -> Vehicle:
     operation_start = simulation_start_time + timedelta(seconds=int(vehicle_row['time']))
-    return Vehicle(int(vehicle_row['vehicle_id']), int(vehicle_row['node_id']), vehicle_capacity, operation_start=operation_start)
+    return Vehicle(int(vehicle_row['vehicle_id']), int(vehicle_row['node_id']), [{"standard": vehicle_capacity}], operation_start=operation_start)
 
 
 # Replaced by method in SolutionLoader class

@@ -11,11 +11,14 @@ The extended fixture (fixtures/extended) has the same 4-node matrix as the
 basic fixture and 2 requests:
 - R0: 1 -> 2, t=1000, min_tt 200, service 10 s, 1 adult + 1 child-in-seat,
       requires 'ramp', required arrival 1600, walks 50/80 m
-- R1: 3 -> 1, t=1100, min_tt 60, 1 adult + 1 wheelchair,
+- R1: 3 -> 1, t=1100, min_tt 60, 1 adult + 1 wheelchair passenger,
       per-request max_pickup_delay override 60 s
-- vehicle 0 at node 0: 3 seats, 1 wheelchair slot, 1 child seat, ramp,
-  operation [800, 2000], max drive 600 s, max continuous drive 400 s,
-  min pause 30 s, no depot return
+- vehicle 0 at node 0: one seating configuration {standard: 3, wheelchair: 1},
+  1 child seat, ramp, operation [800, 2000], max drive 600 s, max continuous
+  drive 400 s, min pause 30 s, no depot return
+
+Onboard slot loads along the valid schedule: after P0 {standard: 2} (adult +
+child-in-seat), after P1 {standard: 3, wheelchair: 1}, after D1 {standard: 2}.
 
 Hand-computed valid schedule (departure 900):
   P0 arr 1000 dep 1010 (service 10), P1 arr 1070 dep 1100 (wait, pause reset),
@@ -143,19 +146,55 @@ def test_relative_max_delay_mode(instance_dir):
     assert ok, {failure.name: count for failure, count in failures.items() if count}
 
 
-def test_seat_capacity_with_composite_demand(instance_dir):
-    # R0 needs 2 seats (adult + child-in-seat), R1 one more: 3 > 2
-    patch_vehicle(instance_dir, "capacity", 2)
+def test_seat_capacity_with_composite_passengers(instance_dir):
+    # R0 needs 2 standard slots (adult + child-in-seat), R1 one more: 3 > 2
+    patch_vehicle(instance_dir, "configurations", [{"standard": 2, "wheelchair": 1}])
     ok, failures = check(instance_dir, valid_solution())
     assert not ok
     assert failures[Failure.CAPACITY] >= 1
 
 
 def test_wheelchair_capacity(instance_dir):
-    patch_vehicle(instance_dir, "wheelchair_slots", 0)
+    # no configuration offers a wheelchair slot
+    patch_vehicle(instance_dir, "configurations", [{"standard": 3}])
     ok, failures = check(instance_dir, valid_solution())
     assert not ok
-    assert failures[Failure.WHEELCHAIR_CAPACITY] >= 1
+    assert failures[Failure.CAPACITY] >= 1
+
+
+def test_reconfiguration_between_stops(instance_dir):
+    # neither configuration alone covers the whole plan: {standard: 4} fits the
+    # load after P0 but has no wheelchair slot, {standard: 3, wheelchair: 1}
+    # fits the load after P1. Per-stop fitting accepts the schedule — the
+    # configurations model shared spots, so the active one may change
+    # mid-operation.
+    patch_vehicle(instance_dir, "configurations", [{"standard": 4}, {"standard": 3, "wheelchair": 1}])
+    ok, failures = check(instance_dir, valid_solution())
+    assert ok, {failure.name: count for failure, count in failures.items() if count}
+
+
+def test_reconfiguration_no_single_fit_rejected(instance_dir):
+    # after P1 the load is {standard: 3, wheelchair: 1}: {standard: 4} has no
+    # wheelchair slot and {standard: 2, wheelchair: 1} lacks a standard seat —
+    # the union of configurations must NOT be treated as one big vehicle
+    patch_vehicle(instance_dir, "configurations", [{"standard": 4}, {"standard": 2, "wheelchair": 1}])
+    ok, failures = check(instance_dir, valid_solution())
+    assert not ok
+    assert failures[Failure.CAPACITY] >= 1
+
+
+def test_capacity_sugar(instance_dir):
+    # plain "capacity": N is sugar for one all-standard configuration; R1's
+    # wheelchair passenger is made a standard one so the schedule fits
+    patch_request(instance_dir, 1, "passengers_wheelchair", 0)
+    patch_request(instance_dir, 1, "passengers_standard", 2)
+    vehicles_path = instance_dir / "vehicles.json"
+    vehicles = json.loads(vehicles_path.read_text(encoding="utf-8"))
+    del vehicles[0]["configurations"]
+    vehicles[0]["capacity"] = 4
+    vehicles_path.write_text(json.dumps(vehicles), encoding="utf-8")
+    ok, failures = check(instance_dir, valid_solution())
+    assert ok, {failure.name: count for failure, count in failures.items() if count}
 
 
 def test_child_seat_capacity(instance_dir):

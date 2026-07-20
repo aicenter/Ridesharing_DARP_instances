@@ -1,38 +1,56 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import Enum, auto
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 from datetime import datetime
 
+# The fixed slot-type vocabulary: every passenger occupies exactly one slot of
+# their type for the whole ride, and vehicle seating configurations are counts
+# over these types. Children in child seats are NOT a slot type — a child seat
+# is equipment mounted on a standard seat, so a child in a seat occupies one
+# standard slot plus one child-seat unit (a separate vehicle-level count).
+SLOT_TYPES = ("standard", "wheelchair", "electric_wheelchair", "stroller")
 
-class Demand:
+
+@dataclass(frozen=True)
+class Passengers:
     """
-    Composite resource demand of one request. A standard passenger occupies one
-    regular seat, a wheelchair user occupies one wheelchair slot (independent of
-    regular seats), and a child in a child seat occupies one regular seat AND one
-    child seat unit (the child seat is equipment installed on a regular seat).
+    The travelling group of one request, as counts per slot type, plus the
+    number of children travelling in child seats. Defaults to a single
+    standard passenger.
     """
 
-    def __init__(self, standard: int = 1, wheelchairs: int = 0, children_in_seat: int = 0):
-        self.standard = standard
-        self.wheelchairs = wheelchairs
-        self.children_in_seat = children_in_seat
+    standard: int = 1
+    wheelchair: int = 0
+    electric_wheelchair: int = 0
+    stroller: int = 0
+    children_in_seat: int = 0
 
     @property
-    def seats_needed(self) -> int:
-        return self.standard + self.children_in_seat
+    def slot_demand(self) -> Dict[str, int]:
+        """Occupied slots per slot type (children occupy standard seats)."""
+        return {
+            "standard": self.standard + self.children_in_seat,
+            "wheelchair": self.wheelchair,
+            "electric_wheelchair": self.electric_wheelchair,
+            "stroller": self.stroller,
+        }
 
     @property
     def total_travellers(self) -> int:
-        return self.standard + self.wheelchairs + self.children_in_seat
-
-    def __repr__(self):
-        return f"Demand(standard={self.standard}, wheelchairs={self.wheelchairs}, children_in_seat={self.children_in_seat})"
+        return (
+            self.standard
+            + self.wheelchair
+            + self.electric_wheelchair
+            + self.stroller
+            + self.children_in_seat
+        )
 
 
 class RequestConstraints:
     """
-    Effective per-request constraint limits, merged from the instance config
-    baseline and the per-request override columns. A value of None means the
+    Effective per-request constraints, merged from the instance config baseline
+    and the per-request override columns. A limit value of None means the
     constraint is disabled for this request.
 
     Both delay constraints follow the unified semantics:
@@ -50,6 +68,9 @@ class RequestConstraints:
         required_arrival_time: Optional[datetime] = None,
         resolved: bool = False,
         max_earliness: Optional[float] = None,
+        required_vehicle_id: Optional[int] = None,
+        exclusive: bool = False,
+        required_equipment: Optional[Set[str]] = None,
     ):
         self.max_travel_delay = max_travel_delay
         self.max_ride_time = max_ride_time
@@ -62,6 +83,12 @@ class RequestConstraints:
         # loaders default it to max_travel_delay (the historical behaviour),
         # None with resolved=True means "earliness unbounded"
         self.max_earliness = max_earliness
+        # per-request hard constraints on the assignment (no config baseline):
+        # only this vehicle may serve the request / no ride-sharing while the
+        # request is onboard / named equipment the vehicle must carry
+        self.required_vehicle_id = required_vehicle_id
+        self.exclusive = exclusive
+        self.required_equipment = required_equipment if required_equipment is not None else set()
 
 
 class Coordinate(ABC):
@@ -116,11 +143,7 @@ class Request:
         min_travel_time: int,
         pickup_service_time: int = 0,
         drop_off_service_time: int = 0,
-        equipment: int = 0,
-        required_vehicle_id: Optional[int] = None,
-        demand: Optional[Demand] = None,
-        exclusive: bool = False,
-        required_equipment: Optional[Set[str]] = None,
+        passengers: Passengers = Passengers(),
         constraints: Optional[RequestConstraints] = None,
         walk_to_origin: float = 0.0,
         walk_from_destination: float = 0.0,
@@ -139,12 +162,10 @@ class Request:
             drop_off_service_time
         )
         self.min_travel_time = min_travel_time
-        self.equipment = equipment
-        self.required_vehicle_id = required_vehicle_id
-        self.demand = demand if demand is not None else Demand()
-        self.exclusive = exclusive
-        self.required_equipment = required_equipment if required_equipment is not None else set()
+        self.passengers = passengers
         self.constraints = constraints if constraints is not None else RequestConstraints()
+        # actual walking distances of this request's rider (metres); the LIMIT
+        # they are checked against lives in constraints.max_walking_distance
         self.walk_to_origin = walk_to_origin
         self.walk_from_destination = walk_from_destination
 
@@ -160,11 +181,9 @@ class Vehicle:
         self,
         index: int,
         initial_position,
-        capacity: int,
-        configurations: List[List[int]] = [],
+        configurations: List[Dict[str, int]],
         operation_start: datetime = None,
         operation_end: datetime = None,
-        wheelchair_slots: int = 0,
         child_seats: int = 0,
         equipment: Optional[Set[str]] = None,
         max_drive_time: Optional[int] = None,
@@ -175,15 +194,18 @@ class Vehicle:
     ):
         self.index = index
         self.initial_position = initial_position
-        self.capacity = capacity
+        # alternative seating configurations, each a slot-type -> count dict
+        # (see SLOT_TYPES). The onboard load must fit within at least one
+        # configuration at every stop; the fitting configuration may differ
+        # between stops (configurations model shared physical spots, e.g. one
+        # bay taking either a stroller or a wheelchair)
         self.configurations = configurations
         self.operation_start = operation_start
         self.operation_end = operation_end
-        # typed resources: wheelchair slots are dedicated space outside regular
-        # seats; child seats are equipment units installed on regular seats
-        self.wheelchair_slots = wheelchair_slots
+        # child seats are equipment units installed on standard seats, tracked
+        # as a plain count outside the configurations
         self.child_seats = child_seats
-        # named equipment flags matched against request.required_equipment (superset check)
+        # named equipment flags matched against the requests' required equipment (superset check)
         self.equipment = equipment if equipment is not None else set()
         # driver rules, all in seconds
         self.max_drive_time = max_drive_time
@@ -197,8 +219,13 @@ class Vehicle:
         # even though no constraint requires it to make it back by shift end
         self.cost_return_to_depot = bool(cost_return_to_depot)
 
+    @property
+    def capacity(self) -> int:
+        """Largest standard-seat count over the configurations (legacy shorthand)."""
+        return max((config.get("standard", 0) for config in self.configurations), default=0)
+
 
 class VirtualVehicle(Vehicle):
     def __init__(self, capacity: int, time_start):
-        super().__init__(0, None, capacity)
+        super().__init__(0, None, [{"standard": capacity}])
         self.time_to_start = time_start

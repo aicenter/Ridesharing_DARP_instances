@@ -2,8 +2,7 @@
   {
     "id": 0,
     "position": 0,
-    "capacity": 3,
-    "wheelchair_slots": 1,
+    "configurations": [{"standard": 3, "wheelchair": 1}],
     "child_seats": 1,
     "equipment": ["ramp"],
     "operation_start": 800,

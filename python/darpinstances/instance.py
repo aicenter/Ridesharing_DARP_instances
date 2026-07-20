@@ -4,7 +4,6 @@ import math
 import os
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, time, timezone
-from enum import Enum
 from pathlib import Path
 from typing import Iterable, Dict, List, Optional, Sequence, TextIO, Tuple, Union
 
@@ -17,7 +16,7 @@ from tqdm.autonotebook import tqdm
 
 import darpinstances.log
 from darpinstances.inout import check_file_exists
-from darpinstances.instance_objects import Coordinate, Demand, Request, RequestConstraints, Vehicle
+from darpinstances.instance_objects import SLOT_TYPES, Coordinate, Passengers, Request, RequestConstraints, Vehicle
 from darpinstances.utils import TimeLoader, DarpinstancesTimestampLoader
 from darpinstances.travel_time_provider import (
     TravelTimeProvider,
@@ -198,27 +197,44 @@ def load_vehicles_csv(vehicles_path: Path) -> List[Vehicle]:
     veh_data = darpinstances.inout.load_csv(vehicles_path, "\t")
     vehicles = []
     for index, veh in enumerate(veh_data):
-        vehicles.append(Vehicle(index, int(veh[0]), int(veh[1])))
+        # legacy tab-separated form: position, capacity (all-standard seating)
+        vehicles.append(Vehicle(index, int(veh[0]), [{"standard": int(veh[1])}]))
 
     return vehicles
 
 
-class EquipmentType(Enum):
-    NONE = 0
-    STANDARD_SEAT = 1
-    WHEELCHAIR = 2
-    ELECTRIC_WHEELCHAIR = 3
-    SPECIAL_NEEDS_STROLLER = 4
+# translation of the legacy slot-type spellings (Slot_Type request column,
+# vehicle "slots"/"configurations" entries) to the unified vocabulary
+_LEGACY_SLOT_TYPES = {
+    "STANDARD_SEAT": "standard",
+    "WHEELCHAIR": "wheelchair",
+    "ELECTRIC_WHEELCHAIR": "electric_wheelchair",
+    "SPECIAL_NEEDS_STROLLER": "stroller",
+}
 
 
-def map_equipment_type(equipment_str: str) -> EquipmentType:
-    equipment_mapping = {
-        "NONE": EquipmentType.NONE,
-        "STANDARD_SEAT": EquipmentType.STANDARD_SEAT,
-        "WHEELCHAIR": EquipmentType.WHEELCHAIR,
-        "ELECTRIC_WHEELCHAIR": EquipmentType.ELECTRIC_WHEELCHAIR,
-        "SPECIAL_NEEDS_STROLLER": EquipmentType.SPECIAL_NEEDS_STROLLER, }
-    return equipment_mapping.get(equipment_str, EquipmentType.NONE)
+def _slot_type(name: str) -> str:
+    """Map a slot-type name (unified or legacy spelling) to the unified vocabulary."""
+    key = str(name).strip()
+    if key in SLOT_TYPES:
+        return key
+    if key in _LEGACY_SLOT_TYPES:
+        return _LEGACY_SLOT_TYPES[key]
+    raise ValueError(f"Unknown slot type '{name}' (expected one of {SLOT_TYPES})")
+
+
+def _passengers_from_slot_type(slot_type_name: Optional[str]) -> Passengers:
+    """
+    Translate a legacy per-request Slot_Type into the unified Passengers model:
+    one traveller occupying one slot of the given type (NONE/absent means a
+    standard passenger).
+    """
+    if slot_type_name is None or str(slot_type_name).strip() in ("", "NONE", "0"):
+        return Passengers()
+    slot = _slot_type(slot_type_name)
+    if slot == "standard":
+        return Passengers()
+    return Passengers(standard=0, **{slot: 1})
 
 
 def _load_datetime(string: str):
@@ -238,6 +254,55 @@ def _load_operation_time(value) -> datetime:
     return parsed.replace(tzinfo=timezone.utc)
 
 
+def _load_vehicle_configurations(veh: dict, index: int) -> List[Dict[str, int]]:
+    """
+    Load a vehicle's seating configurations as slot-type -> count dicts.
+    Accepted forms:
+    - "configurations": [{"standard": 4}, {"standard": 2, "wheelchair": 1}]
+      (list of named-count dicts over SLOT_TYPES),
+    - "capacity": N — sugar for a single all-standard configuration,
+    - legacy "slots": [{"type": "WHEELCHAIR", "count": 1}, ...] — one
+      configuration, translated to the unified vocabulary,
+    - legacy "configurations": [{"STANDARD_SEAT": 2, "WHEELCHAIR": 1}, ...]
+      (dicts keyed by the legacy enum spellings), translated likewise.
+    """
+    if "wheelchair_slots" in veh:
+        raise ValueError(
+            f"Vehicle {index}: 'wheelchair_slots' has been replaced by seating "
+            "configurations — use \"configurations\": [{\"standard\": S, \"wheelchair\": W}]"
+        )
+
+    if "configurations" in veh:
+        if "capacity" in veh:
+            raise ValueError(f"Vehicle {index}: give either 'configurations' or 'capacity', not both")
+        configurations = []
+        for item in veh["configurations"]:
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"Vehicle {index}: each configuration must be a slot-type -> count mapping, got {item!r}"
+                )
+            configuration = {}
+            for name, count in item.items():
+                slot = _slot_type(name)
+                configuration[slot] = configuration.get(slot, 0) + int(count)
+            configurations.append(configuration)
+        if not configurations:
+            raise ValueError(f"Vehicle {index}: 'configurations' must not be empty")
+        return configurations
+
+    if "slots" in veh:
+        configuration = {}
+        for item in veh["slots"]:
+            slot = _slot_type(item["type"])
+            configuration[slot] = configuration.get(slot, 0) + int(item["count"])
+        return [configuration]
+
+    if "capacity" in veh:
+        return [{"standard": int(veh["capacity"])}]
+
+    raise ValueError(f"Vehicle {index}: no seating given — provide 'configurations' or 'capacity'")
+
+
 def load_vehicles_from_json(vehicles_path: Path, stations_path: Optional[Path] = None) -> List[Vehicle]:
     veh_data = darpinstances.inout.load_json(vehicles_path)
     stations = []
@@ -247,28 +312,7 @@ def load_vehicles_from_json(vehicles_path: Path, stations_path: Optional[Path] =
             stations.append(int(station[0]))
     vehicles = []
     for index, veh in enumerate(veh_data):
-        configurations = []
-        if "slots" in veh:
-            equipment = []
-            for item in veh["slots"]:
-                count = int(item["count"])
-                equipment_type = map_equipment_type(item["type"])
-                for n in range(count):
-                    equipment.append(equipment_type.value)
-            configurations.append(equipment)
-        elif "configurations" in veh:
-            equipment_list = [equipment.name for equipment in EquipmentType]
-            for item in veh["configurations"]:
-                configuration_equipment = []
-                for equipment_name in equipment_list:
-                    equipment_type = map_equipment_type(equipment_name)
-                    count = int(item.get(equipment_name, 0))
-                    for i in range(count):
-                        configuration_equipment.append(equipment_type.value)
-                configurations.append(configuration_equipment)
-        config_capacities = [len(config) for config in configurations]
-        max_capacity = max(config_capacities) if config_capacities else 0
-        capacity = veh["capacity"] if "capacity" in veh else max_capacity
+        configurations = _load_vehicle_configurations(veh, index)
         operation_start = _load_operation_time(veh["operation_start"]) if "operation_start" in veh else None
         operation_end = _load_operation_time(veh["operation_end"]) if "operation_end" in veh else None
 
@@ -283,11 +327,9 @@ def load_vehicles_from_json(vehicles_path: Path, stations_path: Optional[Path] =
             Vehicle(
                 int(veh["id"]) if "id" in veh else index,
                 initial_position,
-                capacity,
                 configurations,
                 operation_start,
                 operation_end,
-                wheelchair_slots=int(veh.get("wheelchair_slots", 0)),
                 child_seats=int(veh.get("child_seats", 0)),
                 equipment=set(veh.get("equipment", [])),
                 max_drive_time=veh.get("max_drive_time"),
@@ -397,7 +439,7 @@ def load_demand_legacy(
 
         start_node = int(line[column_indices['origin']])
         end_node = int(line[column_indices['destination']])
-        equipment = map_equipment_type(line[4]).value if (len(line) > 4) else 0
+        passengers = _passengers_from_slot_type(line[4] if len(line) > 4 else None)
 
         min_travel_time = travel_time_provider.get_travel_time(start_node, end_node)
         min_travel_time = min_travel_time / travel_time_divider
@@ -427,8 +469,8 @@ def load_demand_legacy(
                 math.ceil(min_travel_time),
                 0,
                 0,
-                equipment,
-                vehicle_id
+                passengers=passengers,
+                constraints=RequestConstraints(required_vehicle_id=vehicle_id),
             )
         )
         line_string = demand_file.readline()
@@ -566,12 +608,6 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
     else:
         request_data.rename(columns={'origin': 'start_node', 'destination': 'end_node'}, inplace=True)
 
-    # equipment
-    if 'Slot_Type' in request_data.columns:
-        request_data['equipment'] = [map_equipment_type(slot_type).value for slot_type in request_data['Slot_Type']]
-    else:
-        request_data['equipment'] = 0
-
     # minimum travel time from start to end node
     request_data['min_travel_time'] = [travel_time_provider.get_travel_time(start_node, end_node) / travel_time_divider
         for start_node, end_node in zip(request_data['start_node'], request_data['end_node'])]
@@ -693,14 +729,28 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
             max_earliness=max_earliness,
         )
 
-        demand = Demand(
-            standard=int(cell(row, 'demand_standard', 1)),
-            wheelchairs=int(cell(row, 'demand_wheelchairs', 0)),
-            children_in_seat=int(cell(row, 'demand_children_in_seat', 0)),
-        )
+        # travelling group: per-slot-type counts; a legacy Slot_Type column is
+        # translated when no passengers_* column is given for the request
+        slot_type_legacy = cell(row, 'Slot_Type')
+        passenger_counts = {
+            slot: _optional_int(cell(row, f'passengers_{slot}')) for slot in SLOT_TYPES
+        }
+        children_in_seat = _optional_int(cell(row, 'passengers_children_in_seat'))
+        if all(count is None for count in passenger_counts.values()) and children_in_seat is None:
+            passengers = _passengers_from_slot_type(slot_type_legacy)
+        else:
+            passengers = Passengers(
+                standard=passenger_counts['standard'] if passenger_counts['standard'] is not None else 1,
+                wheelchair=passenger_counts['wheelchair'] or 0,
+                electric_wheelchair=passenger_counts['electric_wheelchair'] or 0,
+                stroller=passenger_counts['stroller'] or 0,
+                children_in_seat=children_in_seat or 0,
+            )
 
+        constraints.required_vehicle_id = _optional_int(row.required_vehicle_id)
+        constraints.exclusive = bool(int(cell(row, 'exclusive', 0)))
         required_equipment_raw = cell(row, 'required_equipment', '')
-        required_equipment = {
+        constraints.required_equipment = {
             token.strip() for token in str(required_equipment_raw).split(';') if token.strip()
         }
 
@@ -719,11 +769,7 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
                 math.ceil(min_travel_time),
                 service_time,
                 service_time,
-                row.equipment,
-                _optional_int(row.required_vehicle_id),
-                demand=demand,
-                exclusive=bool(int(cell(row, 'exclusive', 0))),
-                required_equipment=required_equipment,
+                passengers=passengers,
                 constraints=constraints,
                 walk_to_origin=float(cell(row, 'walk_to_origin_m', 0.0)),
                 walk_from_destination=float(cell(row, 'walk_from_dest_m', 0.0)),

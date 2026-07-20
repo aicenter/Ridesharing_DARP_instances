@@ -1,5 +1,4 @@
 import argparse
-import copy
 import json
 import logging
 import os
@@ -18,7 +17,7 @@ import darpinstances.instance
 from darpinstances.cordeau_benchmark import load as load_cordeau
 from darpinstances.inout import check_file_exists
 from darpinstances.instance import DARPInstance, TravelTimeProvider
-from darpinstances.instance_objects import Request, Action, ActionType
+from darpinstances.instance_objects import SLOT_TYPES, Request, Action, ActionType
 from darpinstances.solution import VehiclePlan, Solution
 from darpinstances.utils import TimeLoader
 
@@ -32,7 +31,6 @@ class Failure(Enum):
     PRECEDENCE = auto()
     MAX_TIME = auto()
     CAPACITY = auto()
-    WHEELCHAIR_CAPACITY = auto()
     CHILD_SEAT_CAPACITY = auto()
     EQUIPMENT = auto()
     REQUIRED_VEHICLE = auto()
@@ -102,21 +100,14 @@ class SolutionChecker:
         travel_time_provider = instance.travel_time_provider
         distance_provider = instance.distance_provider
         served_requests = set()
-        vehicle_configurations = (
-            copy.deepcopy(vehicle.configurations)
-            if vehicle is not None
-            else []
-        )
-        used_equipment = []
         min_pause_length = config.min_pause_length * 60
         max_pause_interval = config.max_pause_interval * 60
         driving_start = time
 
-        # typed resource loads for the multi-seat demand model: a standard
-        # passenger holds a regular seat, a wheelchair user holds a wheelchair
-        # slot, a child in a child seat holds a regular seat AND a child seat unit
-        seat_load = 0
-        wheelchair_load = 0
+        # onboard load per slot type (children in child seats occupy standard
+        # seats — folded in by Passengers.slot_demand), plus the child-seat
+        # units, which are equipment outside the seating configurations
+        slot_load = {slot: 0 for slot in SLOT_TYPES}
         child_seat_load = 0
 
         # per-vehicle driver rules, in seconds
@@ -163,19 +154,19 @@ class SolutionChecker:
             request = action.request
             is_drop_off = action.action_type == ActionType.DROP_OFF
             is_pickup = action.action_type == ActionType.PICKUP
-            demand = request.demand
+            passengers = request.passengers
 
             # onboard check; exclusive-ride conflicts are evaluated against the
             # onboard set BEFORE this action is applied
             if is_pickup:
-                if request.exclusive and onboard_requests:
+                if request.constraints.exclusive and onboard_requests:
                     fail(
                         Failure.EXCLUSIVE_RIDE,
                         "[{}. plan] Exclusive request {} picked up while other requests are onboard.".format(
                             plan_counter, request.index
                         ),
                     )
-                elif any(onboard.exclusive for onboard in onboard_requests):
+                elif any(onboard.constraints.exclusive for onboard in onboard_requests):
                     fail(
                         Failure.EXCLUSIVE_RIDE,
                         "[{}. plan] Request {} picked up while an exclusive request is onboard.".format(
@@ -258,77 +249,57 @@ class SolutionChecker:
                     ),
                 )
 
-            # capacity checks over the three typed resources; the regular seat
-            # check is skipped for vehicles with legacy slot configurations, as
-            # their capacity is expressed by the configurations instead
+            # slot-capacity check: every traveller occupies one slot of their
+            # exact type (children in child seats occupy a standard seat), and
+            # after each pickup the onboard load must fit within at least one
+            # seating configuration. The fit is re-evaluated per stop
+            # DELIBERATELY: configurations model shared physical spots (e.g.
+            # one bay taking either a stroller or a wheelchair), so the active
+            # configuration may change mid-operation as passengers come and go.
+            # Child seats are equipment mounted on standard seats, tracked as a
+            # separate vehicle-level count outside the configurations.
+            slot_demand = passengers.slot_demand
             if is_pickup:
+                for slot, count in slot_demand.items():
+                    slot_load[slot] += count
+                child_seat_load += passengers.children_in_seat
                 if not fleet_sizing and vehicle is not None:
-                    if not vehicle_configurations and seat_load + demand.seats_needed > vehicle.capacity:
+                    fits = any(
+                        all(slot_load[slot] <= configuration.get(slot, 0) for slot in SLOT_TYPES)
+                        for configuration in vehicle.configurations
+                    )
+                    if not fits:
                         fail(
                             Failure.CAPACITY,
-                            "[{}. plan] Seat capacity exceeded when handling request {}: {} occupied + {} needed > {}".format(
-                                plan_counter, request.index, seat_load, demand.seats_needed, vehicle.capacity
+                            "[{}. plan] Onboard load {} fits no seating configuration {} of vehicle {} after picking up request {}.".format(
+                                plan_counter,
+                                {slot: load for slot, load in slot_load.items() if load},
+                                vehicle.configurations,
+                                vehicle_index,
+                                request.index,
                             ),
                         )
-                    if demand.wheelchairs and wheelchair_load + demand.wheelchairs > vehicle.wheelchair_slots:
-                        fail(
-                            Failure.WHEELCHAIR_CAPACITY,
-                            "[{}. plan] Wheelchair slots exceeded when handling request {}: {} occupied + {} needed > {}".format(
-                                plan_counter, request.index, wheelchair_load, demand.wheelchairs, vehicle.wheelchair_slots
-                            ),
-                        )
-                    if demand.children_in_seat and child_seat_load + demand.children_in_seat > vehicle.child_seats:
+                    if passengers.children_in_seat and child_seat_load > vehicle.child_seats:
                         fail(
                             Failure.CHILD_SEAT_CAPACITY,
-                            "[{}. plan] Child seats exceeded when handling request {}: {} occupied + {} needed > {}".format(
-                                plan_counter, request.index, child_seat_load, demand.children_in_seat, vehicle.child_seats
+                            "[{}. plan] Child seats exceeded when handling request {}: {} needed > {}".format(
+                                plan_counter, request.index, child_seat_load, vehicle.child_seats
                             ),
                         )
-                seat_load += demand.seats_needed
-                wheelchair_load += demand.wheelchairs
-                child_seat_load += demand.children_in_seat
             else:
-                seat_load -= demand.seats_needed
-                wheelchair_load -= demand.wheelchairs
-                child_seat_load -= demand.children_in_seat
-
-            # legacy slot-configuration equipment check (integer equipment types
-            # consuming vehicle configuration slots)
-            if not fleet_sizing:
-                matching_configurations = [configuration for configuration in vehicle_configurations if
-                                          any(num in used_equipment for num in configuration)]
-                available_configurations = copy.deepcopy(vehicle_configurations) if not used_equipment else copy.deepcopy(
-                    matching_configurations
-                )
-                for configuration in available_configurations:
-                    for item in used_equipment:
-                        if item in configuration:
-                            configuration.remove(item)
-
-                equipment = action_data.action.request.equipment
-                if equipment != 0:
-                    if is_pickup:
-                        if not any(equipment in configuration for configuration in available_configurations):
-                            fail(
-                                Failure.EQUIPMENT,
-                                "Request {}, Equipment {} not available in vehicle equipment list. Vehicle: {}".format(
-                                    action_data.action.request.index,
-                                    equipment,
-                                    vehicle_index
-                                ),
-                            )
-                        used_equipment.append(equipment)
-                    elif is_drop_off:
-                        used_equipment.remove(equipment)
+                for slot, count in slot_demand.items():
+                    slot_load[slot] -= count
+                child_seat_load -= passengers.children_in_seat
 
             # named equipment flags: the vehicle must carry a superset of the
-            # request's required equipment (not consumed, unlike configurations)
-            if is_pickup and request.required_equipment and vehicle is not None:
-                if not request.required_equipment.issubset(vehicle.equipment):
+            # request's required equipment (not consumed, unlike slots)
+            required_equipment = request.constraints.required_equipment
+            if is_pickup and required_equipment and vehicle is not None:
+                if not required_equipment.issubset(vehicle.equipment):
                     fail(
                         Failure.EQUIPMENT,
                         "[{}. plan] Request {} requires equipment {} but vehicle {} only has {}.".format(
-                            plan_counter, request.index, sorted(request.required_equipment),
+                            plan_counter, request.index, sorted(required_equipment),
                             vehicle_index, sorted(vehicle.equipment)
                         ),
                     )
@@ -360,11 +331,12 @@ class SolutionChecker:
                 if per_request_accounting:
                     passenger_delay_total += drop_off_delay_seconds - request.pickup_action.service_time
                 else:
-                    passenger_delay_total += drop_off_delay_seconds * demand.total_travellers
+                    passenger_delay_total += drop_off_delay_seconds * passengers.total_travellers
 
             # vehicle id check
-            if not fleet_sizing and action_data.action.request.required_vehicle_id is not None:
-                if action_data.action.request.required_vehicle_id != vehicle_index:
+            required_vehicle_id = action_data.action.request.constraints.required_vehicle_id
+            if not fleet_sizing and required_vehicle_id is not None:
+                if required_vehicle_id != vehicle_index:
                     fail(
                         Failure.REQUIRED_VEHICLE,
                         "Request {} is not for vehicle {}.".format(action_data.action.request.index, vehicle_index),
@@ -450,7 +422,7 @@ class SolutionChecker:
                 if per_request_accounting:
                     ride_time_total += ride_seconds
                 else:
-                    ride_time_total += ride_seconds * demand.total_travellers
+                    ride_time_total += ride_seconds * passengers.total_travellers
 
             # service time
             time += timedelta(seconds=int(action_data.action.service_time))
