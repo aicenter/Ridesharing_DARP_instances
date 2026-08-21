@@ -54,6 +54,26 @@ The dataset and methodology used to create it are described in the paper [Large-
 The dataset of instances and associated results are available through the dataset repository Zenodo. The dataset is compressed by [7zip](https://7-zip.org/) to adhere to the Zenodo dataset size limits, with some of the archives split into multiple parts. The distance matrices, instances, and results are in separate archives. However, the folder structure inside the archives follows the schema described below. Thus, unpacking the distance matrix archives places them in an appropriate directory in the `Instances` folder.  The dataset is licensed under the [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/) license.
 
 
+## Terminology
+When solving the DARP problem, for each request, we need to determine two times:
+
+- pickup time, and
+- drop-off time.
+
+In line with the DARP literature, these times represent the start of the service, i.e., the start of the on-boarding process, and the start of the off-boarding process, respectively.
+
+For both pickup and drop-off, the pasanger may request a specific ideal time,  we call it the *desired pickup time*, and *desired drop-off time*.
+Also, these times are often constrained by a *time window*, we call these constraints:
+
+- *earliest pickup/drop-off time*
+- *latest pickup/drop-off time*
+
+With each action (pickup/drop-off) a *service time* is associated. We may also refer to it as to:
+
+- *boarding time* for pickup,
+- *unboarding time* for drop-off.
+
+
 ## Time Format
 All times in both the instances and the results can be expressed in two formats:
 
@@ -263,7 +283,7 @@ python python/scripts/check_triangle_inequality.py <path_to_distance_matrix>
 
 Two delay constraints coexist; when both are enabled, the more restrictive one binds:
 
-- **`max_delay`**: anchored to the **requested pickup time**. It is expressed through the derived per-action maximum times as described below (window-based).
+- **`max_delay`**: anchored to the **desired pickup time**. It is expressed through the derived per-action maximum times as described below (window-based).
 - **`max_travel_delay`**: anchored to the **actual pickup**. It bounds `ride time − minimal travel time`, where the ride is measured from the pickup *departure* (after service) to the drop-off *arrival*. Because the bound moves with the actual boarding time, it is checked during the plan walk and cannot be expressed as a static window.
 
 The *maximum delay* (the `max_delay` budget) for each request should be interpreted as follows:
@@ -278,10 +298,10 @@ The same `mode`/`seconds`/`relative` interpretation applies to `max_travel_delay
 
 The logic for the maximum time for each action is as follows:
 
-- **The maximum pickup time**: is equal to *desired pickup time* + `max_pickup_delay` if provided, otherwise, it is equal to *desired pickup time* + the *maximum delay* for the request.
-- **The maximum dropoff time**: is equal to *desired pickup time* + *minimal travel time* + *maximum delay*, rounded to the nearest second.
+- **The latest pickup time**: is equal to *desired pickup time* + `max_pickup_delay` if provided, otherwise, it is equal to *desired pickup time* + the *maximum delay* for the request.
+- **The latest dropoff time**: is equal to *desired pickup time* + *minimal travel time* + *maximum delay*, rounded to the nearest second.
   - No `max_pickup_delay` slack is added: a late pickup eats into the delay budget. The window is therefore exactly equivalent to the constraint *actual dropoff* − (*desired pickup time* + *minimal travel time*) ≤ *maximum delay*.
-  - Note: before the unified format, the *maximum dropoff time* additionally included the `max_pickup_delay` value (a request picked up at its maximum pickup time kept its full delay budget). That interpretation existed to keep checking window-only and was dropped in favor of the more natural rule above; re-checking old solutions may therefore flag drop-offs that were previously within the extra slack.
+  - Note: before the unified format, the *latest dropoff time* additionally included the `max_pickup_delay` value (a request picked up at its latest pickup time kept its full delay budget). That interpretation existed to keep checking window-only and was dropped in favor of the more natural rule above; re-checking old solutions may therefore flag drop-offs that were previously within the extra slack.
 
 Apart from the configuration above, there can be other fields used for the instance generation. These fields has no effect on the instance itself, and can be safely ignored when using the instances.
 
