@@ -1,0 +1,46 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "vehicle_data.schema.json",
+	"title": "Vehicle_data (receding-horizon VGA snapshot)",
+	"description": "One element of a `vehicle_data_list` array as consumed by `DARP::Vehicle_data::JSON_deserialize`. The parent instance must use `problem: fleet-sizing`. Required non-null `current_plan` is a single object matching `vehicle_plan.schema.json` (cost, vehicle, departure_time, arrival_time, actions); vehicle references are resolved from the parent `fleet_sizing_vehicles`, `virtual_vehicle`, or instance vehicles. Onboard pickup `ActionData` rows must exist in the parallel `vehicle_actions[vehicle_index]` array.",
+	"type": "object",
+	"required": [
+		"vehicle_index",
+		"actual_plan_departure_time"
+	],
+	"properties": {
+		"vehicle_index": {
+			"type": "integer",
+			"minimum": 0,
+			"description": "Fleet vehicle index; must match `Vehicle<N>::get_index()` for `instance.get_vehicles().at(vehicle_index)`."
+		},
+		"actual_plan_departure_time": {
+			"type": "integer",
+			"minimum": 0,
+			"description": "Seconds; plan departure at materialization (receding horizon); must equal the value used when constructing `Vehicle_data`."
+		},
+		"onboard_request_indices": {
+			"type": "array",
+			"description": "Request indices (same convention as `Request::get_index()` / `instance.get_requests().at(i)` ordering used by your instance). Each entry must have a matching pickup `ActionData` in `vehicle_actions[vehicle_index]`.",
+			"items": {
+				"type": "integer",
+				"minimum": 0
+			}
+		},
+		"current_plan": {
+			"description": "Rolling plan for this vehicle, same shape as one element of a solution `plans` array. The C++ loader resolves its vehicle reference from the parent vehicle context; it does not create vehicles from this object. Depot timetable rows are not supported in plan JSON deserialization.",
+            "$ref": "https://raw.githubusercontent.com/aicenter/Ridesharing_DARP_instances/main/JSON/vehicle_plan_schema.json"
+		},
+		"next_location_index": {
+			"description": "Graph node index for discrete location; resolved via a caller-built map (e.g. DM canonical nodes). Omitted or `null`: leave next location unset.",
+			"type": ["integer", "null"],
+			"minimum": 0
+		},
+		"time_at_next_location": {
+			"type": "integer",
+			"minimum": 0,
+			"description": "Seconds to reach `next_location_index` from the receding-horizon clock; if omitted when `next_location_index` is set, only the next node is stored (no time)."
+		}
+	},
+	"additionalProperties": true
+}

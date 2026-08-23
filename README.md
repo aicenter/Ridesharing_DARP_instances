@@ -400,6 +400,29 @@ Contains area and instance files for visualization in e.g. [Q-GIS](https://www.q
 - `🗺 dropoff.[shx, shp, prh, dbf, cpg]` - request dropoff points
 
 
+### Dynamic (Online) DARP Instances
+All of the instances in this repository are static. However, for the future, we provide a specification for dynamic DARP instances. The specification is in two schemas:
+
+- `📁 JSON/vehicles_data.schema.json`: data format for state of a single vehicle
+- `📁 JSON/vehicles_data_list.schema.json`: data format for the state of the whole fleet (reference to the vehicles data)
+
+### Vehicle Data
+Vehicle data object describes the state of a single vehicle. It has the following fields (required fields are in bold):
+
+- **`actual_plan_departure_time`**: the time the vehicle departed from its initial position.
+- `current_plan`: the current plan of the vehicle.
+- `next_location_index`: the index of the next location in the current plan.
+- `onboard_request_indices`: list of indices of the requests currently onboard the vehicle
+- **`vehicle_index`**: index of the vehicle in the fleet
+- `time_to_next_location`: the time to the next location in the current plan.
+
+### Vehicles Data List
+Vehicles data list object describes the state of the whole fleet. It has the following fields (required fields are in bold):
+
+- `fleet_sizing_vehicles`: list of vehicles in the current solution, in case we minimize the fleet size, instead of working with a given fleet.
+- `virtual_vehicle`: Virtual vehicle definition.
+- **`vehicles_data_list`**: list of vehicles data objects.
+
 
 ## Results
 The results are stored in the `📁 Results/` folder. The folder structure follows a similar pattern as the `📁 Instance/` folder:

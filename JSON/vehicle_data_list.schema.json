@@ -1,0 +1,58 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "vehicle_data_list.schema.json",
+    "title": "Representation of vehicle states for solvers with state",
+    "description": "List of Vehicle_data objects, fleet-sizing vehicles, and a virtual vehicle",
+    "type": "object",
+    "required": [
+        "vehicle_data_list"
+    ],
+    "properties": {
+        "fleet_sizing_vehicles": {
+            "title": "Fleet-sizing vehicles",
+            "type": "array",
+            "items": {
+                "$ref": "https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/JSON/vehicle.schema.json"
+            }
+        },
+        "virtual_vehicle": {
+            "title": "Virtual vehicle",
+            "$ref": "https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/JSON/virtual_vehicle.schema.json"
+        },
+        "vehicle_data_list": {
+            "type": "array",
+            "items": {
+                "$ref": "vehicle_data.schema.json"
+            }
+        }
+    },
+    "if": {
+        "properties": {
+            "vehicle_data_list": {
+                "contains": {
+                    "type": "object",
+                    "properties": {
+                        "current_plan": {
+                            "type": "object",
+                            "properties": {
+                                "vehicle": {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "const": "virtual"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "then": {
+        "required": [
+            "virtual_vehicle"
+        ]
+    }
+}
