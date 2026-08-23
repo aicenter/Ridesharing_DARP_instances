@@ -29,7 +29,7 @@
 		},
 		"current_plan": {
 			"description": "Rolling plan for this vehicle, same shape as one element of a solution `plans` array. The C++ loader resolves its vehicle reference from the parent vehicle context; it does not create vehicles from this object. Depot timetable rows are not supported in plan JSON deserialization.",
-            "$ref": "https://raw.githubusercontent.com/aicenter/Ridesharing_DARP_instances/main/JSON/vehicle_plan_schema.json"
+            "$ref": "https://raw.githubusercontent.com/aicenter/Ridesharing_DARP_instances/main/JSON/vehicle_plan.schema.json"
 		},
 		"next_location_index": {
 			"description": "Graph node index for discrete location; resolved via a caller-built map (e.g. DM canonical nodes). Omitted or `null`: leave next location unset.",
