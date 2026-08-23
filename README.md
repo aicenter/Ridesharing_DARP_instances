@@ -68,10 +68,12 @@ Also, these times are often constrained by a *time window*, we call these constr
 - *earliest pickup/drop-off time*
 - *latest pickup/drop-off time*
 
-With each action (pickup/drop-off) a *service time* is associated. We may also refer to it as to:
+With each action (pickup/drop-off) a *service duration* is associated. We may also refer to it as to:
 
-- *boarding time* for pickup,
-- *unboarding time* for drop-off.
+- *boarding duration* for pickup,
+- *unboarding duration* for drop-off.
+
+(In the file formats, the JSON schemas call this field `service_duration`; the `requests.csv` column keeps its legacy name `service_time`.)
 
 
 ## Time Format
@@ -165,8 +167,8 @@ The defaults reproduce the legacy cost exactly: total travel time + `demand.rela
 
 `accounting` selects how the passenger components accumulate:
 
-- `per_traveller` (default, legacy): ride time and drop-off delay are multiplied by the request's total travellers, and the delay is measured from the *desired pickup time* (so it includes the rider's own boarding service time).
-- `per_request` (allocator-style, used by real-time DRT allocator exports): ride time and delay are counted once per request, and the delay is measured from the pickup *departure* (net of the boarding service time) — exactly `pickup wait + (ride − minimal travel time)`.
+- `per_traveller` (default, legacy): ride time and drop-off delay are multiplied by the request's total travellers, and the delay is measured from the *desired pickup time* (so it includes the rider's own boarding service duration).
+- `per_request` (allocator-style, used by real-time DRT allocator exports): ride time and delay are counted once per request, and the delay is measured from the pickup *departure* (net of the boarding service duration) — exactly `pickup wait + (ride − minimal travel time)`.
 
 
 ### Requests Files
