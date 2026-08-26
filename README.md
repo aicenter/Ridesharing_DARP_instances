@@ -180,12 +180,12 @@ Request file contains the list of requests $R$ with a header defining the follow
 - `destination`: the id of the destination location of the request.
 - `id`: request id. If not provided, the request id is set to the index of the request in the file (starting from 0).
 - `origin`: the id of the starting location of the request.
-- `time`: the desired pickup time of the request.
+- `time`: the desired pickup time of the request. The cell may be left empty only when `required_arrival_time` is set (a pure-deadline, ALAP request): the consumer then derives the earliest departure as `max(request_time, required_arrival_time − direct travel time − service_time)`, with the `request_time` term dropped when that column is absent.
 
 All further columns are optional. Attribute columns:
 
 | column | meaning |
-|---|---|
+| --- | --- |
 | `service_time` | boarding/alighting time at both stops of this request (seconds, default 0) |
 | `passengers_standard` | passengers occupying one `standard` slot each (default 1) |
 | `passengers_wheelchair` | passengers occupying one `wheelchair` slot each (default 0) |
@@ -193,6 +193,7 @@ All further columns are optional. Attribute columns:
 | `passengers_stroller` | passengers occupying one `stroller` slot each (default 0) |
 | `passengers_children_in_seat` | children in child seats: each occupies one `standard` slot AND one child-seat unit (default 0) |
 | `exclusive` | 0/1: an exclusive request may not share the vehicle with other requests (default 0) |
+| `request_time` | The time the request arrived to the system. Only relevant for dynamic DARP.
 | `required_equipment` | semicolon-separated equipment names the vehicle must carry (e.g. `ramp;low_floor`) |
 | `required_vehicle_id` | index of the only vehicle allowed to serve this request |
 | `required_arrival_time` | latest allowed drop-off arrival; arriving more than the earliness budget *before* it is also invalid (symmetric earliness bound) |

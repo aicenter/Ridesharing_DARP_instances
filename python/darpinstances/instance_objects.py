@@ -147,6 +147,7 @@ class Request:
         constraints: Optional[RequestConstraints] = None,
         walk_to_origin: float = 0.0,
         walk_from_destination: float = 0.0,
+        request_time: Optional[datetime] = None,
     ):
         self.index = index
         self.pickup_action = Action(
@@ -168,6 +169,9 @@ class Request:
         # they are checked against lives in constraints.max_walking_distance
         self.walk_to_origin = walk_to_origin
         self.walk_from_destination = walk_from_destination
+        # when the request arrived to the system (dynamic DARP); None for
+        # static instances without a request_time column
+        self.request_time = request_time
 
     def __eq__(self, other):
         return self.index == other.index

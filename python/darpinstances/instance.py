@@ -588,16 +588,25 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
 
     request_data = pd.read_csv(demand_file)
 
-    # convert pickup time to datetime
-    request_data['time'] = [time_loader.load_time_field(time) for time in request_data['time']]
+    def _load_optional_time(value):
+        """None for an empty cell, otherwise the parsed time field."""
+        if value is None or (not isinstance(value, str) and pd.isna(value)):
+            return None
+        return time_loader.load_time_field(value)
+
+    # convert pickup time to datetime; the cell may be empty only for
+    # pure-deadline (ALAP) requests — derived below, once travel times exist
+    request_data['time'] = [_load_optional_time(time) for time in request_data['time']]
+
+    # request submission time (dynamic DARP); optional column
+    if 'request_time' in request_data.columns:
+        request_data['request_time'] = [_load_optional_time(value) for value in request_data['request_time']]
+    else:
+        request_data['request_time'] = None
 
     # request id
     if not 'id' in request_data.columns:
         request_data['id'] = request_data.index
-
-    # min pickup time
-    request_data['min_pickup_time'] = [_compute_min_pickup_time(instance_config, desired_pickup_time) for
-        desired_pickup_time in request_data['time']]
 
     # nodes
     if 'srid' in instance_config:
@@ -611,6 +620,42 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
     # minimum travel time from start to end node
     request_data['min_travel_time'] = [travel_time_provider.get_travel_time(start_node, end_node) / travel_time_divider
         for start_node, end_node in zip(request_data['start_node'], request_data['end_node'])]
+
+    # derive the desired pickup time for pure-deadline (ALAP) rows: 'time' may
+    # be left empty only when required_arrival_time is set (README §Requests
+    # Files) — earliest departure = max(request_time, required_arrival_time
+    # − min travel time − service_time), with the request_time term dropped
+    # when that column is absent
+    if 'required_arrival_time' not in request_data.columns:
+        request_data['required_arrival_time'] = None
+    if 'service_time' not in request_data.columns:
+        request_data['service_time'] = 0
+
+    def _derive_desired_pickup(time_value, request_time, required_arrival_raw, service_time, min_travel_time):
+        # pandas coerces None to NaT in datetime columns — treat both as absent
+        if time_value is not None and not pd.isna(time_value):
+            return time_value
+        if required_arrival_raw is None or (not isinstance(required_arrival_raw, str) and pd.isna(required_arrival_raw)):
+            raise ValueError(
+                "request with an empty 'time' cell but no 'required_arrival_time' — "
+                "'time' may be left empty only for pure-deadline (ALAP) requests"
+            )
+        deadline = time_loader.load_time_field(required_arrival_raw)
+        service_seconds = 0 if service_time is None or pd.isna(service_time) else int(service_time)
+        derived = deadline - timedelta(seconds=round(min_travel_time) + service_seconds)
+        if request_time is not None and not pd.isna(request_time) and request_time > derived:
+            derived = request_time
+        return derived
+
+    request_data['time'] = [
+        _derive_desired_pickup(*fields) for fields in zip(
+            request_data['time'], request_data['request_time'], request_data['required_arrival_time'],
+            request_data['service_time'], request_data['min_travel_time'])
+    ]
+
+    # min pickup time
+    request_data['min_pickup_time'] = [_compute_min_pickup_time(instance_config, desired_pickup_time) for
+        desired_pickup_time in request_data['time']]
 
     # required vehicle id, if not present, set to -1
     if 'required_vehicle_id' not in request_data:
@@ -641,7 +686,7 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
     requests = []
     for row in request_data.itertuples(index=False):
         min_travel_time = row.min_travel_time
-        request_time = row.time
+        desired_pickup_time = row.time  # for ALAP rows: the derived earliest departure
 
         # max_delay: anchored to the requested pickup time, expressed as the
         # derived action max times (window-based)
@@ -671,12 +716,12 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
         # (the window is exactly `arrival - (request time + min travel time)
         # <= max_delay`, matching the allocator's max-delay predicate)
         max_pickup_time = (
-            request_time + timedelta(seconds=float(max_pickup_delay)) if max_pickup_delay is not None else None
+            desired_pickup_time + timedelta(seconds=float(max_pickup_delay)) if max_pickup_delay is not None else None
         )
         if max_delay is None:
             max_drop_off_time = None
         else:
-            max_drop_off_time = request_time + timedelta(
+            max_drop_off_time = desired_pickup_time + timedelta(
                 seconds=round(min_travel_time + max_delay)
             )
 
@@ -773,6 +818,8 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
                 constraints=constraints,
                 walk_to_origin=float(cell(row, 'walk_to_origin_m', 0.0)),
                 walk_from_destination=float(cell(row, 'walk_from_dest_m', 0.0)),
+                # NaT (pandas' missing datetime) normalised to None
+                request_time=None if pd.isna(row.request_time) else row.request_time,
             )
         )
 

@@ -339,3 +339,52 @@ def test_generalized_cost_check(instance_dir):
     ok, failures = check(instance_dir, solution)
     assert not ok
     assert failures[Failure.PLAN_COST] >= 1
+
+
+# ---------------------------------------------------------------- dynamic DARP
+
+
+def load_requests(instance_dir: Path):
+    instance, _, _ = darpinstances.solution_checker.load_instance(instance_dir / "config.yaml")
+    return instance.requests
+
+
+def test_request_time_column_is_loaded(instance_dir):
+    from datetime import datetime, timezone
+
+    patch_request(instance_dir, 0, "request_time", 940)
+    requests = load_requests(instance_dir)
+    assert requests[0].request_time == datetime.fromtimestamp(940, tz=timezone.utc)
+    assert requests[1].request_time is None  # empty cell = absent
+
+
+def test_request_time_absent_column_defaults_to_none(instance_dir):
+    requests = load_requests(instance_dir)
+    assert requests[0].request_time is None
+
+
+def test_pure_deadline_request_derives_earliest_pickup(instance_dir):
+    from datetime import datetime, timezone
+
+    # R0: required arrival 1600, min travel time 200, service 10 —
+    # derived earliest pickup = 1600 - 200 - 10 = 1390
+    patch_request(instance_dir, 0, "time", None)
+    requests = load_requests(instance_dir)
+    assert requests[0].pickup_action.min_time == datetime.fromtimestamp(1390, tz=timezone.utc)
+
+
+def test_request_time_floors_the_derived_earliest_pickup(instance_dir):
+    from datetime import datetime, timezone
+
+    # derived 1390, but the request only entered the system at 1450
+    patch_request(instance_dir, 0, "time", None)
+    patch_request(instance_dir, 0, "request_time", 1450)
+    requests = load_requests(instance_dir)
+    assert requests[0].pickup_action.min_time == datetime.fromtimestamp(1450, tz=timezone.utc)
+
+
+def test_empty_time_without_deadline_is_rejected(instance_dir):
+    # R1 has no required_arrival_time — an empty time cell is invalid
+    patch_request(instance_dir, 1, "time", None)
+    with pytest.raises(ValueError, match="required_arrival_time"):
+        load_requests(instance_dir)
