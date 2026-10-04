@@ -19,6 +19,11 @@
             "type": "object",
             "title": "Vehicle this plan is assigned to (fleet or virtual slot)",
             "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": ["virtual"],
+                    "description": "Present only for the virtual vehicle; omitted for fleet vehicles."
+                },
                 "capacity": {
                     "type": "integer",
                     "minimum": 1,

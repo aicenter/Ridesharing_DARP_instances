@@ -413,7 +413,7 @@ All of the instances in this repository are static. However, for the future, we 
 Vehicle data object describes the state of a single vehicle. It has the following fields (required fields are in bold):
 
 - **`actual_plan_departure_time`**: the time the vehicle departed from its initial position.
-- `current_plan`: the current plan of the vehicle.
+- **`current_plan`**: the current plan of the vehicle.
 - `next_location_index`: the index of the next location in the current plan.
 - `onboard_request_indices`: list of indices of the requests currently onboard the vehicle
 - **`vehicle_index`**: index of the vehicle in the fleet
@@ -424,7 +424,7 @@ Vehicles data list object describes the state of the whole fleet. It has the fol
 
 - `fleet_sizing_vehicles`: list of vehicles in the current solution, in case we minimize the fleet size, instead of working with a given fleet.
 - `virtual_vehicle`: Virtual vehicle definition.
-- **`vehicles_data_list`**: list of vehicles data objects.
+- **`vehicle_data_list`**: list of vehicles data objects.
 
 
 ## Results

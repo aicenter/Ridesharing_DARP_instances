@@ -6,7 +6,8 @@
 	"type": "object",
 	"required": [
 		"vehicle_index",
-		"actual_plan_departure_time"
+		"actual_plan_departure_time",
+		"current_plan"
 	],
 	"properties": {
 		"vehicle_index": {
