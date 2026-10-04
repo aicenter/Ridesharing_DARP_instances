@@ -668,3 +668,12 @@
     border-color: #444;
   }
 }
+
+.app__setting--invalid input {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 1px #dc2626;
+}
+
+.app__setting-reset {
+  margin-top: 0;
+}

@@ -1,5 +1,10 @@
 import JSZip from "jszip";
-import { buildDistanceMatrix, buildNodeIndex, type ExportSolutionInput } from "./exportSolution";
+import {
+  buildDistanceMatrix,
+  buildNodeIndex,
+  resolveOnboardTiming,
+  type ExportSolutionInput,
+} from "./exportSolution";
 import { buildVehicleDataExportObject, hasVehicleState } from "./exportVehicleData";
 import { vehicleStartNodeId, type ProblemType } from "./graphModel";
 
@@ -13,16 +18,23 @@ function yamlEscapeString(s: string): string {
   return JSON.stringify(s);
 }
 
-function buildConfigYaml(problemType: ProblemType, maxDelaySeconds: number | null): string {
+/** @param currentTime written as the operation start of the vehicles: they cannot act before it */
+function buildConfigYaml(
+  problemType: ProblemType,
+  maxDelaySeconds: number | null,
+  currentTime: number,
+): string {
+  // The vehicles of a fleet-sizing instance are not an input.
+  const vehiclesSection = [
+    ...(problemType === "DARP" ? [`  filepath: ${yamlEscapeString("./vehicles.csv")}`] : []),
+    ...(currentTime > 0 ? [`  operation_start: ${currentTime}`] : []),
+  ];
   // Minimal config: filepaths, and the settings that differ from the defaults.
   return [
     ...(problemType === "fleet-sizing" ? [`problem: ${problemType}`] : []),
     `demand:`,
     `  filepath: ${yamlEscapeString("./requests.csv")}`,
-    // The vehicles of a fleet-sizing instance are not an input.
-    ...(problemType === "DARP"
-      ? [`vehicles:`, `  filepath: ${yamlEscapeString("./vehicles.csv")}`]
-      : []),
+    ...(vehiclesSection.length > 0 ? [`vehicles:`, ...vehiclesSection] : []),
     `dm_filepath: ${yamlEscapeString("./dm.csv")}`,
     ...(maxDelaySeconds !== null
       ? [`max_delay:`, `  mode: absolute`, `  seconds: ${maxDelaySeconds}`]
@@ -88,7 +100,8 @@ export async function exportInstanceZip(input: ExportInstanceInput) {
     zip.file("vehicles.csv", vehiclesLines.join(""));
   }
   zip.file("dm.csv", dmLines.join(""));
-  zip.file("config.yaml", buildConfigYaml(input.problemType, input.maxDelaySeconds));
+  const timing = resolveOnboardTiming(input, { idToIndex, dm });
+  zip.file("config.yaml", buildConfigYaml(input.problemType, input.maxDelaySeconds, timing.now));
   if (hasVehicleState(input)) {
     const vehicleData = buildVehicleDataExportObject(input, idToIndex, dm);
     zip.file("vehicle_data.json", `${JSON.stringify(vehicleData, null, 2)}\n`);

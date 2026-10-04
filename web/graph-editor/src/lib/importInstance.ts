@@ -210,6 +210,8 @@ export type ImportInstanceResult = {
   requests: RequestState[];
   problemType: ProblemType;
   maxDelaySeconds: number | null;
+  /** Current time, if it differs from the one derived from the onboard requests. */
+  currentTimeSeconds: number | null;
   nextLogicalId: number;
   nextVehicleId: number;
   nextRequestId: number;
@@ -265,6 +267,8 @@ type InstanceConfig = {
   dm?: string;
   problemType?: ProblemType;
   maxDelaySeconds?: number;
+  /** `vehicles.operation_start` (or its deprecated alias `start_time`) given in seconds. */
+  operationStartSeconds?: number;
 };
 
 /**
@@ -319,6 +323,10 @@ function parseConfig(yamlText: string): InstanceConfig {
     if (inVehicles) {
       const p = lineMatch("filepath", line);
       if (p) out.vehicles = p;
+      const operationStart = lineMatch("operation_start", line) ?? lineMatch("start_time", line);
+      if (operationStart && /^\d+$/.test(operationStart)) {
+        out.operationStartSeconds = Number(operationStart);
+      }
     }
   }
   return out;
@@ -557,31 +565,35 @@ export function importInstanceFromBundle(bundle: ImportFileBundle): ImportInstan
 
   if (vehicleData) {
     applyVehicleData(vehicleData, vehicles, requests, edges, warnings);
+  }
 
-    // Pickup times that the default timing would produce anyway are not kept as user-set ones.
-    const idToIndex = buildNodeIndex(nodes);
-    const timing = computeOnboardTiming(
-      vehicles,
-      requests,
-      edges,
-      idToIndex,
-      buildDistanceMatrix(edges, idToIndex),
-    );
-    const defaultTiming = computeOnboardTiming(
-      vehicles,
-      requests.map((r) => ({ ...r, onboardPickupTimeSeconds: null })),
-      edges,
-      idToIndex,
-      buildDistanceMatrix(edges, idToIndex),
-    );
-    if (timing.now === defaultTiming.now) {
-      for (const r of requests) {
-        if (timing.pickupTimes.get(r.id) === defaultTiming.pickupTimes.get(r.id)) {
-          r.onboardPickupTimeSeconds = null;
-        }
-      }
+  // The current time and the pickup times that the default timing would produce anyway are not
+  // kept as user-set ones.
+  const idToIndex = buildNodeIndex(nodes);
+  const editorDm = buildDistanceMatrix(edges, idToIndex);
+  const requestsWithoutPickupTimes = requests.map((r) => ({ ...r, onboardPickupTimeSeconds: null }));
+  const importedNow = computeOnboardTiming(
+    vehicles,
+    requests,
+    edges,
+    idToIndex,
+    editorDm,
+    config.operationStartSeconds ?? null,
+  ).now;
+  const defaultPickupTimes = computeOnboardTiming(
+    vehicles,
+    requestsWithoutPickupTimes,
+    edges,
+    idToIndex,
+    editorDm,
+    importedNow,
+  ).pickupTimes;
+  for (const r of requests) {
+    if (r.onboardPickupTimeSeconds === defaultPickupTimes.get(r.id)) {
+      r.onboardPickupTimeSeconds = null;
     }
   }
+  const defaultNow = computeOnboardTiming(vehicles, requests, edges, idToIndex, editorDm, null).now;
 
   return {
     nodes,
@@ -590,6 +602,7 @@ export function importInstanceFromBundle(bundle: ImportFileBundle): ImportInstan
     requests,
     problemType: config.problemType ?? "DARP",
     maxDelaySeconds: config.maxDelaySeconds ?? null,
+    currentTimeSeconds: importedNow === defaultNow ? null : importedNow,
     nextLogicalId: n,
     nextVehicleId: vehicles.reduce((m, v) => Math.max(m, v.id + 1), 0),
     nextRequestId: maxRequestId + 1,

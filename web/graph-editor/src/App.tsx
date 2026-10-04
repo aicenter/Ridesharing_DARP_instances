@@ -91,6 +91,7 @@ function AppShell() {
   const [selectedRequest, setSelectedRequest] = useState<SelectedRequest | null>(null);
   const [problemType, setProblemType] = useState<ProblemType>("DARP");
   const [maxDelaySeconds, setMaxDelaySeconds] = useState<number | null>(null);
+  const [currentTimeSeconds, setCurrentTimeSeconds] = useState<number | null>(null);
   const [solutionOpen, setSolutionOpen] = useState(false);
   const [solutionItems, setSolutionItems] = useState<SolutionItems | null>(null);
 
@@ -272,9 +273,10 @@ function AppShell() {
       edges,
       idToIndex,
       buildDistanceMatrix(edges, idToIndex),
+      currentTimeSeconds,
     );
-  }, [nodes, edges, vehicles, requests]);
-  const hasOnboardRequests = requests.some((r) => r.onboardVehicleId !== null);
+  }, [nodes, edges, vehicles, requests, currentTimeSeconds]);
+  const currentTimeTooEarly = onboardTiming.now < onboardTiming.minNow;
 
   useEffect(() => {
     if (!solutionOpen) return;
@@ -559,6 +561,7 @@ function AppShell() {
         solutionItems,
         problemType,
         maxDelaySeconds,
+        currentTimeSeconds,
       });
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -570,7 +573,16 @@ function AppShell() {
     } catch (e) {
       window.alert(e instanceof Error ? e.message : String(e));
     }
-  }, [nodes, edges, vehicles, requests, solutionItems, problemType, maxDelaySeconds]);
+  }, [
+    nodes,
+    edges,
+    vehicles,
+    requests,
+    solutionItems,
+    problemType,
+    maxDelaySeconds,
+    currentTimeSeconds,
+  ]);
 
   const handleExport = useCallback(async () => {
     const host = flowHostRef.current;
@@ -593,12 +605,22 @@ function AppShell() {
         solutionItems: solutionItems ?? buildInitialSolution(vehicles, requests),
         problemType,
         maxDelaySeconds,
+        currentTimeSeconds,
         pngBlob,
       });
     } catch (e) {
       window.alert(e instanceof Error ? e.message : String(e));
     }
-  }, [nodes, edges, vehicles, requests, solutionItems, problemType, maxDelaySeconds]);
+  }, [
+    nodes,
+    edges,
+    vehicles,
+    requests,
+    solutionItems,
+    problemType,
+    maxDelaySeconds,
+    currentTimeSeconds,
+  ]);
 
   const applyImportedFiles = useCallback(
     async (files: File[]) => {
@@ -609,6 +631,7 @@ function AppShell() {
       setRequests(data.requests);
       setProblemType(data.problemType);
       setMaxDelaySeconds(data.maxDelaySeconds);
+      setCurrentTimeSeconds(data.currentTimeSeconds);
       nextLogicalIdRef.current = data.nextLogicalId;
       nextVehicleIdRef.current = data.nextVehicleId;
       nextRequestIdRef.current = data.nextRequestId;
@@ -753,11 +776,37 @@ function AppShell() {
               }}
             />
           </label>
-          {hasOnboardRequests ? (
-            <span className="app__setting" title="Time 0 is the pickup of the earliest picked up onboard request; the current time is the moment the vehicle positions describe.">
-              Current time: {onboardTiming.now}s
-            </span>
-          ) : null}
+          <label
+            className={`app__setting${currentTimeTooEarly ? " app__setting--invalid" : ""}`}
+            title={
+              currentTimeTooEarly
+                ? `Too early: the vehicles with onboard requests cannot be at their positions before ${onboardTiming.minNow}s.`
+                : "The moment the vehicle positions describe (batch start), exported as the operation start of the vehicles. Default: the longest time since pickup among the onboard requests, so that the earliest pickup is at time 0."
+            }
+          >
+            <span>Current time (s)</span>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={onboardTiming.now}
+              onChange={(ev) => {
+                const n = Number(ev.target.value);
+                if (ev.target.value !== "" && Number.isFinite(n) && n >= 0) {
+                  setCurrentTimeSeconds(Math.round(n));
+                }
+              }}
+            />
+            {currentTimeSeconds !== null ? (
+              <button
+                type="button"
+                className="app__inspector-btn app__setting-reset"
+                onClick={() => setCurrentTimeSeconds(null)}
+              >
+                Auto
+              </button>
+            ) : null}
+          </label>
           <p className="app__hint">
             <strong>Import</strong> accepts several files at once (<code>dm.csv</code> required;{" "}
             <code>requests.csv</code>, <code>vehicles.csv</code>, <code>config.yaml</code>,{" "}

@@ -14,7 +14,7 @@ import {
   type RoadEdgeData,
   type VehicleState,
 } from "./graphModel";
-import { computeOnboardTiming } from "./onboardTiming";
+import { computeOnboardTiming, type OnboardTiming } from "./onboardTiming";
 import { dijkstraAllPairs } from "./shortestPaths";
 
 /** Upper bound for time windows when the instance has no maximum delay (seconds). */
@@ -29,6 +29,8 @@ export type ExportSolutionInput = {
   problemType: ProblemType;
   /** Maximum delay of the instance (`max_delay`, absolute mode); `null` if not set. */
   maxDelaySeconds: number | null;
+  /** Current time set by the user; `null` derives it from the onboard requests. */
+  currentTimeSeconds: number | null;
 };
 
 /** Graph data shared by the exports: exported node indices and travel times between them. */
@@ -36,6 +38,35 @@ type GraphIndex = {
   idToIndex: Map<string, number>;
   dm: number[][];
 };
+
+/** Timing of the onboard requests for an export; throws if the state on the map is not consistent. */
+export function resolveOnboardTiming(
+  input: Pick<ExportSolutionInput, "edges" | "vehicles" | "requests" | "currentTimeSeconds">,
+  { idToIndex, dm }: GraphIndex,
+): OnboardTiming {
+  const timing = computeOnboardTiming(
+    input.vehicles,
+    input.requests,
+    input.edges,
+    idToIndex,
+    dm,
+    input.currentTimeSeconds,
+  );
+  if (timing.unreachable.length > 0) {
+    const r = timing.unreachable[0];
+    throw new Error(
+      `Request R${r.id} cannot be onboard vehicle ${r.onboardVehicleId}: there is no path from ` +
+        `the request origin to the vehicle.`,
+    );
+  }
+  if (timing.now < timing.minNow) {
+    throw new Error(
+      `Current time ${timing.now}s is too early: the vehicles with onboard requests cannot be at ` +
+        `their positions before ${timing.minNow}s.`,
+    );
+  }
+  return timing;
+}
 
 /** Export node ids as 0..n-1 by sorting by logicalId. */
 export function buildNodeIndex(nodes: RoadNodeType[]): Map<string, number> {
@@ -291,17 +322,10 @@ export function buildVehiclePlans(
   graph: GraphIndex,
 ): VehiclePlanExport[] {
   const { edges, vehicles, requests, solutionItems, maxDelaySeconds } = input;
-  const { idToIndex, dm } = graph;
+  const { idToIndex } = graph;
   assertSolutionMatchesOnboardState(solutionItems, requests);
 
-  const timing = computeOnboardTiming(vehicles, requests, edges, idToIndex, dm);
-  if (timing.unreachable.length > 0) {
-    const r = timing.unreachable[0];
-    throw new Error(
-      `Request R${r.id} cannot be onboard vehicle ${r.onboardVehicleId}: there is no path from ` +
-        `the request origin to the vehicle.`,
-    );
-  }
+  const timing = resolveOnboardTiming(input, graph);
 
   const requestsById = new Map(requests.map((r) => [r.id, r]));
   const nodeIndex = (nodeId: string): number => {

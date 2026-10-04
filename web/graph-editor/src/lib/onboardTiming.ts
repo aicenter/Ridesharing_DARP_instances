@@ -11,6 +11,8 @@ type TimingEdge = { id: string; source: string; target: string; data?: RoadEdgeD
 export type OnboardTiming = {
   /** Current time of the instance: the moment the vehicle positions on the map describe. */
   now: number;
+  /** Earliest current time at which all onboard requests can be where their vehicles are. */
+  minNow: number;
   /** Pickup time of every onboard request (by request id). */
   pickupTimes: Map<number, number>;
   /** Onboard requests whose vehicle cannot have driven from the request origin to its position. */
@@ -47,6 +49,9 @@ function minTimeSincePickup(
  * late enough for the vehicle to reach its position from that pickup.
  *
  * Without onboard requests, the current time is 0.
+ *
+ * The current time can be set by the user as well (`currentTimeSeconds`); the default pickup times
+ * are then derived from it. A time before `minNow` is not valid.
  */
 export function computeOnboardTiming(
   vehicles: VehicleState[],
@@ -54,6 +59,7 @@ export function computeOnboardTiming(
   edges: TimingEdge[],
   idToIndex: Map<string, number>,
   dm: number[][],
+  currentTimeSeconds: number | null,
 ): OnboardTiming {
   const vehiclesById = new Map(vehicles.map((v) => [v.id, v]));
   const onboard = requests
@@ -74,15 +80,17 @@ export function computeOnboardTiming(
     .map((o) => o.request);
   const reachable = onboard.filter((o) => Number.isFinite(o.minTimeSincePickup));
 
-  const now = reachable.reduce(
+  const minNow = reachable.reduce(
     (latest, o) =>
       Math.max(latest, (o.request.onboardPickupTimeSeconds ?? 0) + o.minTimeSincePickup),
     0,
   );
 
+  const now = currentTimeSeconds ?? minNow;
+
   const pickupTimes = new Map<number, number>();
   for (const o of reachable) {
     pickupTimes.set(o.request.id, o.request.onboardPickupTimeSeconds ?? now - o.minTimeSincePickup);
   }
-  return { now, pickupTimes, unreachable };
+  return { now, minNow, pickupTimes, unreachable };
 }
