@@ -1,4 +1,4 @@
-import type { RequestState } from "./graphModel";
+import type { RequestState, VehicleState } from "./graphModel";
 
 /** Unassigned pickup/dropoff chips live in this container. */
 export const SOLUTION_POOL_ID = "pool";
@@ -31,34 +31,19 @@ export function formatActionLabel(actionKey: string): string {
   return p.kind === "pickup" ? `Pickup R${p.requestId}` : `Dropoff R${p.requestId}`;
 }
 
-/** Container id → ordered draggable action ids (`p:3`, `d:3`, …). */
+/**
+ * Container id → ordered draggable action ids (`p:3`, `d:3`, …).
+ * An onboard request has no pickup action (it is already picked up); its drop-off stays in the
+ * plan of the vehicle that carries it.
+ */
 export type SolutionItems = Record<string, string[]>;
 
-export type FleetVehicle = {
-  vehicleId: number;
-  nodeId: string;
-  capacity: number;
-};
-
-export function fleetFromNodes(
-  nodes: { id: string; data: { vehicles: { id: number; capacity: number }[] } }[],
-): FleetVehicle[] {
-  const out: FleetVehicle[] = [];
-  for (const n of nodes) {
-    for (const v of n.data.vehicles) {
-      out.push({ vehicleId: v.id, nodeId: n.id, capacity: v.capacity });
-    }
-  }
-  out.sort((a, b) => a.vehicleId - b.vehicleId);
-  return out;
-}
-
 /** Add empty plan columns for new vehicles without discarding existing layout. */
-export function ensureVehicleColumns(items: SolutionItems, vehicles: FleetVehicle[]): SolutionItems {
+export function ensureVehicleColumns(items: SolutionItems, vehicles: VehicleState[]): SolutionItems {
   let changed = false;
   const next = { ...items };
   for (const v of vehicles) {
-    const k = vehiclePlanContainerId(v.vehicleId);
+    const k = vehiclePlanContainerId(v.id);
     if (!(k in next)) {
       next[k] = [];
       changed = true;
@@ -68,22 +53,25 @@ export function ensureVehicleColumns(items: SolutionItems, vehicles: FleetVehicl
 }
 
 export function buildInitialSolution(
-  vehicles: FleetVehicle[],
+  vehicles: VehicleState[],
   requests: RequestState[],
 ): SolutionItems {
   const complete = requests
     .filter((r) => r.originNodeId && r.destinationNodeId)
     .sort((a, b) => a.id - b.id);
 
-  const pool: string[] = [];
-  for (const r of complete) {
-    pool.push(actionId("pickup", r.id), actionId("dropoff", r.id));
+  const sortedVehicles = [...vehicles].sort((a, b) => a.id - b.id);
+  const out: SolutionItems = { [SOLUTION_POOL_ID]: [] };
+  for (const v of sortedVehicles) {
+    out[vehiclePlanContainerId(v.id)] = [];
   }
 
-  const sortedVehicles = [...vehicles].sort((a, b) => a.vehicleId - b.vehicleId);
-  const out: SolutionItems = { [SOLUTION_POOL_ID]: pool };
-  for (const v of sortedVehicles) {
-    out[vehiclePlanContainerId(v.vehicleId)] = [];
+  for (const r of complete) {
+    if (r.onboardVehicleId !== null) {
+      out[vehiclePlanContainerId(r.onboardVehicleId)].push(actionId("dropoff", r.id));
+    } else {
+      out[SOLUTION_POOL_ID].push(actionId("pickup", r.id), actionId("dropoff", r.id));
+    }
   }
   return out;
 }

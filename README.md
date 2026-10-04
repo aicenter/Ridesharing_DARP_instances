@@ -23,6 +23,7 @@ The dataset and methodology used to create it are described in the paper [Large-
 
 
 ## Table of contents
+
 - [Instances and Results download](#instances-and-results-download)
 - [Time Format](#time-format)
 - [Instances](#instances)
@@ -40,6 +41,7 @@ The dataset and methodology used to create it are described in the paper [Large-
 - [Instance Creation](#instance-creation)
   - [Sizing](#sizing)
   - [Public Datasets used in the creation of the instances](#public-datasets-used-in-the-creation-of-the-instances)
+- [Graph Editor](#graph-editor)
 - [Solution Checker](#solution-checker)
   - [Command line usage](#command-line-usage)
 - [Citation](#citation)
@@ -650,6 +652,20 @@ Writes the instance `config.yaml`. All path-like fields in the exported YAML are
 Configurable parameters:
 
 - `filepath`: output YAML file. Defaults to `<demand_export.instance_dir>/instance.yaml`.
+
+
+## Graph Editor
+For creating small instances by hand (e.g., for testing or illustration), we provide a simple web-based GUI tool located in [`web/graph-editor`](web/graph-editor). In the editor, you can draw a road graph with travel times, place vehicles and requests on its nodes, and export the result as an instance in the format described in the [Instances](#instances) section (`config.yaml`, `requests.csv`, `vehicles.csv`, and `dm.csv`). Existing instances of a reasonable size can be imported as well. The editor also supports vehicle states: requests can be placed onboard a vehicle, and vehicles can be positioned along an edge. If used, the vehicle states are exported to an additional `vehicle_data.json` file in the format described in the [Dynamic (Online) DARP Instances](#dynamic-online-darp-instances) section. Additionally, a solution for the instance can be composed manually and exported to a JSON [solution file](#solution-file).
+
+The tool is still under development, and so far, it is not hosted anywhere. To use it, run it locally (requires [Node.js](https://nodejs.org/)):
+
+```bash
+cd web/graph-editor
+npm install
+npm run dev
+```
+
+Then open the URL printed in the console in your browser.
 
 
 ## Solution Checker

@@ -564,3 +564,107 @@
     border-color: #444;
   }
 }
+
+/* Onboard requests and vehicles travelling along an edge */
+.road-node__vehicle-onboard {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: 72px;
+}
+
+.road-node__onboard-chip {
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid #8b5cf6;
+  background: rgba(251, 247, 255, 0.96);
+  color: #2a1b44;
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  cursor: grab;
+}
+
+.road-node__onboard-chip:active {
+  cursor: grabbing;
+}
+
+.road-node__onboard-chip--selected {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 1px #7c3aed;
+}
+
+.road-node__request-chip--onboard {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.road-edge__vehicle {
+  position: absolute;
+  pointer-events: all;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.solution-panel__onboard {
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  font-family: ui-monospace, monospace;
+}
+
+.app__inspector-btn {
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  .road-node__onboard-chip {
+    background: rgba(36, 27, 47, 0.95);
+    border-color: #a78bfa;
+    color: #f5f3ff;
+  }
+
+  .road-node__onboard-chip--selected {
+    border-color: #c4b5fd;
+    box-shadow: 0 0 0 1px #c4b5fd;
+  }
+
+  .app__inspector-btn {
+    background: #2a2a2a;
+    color: #f3f4f6;
+    border-color: #444;
+  }
+}
+
+/* Instance settings in the toolbar */
+.app__setting {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.app__setting select,
+.app__setting input {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #ccc);
+  font: inherit;
+}
+
+.app__setting input {
+  width: 5.5em;
+}
+
+@media (prefers-color-scheme: dark) {
+  .app__setting select,
+  .app__setting input {
+    background: #2a2a2a;
+    color: #f3f4f6;
+    border-color: #444;
+  }
+}

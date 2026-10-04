@@ -18,16 +18,24 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  formatVehicleLocation,
+  type RequestState,
+  type VehicleState,
+} from "../lib/graphModel";
+import {
   SOLUTION_POOL_ID,
   formatActionLabel,
-  type FleetVehicle,
+  parseActionId,
+  vehiclePlanContainerId,
   type SolutionItems,
 } from "../lib/solutionModel";
 
 type Props = {
   items: SolutionItems;
   onItemsChange: (next: SolutionItems) => void;
-  vehicles: FleetVehicle[];
+  vehicles: VehicleState[];
+  requests: RequestState[];
+  edges: { id: string; source: string; target: string }[];
   onClose: () => void;
   onResetFromGraph: () => void;
   onExportSolution: () => void;
@@ -67,11 +75,14 @@ function PlanSection({
   containerId,
   title,
   subtitle,
+  onboardRequestIds = [],
   itemIds,
 }: {
   containerId: string;
   title: string;
   subtitle?: string;
+  /** Requests already in the vehicle: picked up, so only their drop-offs are in the plan. */
+  onboardRequestIds?: number[];
   itemIds: string[];
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: containerId });
@@ -84,6 +95,11 @@ function PlanSection({
         <h3 className="solution-panel__section-title">{title}</h3>
         {subtitle ? <p className="solution-panel__section-sub">{subtitle}</p> : null}
       </header>
+      {onboardRequestIds.length > 0 ? (
+        <p className="solution-panel__onboard">
+          Onboard: {onboardRequestIds.map((id) => `R${id}`).join(", ")}
+        </p>
+      ) : null}
       <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
         <ul className="solution-panel__list">
           {itemIds.map((id) => (
@@ -100,7 +116,11 @@ function PlanSection({
   );
 }
 
-function handleDragEndMutation(event: DragEndEvent, items: SolutionItems): SolutionItems | null {
+function handleDragEndMutation(
+  event: DragEndEvent,
+  items: SolutionItems,
+  requests: RequestState[],
+): SolutionItems | null {
   const { active, over } = event;
   if (!over) return null;
 
@@ -121,6 +141,12 @@ function handleDragEndMutation(event: DragEndEvent, items: SolutionItems): Solut
       ...items,
       [activeContainer]: arrayMove(list, oldIndex, newIndex),
     };
+  }
+
+  // The drop-off of an onboard request cannot leave the plan of the vehicle that carries it.
+  const activeAction = parseActionId(activeId);
+  if (requests.some((r) => r.id === activeAction?.requestId && r.onboardVehicleId !== null)) {
+    return null;
   }
 
   const fromList = [...items[activeContainer]];
@@ -149,6 +175,8 @@ export function SolutionPanel({
   items,
   onItemsChange,
   vehicles,
+  requests,
+  edges,
   onClose,
   onResetFromGraph,
   onExportSolution,
@@ -160,15 +188,7 @@ export function SolutionPanel({
     }),
   );
 
-  const sortedVehicleIds = useMemo(
-    () =>
-      [...vehicles]
-        .sort((a, b) => a.vehicleId - b.vehicleId)
-        .map((v) => v.vehicleId),
-    [vehicles],
-  );
-
-  const vehicleById = useMemo(() => new Map(vehicles.map((v) => [v.vehicleId, v])), [vehicles]);
+  const sortedVehicles = useMemo(() => [...vehicles].sort((a, b) => a.id - b.id), [vehicles]);
 
   return (
     <aside className="solution-panel" aria-label="Solution builder">
@@ -188,7 +208,8 @@ export function SolutionPanel({
       </header>
       <p className="solution-panel__hint">
         Drag to reorder within a vehicle or the unassigned list, or move actions between vehicles.
-        Use <strong>Reset from graph</strong> after you add or change requests on the map.
+        Use <strong>Reset from graph</strong> after you add or change requests on the map, or put
+        them onboard a vehicle.
       </p>
 
       <DndContext
@@ -197,7 +218,7 @@ export function SolutionPanel({
         onDragStart={({ active }: DragStartEvent) => setActiveId(String(active.id))}
         onDragEnd={(e) => {
           setActiveId(null);
-          const next = handleDragEndMutation(e, items);
+          const next = handleDragEndMutation(e, items, requests);
           if (next) onItemsChange(next);
         }}
         onDragCancel={() => setActiveId(null)}
@@ -209,20 +230,22 @@ export function SolutionPanel({
             subtitle="Pickup / dropoff stops not on a vehicle plan yet"
             itemIds={items[SOLUTION_POOL_ID] ?? []}
           />
-          {sortedVehicleIds.map((vid) => {
-            const v = vehicleById.get(vid);
-            const cid = `v:${vid}`;
+          {sortedVehicles.map((v) => {
+            const cid = vehiclePlanContainerId(v.id);
             return (
               <PlanSection
                 key={cid}
                 containerId={cid}
-                title={`Vehicle ${vid}`}
-                subtitle={v ? `Node ${v.nodeId} · cap ${v.capacity}` : undefined}
+                title={`Vehicle ${v.id}`}
+                subtitle={`${formatVehicleLocation(v, edges)} · cap ${v.capacity}`}
+                onboardRequestIds={requests
+                  .filter((r) => r.onboardVehicleId === v.id)
+                  .map((r) => r.id)}
                 itemIds={items[cid] ?? []}
               />
             );
           })}
-          {sortedVehicleIds.length === 0 ? (
+          {sortedVehicles.length === 0 ? (
             <p className="solution-panel__note">Add vehicles on the map to create plans.</p>
           ) : null}
         </div>

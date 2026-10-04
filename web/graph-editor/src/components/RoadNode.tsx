@@ -5,13 +5,13 @@ import {
   useGraphEditor,
   type DndPayload,
 } from "../GraphEditorContext";
-import type { RequestBadge, VehicleState } from "../lib/graphModel";
-import { VehicleGlyph } from "./VehicleGlyph";
+import { parseDndPayload } from "../lib/dndPayload";
+import type { RequestBadge } from "../lib/graphModel";
 import { RequestGlyph } from "./RequestGlyph";
+import { VehicleChip } from "./VehicleChip";
 
 export type RoadNodeData = {
   logicalId: number;
-  vehicles: VehicleState[];
   requestBadges: RequestBadge[];
 };
 
@@ -24,39 +24,17 @@ const SIDES = [
   { position: Position.Left, id: "left" },
 ] as const;
 
-function parsePayload(raw: string): DndPayload | null {
-  try {
-    const o = JSON.parse(raw) as unknown;
-    if (!o || typeof o !== "object") return null;
-    const rec = o as Record<string, unknown>;
-    if (rec.kind === "new-vehicle") return { kind: "new-vehicle" };
-    if (rec.kind === "new-request") return { kind: "new-request" };
-    if (
-      rec.kind === "vehicle" &&
-      typeof rec.nodeId === "string" &&
-      typeof rec.vehicleId === "number"
-    ) {
-      return { kind: "vehicle", nodeId: rec.nodeId, vehicleId: rec.vehicleId };
-    }
-    if (rec.kind === "request" && typeof rec.requestId === "number") {
-      return { kind: "request", requestId: rec.requestId };
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
 export function RoadNode({ id, data }: NodeProps<RoadNodeType>) {
   const {
-    selectedVehicle,
-    selectVehicle,
-    addVehicleToNode,
+    vehicles,
+    addVehicle,
     moveVehicle,
+    requests,
     selectedRequest,
     selectRequest,
     addRequestToNode,
     dropRequestOnNode,
+    setRequestOnboard,
   } = useGraphEditor();
 
   const onDragOver = useCallback((e: DragEvent) => {
@@ -69,10 +47,10 @@ export function RoadNode({ id, data }: NodeProps<RoadNodeType>) {
       e.preventDefault();
       e.stopPropagation();
       const raw = e.dataTransfer.getData(GRAPH_EDITOR_DND_MIME);
-      const payload = parsePayload(raw);
+      const payload = parseDndPayload(raw);
       if (!payload) return;
       if (payload.kind === "new-vehicle") {
-        addVehicleToNode(id);
+        addVehicle({ kind: "node", nodeId: id });
         return;
       }
       if (payload.kind === "new-request") {
@@ -80,34 +58,18 @@ export function RoadNode({ id, data }: NodeProps<RoadNodeType>) {
         return;
       }
       if (payload.kind === "vehicle") {
-        if (payload.nodeId !== id) {
-          moveVehicle(payload.nodeId, payload.vehicleId, id);
-        }
+        moveVehicle(payload.vehicleId, { kind: "node", nodeId: id });
         return;
       }
       if (payload.kind === "request") {
-        dropRequestOnNode(payload.requestId, id);
+        if (payload.fromVehicle) {
+          setRequestOnboard(payload.requestId, null);
+        } else {
+          dropRequestOnNode(payload.requestId, id);
+        }
       }
     },
-    [id, addVehicleToNode, moveVehicle, addRequestToNode, dropRequestOnNode],
-  );
-
-  const onVehicleChipDragStart = useCallback(
-    (e: DragEvent, vehicleId: number) => {
-      e.stopPropagation();
-      const payload: DndPayload = { kind: "vehicle", nodeId: id, vehicleId };
-      e.dataTransfer.setData(GRAPH_EDITOR_DND_MIME, JSON.stringify(payload));
-      e.dataTransfer.effectAllowed = "move";
-    },
-    [id],
-  );
-
-  const onVehicleChipClick = useCallback(
-    (e: MouseEvent, vehicleId: number) => {
-      e.stopPropagation();
-      selectVehicle({ nodeId: id, vehicleId });
-    },
-    [id, selectVehicle],
+    [id, addVehicle, moveVehicle, addRequestToNode, dropRequestOnNode, setRequestOnboard],
   );
 
   const onRequestChipDragStart = useCallback(
@@ -128,11 +90,14 @@ export function RoadNode({ id, data }: NodeProps<RoadNodeType>) {
     [selectRequest],
   );
 
-  const hasVehicles = data.vehicles.length > 0;
+  const nodeVehicles = vehicles.filter(
+    (v) => v.location.kind === "node" && v.location.nodeId === id,
+  );
+  const hasVehicles = nodeVehicles.length > 0;
   const hasRequests = data.requestBadges.length > 0;
-  const chipSelected = (v: VehicleState) =>
-    selectedVehicle?.nodeId === id && selectedVehicle.vehicleId === v.id;
   const requestSelected = (r: RequestBadge) => selectedRequest?.requestId === r.id;
+  const onboardVehicleId = (r: RequestBadge) =>
+    requests.find((x) => x.id === r.id)?.onboardVehicleId ?? null;
 
   return (
     <div
@@ -150,52 +115,43 @@ export function RoadNode({ id, data }: NodeProps<RoadNodeType>) {
         <span className="road-node__label">{data.logicalId}</span>
         {hasVehicles ? (
           <div className="road-node__vehicles">
-            {data.vehicles.map((v) => (
-              <div
-                key={v.id}
-                className={`road-node__vehicle-chip nodrag${chipSelected(v) ? " road-node__vehicle-chip--selected" : ""}`}
-                draggable
-                onDragStart={(e) => onVehicleChipDragStart(e, v.id)}
-                onClick={(e) => onVehicleChipClick(e, v.id)}
-                title={`Vehicle ${v.id}, capacity ${v.capacity} (drag to move)`}
-              >
-                <VehicleGlyph />
-                <span className="road-node__vehicle-meta">
-                  <span className="road-node__vehicle-id">{v.id}</span>
-                  <span className="road-node__vehicle-cap">cap {v.capacity}</span>
-                </span>
-              </div>
+            {nodeVehicles.map((v) => (
+              <VehicleChip key={v.id} vehicle={v} />
             ))}
           </div>
         ) : null}
         {hasRequests ? (
           <div className="road-node__requests">
-            {data.requestBadges.map((r) => (
-              <div
-                key={`${r.role}-${r.id}`}
-                className={`road-node__request-chip nodrag${requestSelected(r) ? " road-node__request-chip--selected" : ""}`}
-                draggable
-                onDragStart={(e) => onRequestChipDragStart(e, r.id)}
-                onClick={(e) => onRequestChipClick(e, r.id)}
-                title={
-                  r.role === "origin"
-                    ? `Request ${r.id} pickup at t=${r.pickupTimeSeconds}s (drag to set/move)`
-                    : `Request ${r.id} dropoff (drag to move / reset origin)`
-                }
-              >
-                <RequestGlyph />
-                {r.role === "origin" ? (
-                  <span className="road-node__request-meta">
-                    <span className="road-node__request-id">R{r.id}</span>
-                    <span className="road-node__request-time">t {r.pickupTimeSeconds}s</span>
-                  </span>
-                ) : (
-                  <span className="road-node__request-meta">
-                    <span className="road-node__request-id">R{r.id}</span>
-                  </span>
-                )}
-              </div>
-            ))}
+            {data.requestBadges.map((r) => {
+              const onboardOn = onboardVehicleId(r);
+              const onboardNote = onboardOn !== null ? `, onboard vehicle ${onboardOn}` : "";
+              return (
+                <div
+                  key={`${r.role}-${r.id}`}
+                  className={`road-node__request-chip nodrag${requestSelected(r) ? " road-node__request-chip--selected" : ""}${onboardOn !== null ? " road-node__request-chip--onboard" : ""}`}
+                  draggable
+                  onDragStart={(e) => onRequestChipDragStart(e, r.id)}
+                  onClick={(e) => onRequestChipClick(e, r.id)}
+                  title={
+                    r.role === "origin"
+                      ? `Request ${r.id} pickup at t=${r.pickupTimeSeconds}s${onboardNote} (drag to set/move, or onto a vehicle to put it onboard)`
+                      : `Request ${r.id} dropoff${onboardNote} (drag to move / reset origin, or onto a vehicle to put it onboard)`
+                  }
+                >
+                  <RequestGlyph />
+                  {r.role === "origin" ? (
+                    <span className="road-node__request-meta">
+                      <span className="road-node__request-id">R{r.id}</span>
+                      <span className="road-node__request-time">t {r.pickupTimeSeconds}s</span>
+                    </span>
+                  ) : (
+                    <span className="road-node__request-meta">
+                      <span className="road-node__request-id">R{r.id}</span>
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : null}
       </div>

@@ -1,37 +1,56 @@
 import type { Edge } from "@xyflow/react";
 import type { RoadNodeType } from "../components/RoadNode";
-import { actionId, parseActionId, vehiclePlanContainerId, type SolutionItems } from "./solutionModel";
-import type { RequestState, RoadEdgeData } from "./graphModel";
+import {
+  actionId,
+  parseActionId,
+  vehiclePlanContainerId,
+  type SolutionItems,
+} from "./solutionModel";
+import {
+  vehicleNextLocation,
+  vehicleStartNodeId,
+  type ProblemType,
+  type RequestState,
+  type RoadEdgeData,
+  type VehicleState,
+} from "./graphModel";
+import { computeOnboardTiming } from "./onboardTiming";
 import { dijkstraAllPairs } from "./shortestPaths";
 
-/** Upper bound for time windows when the editor has no latest time (seconds). */
+/** Upper bound for time windows when the instance has no maximum delay (seconds). */
 const DEFAULT_MAX_TIME_SLACK = 10 * 24 * 3600;
 
 export type ExportSolutionInput = {
   nodes: RoadNodeType[];
   edges: Edge<RoadEdgeData>[];
+  vehicles: VehicleState[];
   requests: RequestState[];
   solutionItems: SolutionItems;
+  problemType: ProblemType;
+  /** Maximum delay of the instance (`max_delay`, absolute mode); `null` if not set. */
+  maxDelaySeconds: number | null;
 };
 
-type NodeMaps = {
-  nodesSorted: RoadNodeType[];
+/** Graph data shared by the exports: exported node indices and travel times between them. */
+type GraphIndex = {
   idToIndex: Map<string, number>;
-  n: number;
+  dm: number[][];
 };
 
-function buildNodeMaps(nodes: RoadNodeType[]): NodeMaps {
+/** Export node ids as 0..n-1 by sorting by logicalId. */
+export function buildNodeIndex(nodes: RoadNodeType[]): Map<string, number> {
   const nodesSorted = [...nodes].sort((a, b) => a.data.logicalId - b.data.logicalId);
   const idToIndex = new Map<string, number>();
   nodesSorted.forEach((node, idx) => idToIndex.set(node.id, idx));
-  return { nodesSorted, idToIndex, n: nodesSorted.length };
+  return idToIndex;
 }
 
-function buildAdjacency(
-  n: number,
+/** All-pairs shortest travel times over the directed edges, indexed by exported node index. */
+export function buildDistanceMatrix(
   edges: Edge<RoadEdgeData>[],
   idToIndex: Map<string, number>,
-): Array<Array<{ to: number; w: number }>> {
+): number[][] {
+  const n = idToIndex.size;
   const adj: Array<Array<{ to: number; w: number }>> = Array.from({ length: n }, () => []);
   for (const e of edges) {
     const s = idToIndex.get(e.source);
@@ -41,7 +60,7 @@ function buildAdjacency(
     if (w === undefined || !Number.isFinite(w) || w < 0) continue;
     adj[s].push({ to: t, w });
   }
-  return adj;
+  return dijkstraAllPairs(n, adj);
 }
 
 /** True if this action chip sits on some vehicle’s plan (any `v:*` list), not only Unassigned. */
@@ -77,34 +96,126 @@ function classifyRequests(
   return { dropped };
 }
 
+/**
+ * The solution is edited separately from the map, so it can lag behind the onboard state:
+ * an onboard request must have no pickup action and its drop-off must be on its vehicle's plan.
+ */
+function assertSolutionMatchesOnboardState(items: SolutionItems, requests: RequestState[]): void {
+  for (const r of requests) {
+    if (r.onboardVehicleId === null) continue;
+    const pickupPlaced = Object.values(items).some((list) =>
+      list.includes(actionId("pickup", r.id)),
+    );
+    const dropOffOnVehicle = (
+      items[vehiclePlanContainerId(r.onboardVehicleId)] ?? []
+    ).includes(actionId("dropoff", r.id));
+    if (pickupPlaced || !dropOffOnVehicle) {
+      throw new Error(
+        `The solution is out of date: request R${r.id} is onboard vehicle ${r.onboardVehicleId}. ` +
+          `Use "Reset from graph" in the Solution panel.`,
+      );
+    }
+  }
+}
+
+type PlanAction = {
+  id: number;
+  request_index: number;
+  type: "pickup" | "drop_off";
+  position: { index: number };
+  min_time: number;
+  max_time: number;
+  service_duration: number;
+};
+
 type SimulatedAction = {
   arrival_time: number;
   departure_time: number;
-  action: {
-    id: number;
-    request_index: number;
-    type: "pickup" | "drop_off";
-    position: { index: number };
-    min_time: number;
-    max_time: number;
-    service_duration: number;
-  };
+  action: PlanAction;
 };
 
+export type VehiclePlanJson = {
+  cost: number;
+  vehicle: { index: number; capacity: number; init_position: { index: number } };
+  departure_time: number;
+  arrival_time: number;
+  actions: SimulatedAction[];
+};
+
+/**
+ * With a maximum delay, the latest times follow the instance specification: the latest pickup is
+ * the desired pickup time + maximum delay, the latest drop-off adds the minimal travel time.
+ */
+function makeAction(
+  id: number,
+  r: RequestState,
+  kind: "pickup" | "drop_off",
+  { idToIndex, dm }: GraphIndex,
+  maxDelaySeconds: number | null,
+): PlanAction {
+  const nodeIndex = (nodeId: string): number => {
+    const idx = idToIndex.get(nodeId);
+    if (idx === undefined) {
+      throw new Error(`Node ${nodeId} not found for request R${r.id}.`);
+    }
+    return idx;
+  };
+  const origin = nodeIndex(r.originNodeId!);
+  const destination = nodeIndex(r.destinationNodeId!);
+  const desiredPickupTime = Math.max(0, Math.round(r.pickupTimeSeconds));
+  const minTime = kind === "pickup" ? desiredPickupTime : 0;
+
+  let maxTime = minTime + DEFAULT_MAX_TIME_SLACK;
+  if (maxDelaySeconds !== null) {
+    maxTime =
+      kind === "pickup"
+        ? desiredPickupTime + maxDelaySeconds
+        : desiredPickupTime + dm[origin][destination] + maxDelaySeconds;
+  }
+  return {
+    id,
+    request_index: r.id,
+    type: kind,
+    position: { index: kind === "pickup" ? origin : destination },
+    min_time: minTime,
+    max_time: maxTime,
+    service_duration: 0,
+  };
+}
+
+/**
+ * @param startNodeIndex node the plan continues from: the vehicle's node, or the target of its edge
+ * @param now current time of the instance, see `computeOnboardTiming`
+ * @param timeToStartNode remaining time to reach `startNodeIndex` (0 unless the vehicle is en route)
+ * @param onboardPickups requests already in the vehicle with their pickup times, in pickup order;
+ * they open the plan
+ */
 function simulateVehiclePlan(
   planKeys: string[],
   startNodeIndex: number,
-  dm: number[][],
+  now: number,
+  timeToStartNode: number,
+  onboardPickups: Array<{ request: RequestState; time: number }>,
+  graph: GraphIndex,
+  maxDelaySeconds: number | null,
   requestsById: Map<number, RequestState>,
-  idToIndex: Map<string, number>,
   nextStopId: { value: number },
 ): { driveCost: number; departure_time: number; arrival_time: number; actions: SimulatedAction[] } {
+  const { dm } = graph;
+  // The plan of a vehicle with passengers started with its first pickup; the cost covers the
+  // time driven since then.
+  const planDeparture = onboardPickups.length > 0 ? onboardPickups[0].time : now;
+
   let pos = startNodeIndex;
-  let t = 0;
-  let driveCost = 0;
+  let t = now + timeToStartNode;
+  let driveCost = t - planDeparture;
   const actions: SimulatedAction[] = [];
 
-  const planDeparture = 0;
+  // Onboard pickups already happened; they add no travel.
+  for (const { request, time } of onboardPickups) {
+    const action = makeAction(nextStopId.value++, request, "pickup", graph, maxDelaySeconds);
+    actions.push({ arrival_time: time, departure_time: time, action });
+  }
 
   for (const key of planKeys) {
     const parsed = parseActionId(key);
@@ -117,11 +228,14 @@ function simulateVehiclePlan(
         `Request R${parsed.requestId} is missing origin/destination; remove it from the plan or fix the request.`,
       );
     }
-    const nodeId = parsed.kind === "pickup" ? req.originNodeId : req.destinationNodeId;
-    const nodeIndex = idToIndex.get(nodeId);
-    if (nodeIndex === undefined) {
-      throw new Error(`Node ${nodeId} not found for request R${parsed.requestId}.`);
-    }
+    const action = makeAction(
+      nextStopId.value++,
+      req,
+      parsed.kind === "pickup" ? "pickup" : "drop_off",
+      graph,
+      maxDelaySeconds,
+    );
+    const nodeIndex = action.position.index;
 
     const d = dm[pos][nodeIndex];
     if (!Number.isFinite(d)) {
@@ -133,33 +247,15 @@ function simulateVehiclePlan(
     t += Math.round(d);
     const arrivalAtStop = t;
 
-    const minTime =
-      parsed.kind === "pickup"
-        ? Math.max(0, Math.round(req.pickupTimeSeconds))
-        : 0;
-    const serviceStart = Math.max(arrivalAtStop, minTime);
-    const serviceDuration = 0;
-    const departureFromStop = serviceStart + serviceDuration;
+    const serviceStart = Math.max(arrivalAtStop, action.min_time);
+    const departureFromStop = serviceStart + action.service_duration;
     t = departureFromStop;
     pos = nodeIndex;
-
-    const maxTime =
-      parsed.kind === "pickup"
-        ? minTime + DEFAULT_MAX_TIME_SLACK
-        : minTime + DEFAULT_MAX_TIME_SLACK;
 
     actions.push({
       arrival_time: arrivalAtStop,
       departure_time: departureFromStop,
-      action: {
-        id: nextStopId.value++,
-        request_index: req.id,
-        type: parsed.kind === "pickup" ? "pickup" : "drop_off",
-        position: { index: nodeIndex },
-        min_time: minTime,
-        max_time: maxTime,
-        service_duration: serviceDuration,
-      },
+      action,
     });
   }
 
@@ -171,124 +267,135 @@ function simulateVehiclePlan(
   };
 }
 
-function makeUnservedLeg(
-  id: number,
-  r: RequestState,
-  kind: "pickup" | "drop_off",
-  idToIndex: Map<string, number>,
-): {
-  id: number;
-  request_index: number;
-  type: "pickup" | "drop_off";
-  position: { index: number };
-  min_time: number;
-  max_time: number;
-  service_duration: number;
-} {
-  const nodeId = kind === "pickup" ? r.originNodeId! : r.destinationNodeId!;
-  const idx = idToIndex.get(nodeId) ?? 0;
-  const minTime =
-    kind === "pickup" ? Math.max(0, Math.round(r.pickupTimeSeconds)) : 0;
-  return {
-    id,
-    request_index: r.id,
-    type: kind,
-    position: { index: idx },
-    min_time: minTime,
-    max_time: minTime + DEFAULT_MAX_TIME_SLACK,
-    service_duration: 0,
+export type VehiclePlanExport = {
+  vehicle: VehicleState;
+  /** Index of the vehicle in the exported fleet (vehicles sorted by id). */
+  fleetIndex: number;
+  /** Exported index of the node the vehicle starts from (edge source if it is en route). */
+  initNodeIndex: number;
+  /** Edge target and remaining travel time for an en-route vehicle. */
+  nextLocation: { nodeIndex: number; remainingTime: number } | null;
+  /** Requests in the vehicle, in pickup order. */
+  onboardRequests: RequestState[];
+  /** True if the plan has neither onboard pickups nor actions from the Solution panel. */
+  empty: boolean;
+  plan: VehiclePlanJson;
+};
+
+/**
+ * One plan per vehicle on the map (matching `JSON/vehicle_plan.schema.json`), ordered by fleet
+ * index. Action ids are numbered from 1 across the plans.
+ */
+export function buildVehiclePlans(
+  input: ExportSolutionInput,
+  graph: GraphIndex,
+): VehiclePlanExport[] {
+  const { edges, vehicles, requests, solutionItems, maxDelaySeconds } = input;
+  const { idToIndex, dm } = graph;
+  assertSolutionMatchesOnboardState(solutionItems, requests);
+
+  const timing = computeOnboardTiming(vehicles, requests, edges, idToIndex, dm);
+  if (timing.unreachable.length > 0) {
+    const r = timing.unreachable[0];
+    throw new Error(
+      `Request R${r.id} cannot be onboard vehicle ${r.onboardVehicleId}: there is no path from ` +
+        `the request origin to the vehicle.`,
+    );
+  }
+
+  const requestsById = new Map(requests.map((r) => [r.id, r]));
+  const nodeIndex = (nodeId: string): number => {
+    const idx = idToIndex.get(nodeId);
+    if (idx === undefined) throw new Error(`Node ${nodeId} not found.`);
+    return idx;
   };
+
+  const nextStopId = { value: 1 };
+  return [...vehicles]
+    .sort((a, b) => a.id - b.id)
+    .map((vehicle, fleetIndex) => {
+      const planKeys = solutionItems[vehiclePlanContainerId(vehicle.id)] ?? [];
+      const onboardPickups = requests
+        .filter((r) => r.onboardVehicleId === vehicle.id)
+        .map((request) => ({ request, time: timing.pickupTimes.get(request.id)! }))
+        .sort((a, b) => a.time - b.time || a.request.id - b.request.id);
+
+      const initNodeIndex = nodeIndex(vehicleStartNodeId(vehicle, edges));
+      const next = vehicleNextLocation(vehicle, edges);
+      const nextLocation = next
+        ? { nodeIndex: nodeIndex(next.nodeId), remainingTime: next.remainingTime }
+        : null;
+
+      const sim = simulateVehiclePlan(
+        planKeys,
+        nextLocation ? nextLocation.nodeIndex : initNodeIndex,
+        timing.now,
+        nextLocation ? nextLocation.remainingTime : 0,
+        onboardPickups,
+        graph,
+        maxDelaySeconds,
+        requestsById,
+        nextStopId,
+      );
+
+      return {
+        vehicle,
+        fleetIndex,
+        initNodeIndex,
+        nextLocation,
+        onboardRequests: onboardPickups.map((p) => p.request),
+        empty: sim.actions.length === 0,
+        plan: {
+          cost: sim.driveCost,
+          vehicle: {
+            index: fleetIndex,
+            capacity: vehicle.capacity,
+            init_position: { index: initNodeIndex },
+          },
+          departure_time: sim.departure_time,
+          arrival_time: sim.arrival_time,
+          actions: sim.actions,
+        },
+      };
+    });
 }
 
 /**
  * Build a JSON object matching `JSON/solution.schema.json` (plans follow `vehicle_plan.schema.json`).
  */
 export function buildSolutionExportObject(input: ExportSolutionInput): Record<string, unknown> {
-  const { nodes, edges, requests, solutionItems } = input;
+  const { nodes, edges, requests, solutionItems, maxDelaySeconds } = input;
   if (nodes.length === 0) {
     throw new Error("Cannot export solution: no nodes in the graph.");
   }
 
-  const { idToIndex, n } = buildNodeMaps(nodes);
-  const adj = buildAdjacency(n, edges, idToIndex);
-  const dm = dijkstraAllPairs(n, adj);
+  const idToIndex = buildNodeIndex(nodes);
+  const dm = buildDistanceMatrix(edges, idToIndex);
+  const graph: GraphIndex = { idToIndex, dm };
 
-  const requestsById = new Map(requests.map((r) => [r.id, r]));
-  const { dropped: droppedRequests } = classifyRequests(solutionItems, requests);
-
-  const vehicleById = new Map(
-    nodes
-      .flatMap((node) =>
-        node.data.vehicles.map((v) => ({
-          vehicleId: v.id,
-          nodeId: node.id,
-          capacity: v.capacity,
-        })),
-      )
-      .map((x) => [x.vehicleId, x]),
-  );
-
-  const allVehicleIdsSorted = [...vehicleById.keys()].sort((a, b) => a - b);
-  const vehicleIdToFleetIndex = new Map(allVehicleIdsSorted.map((id, i) => [id, i]));
-
-  const vehicleIdsWithColumns = Object.keys(solutionItems)
-    .filter((k) => k.startsWith("v:"))
-    .map((k) => Number(k.slice(2)))
-    .sort((a, b) => a - b);
-
-  const nextStopId = { value: 1 };
-  const plans: Array<Record<string, unknown> & { cost: number }> = [];
-
-  for (const vehicleId of vehicleIdsWithColumns) {
-    const planKeys = solutionItems[vehiclePlanContainerId(vehicleId)] ?? [];
-    if (planKeys.length === 0) continue;
-
-    const fleet = vehicleById.get(vehicleId);
-    if (!fleet) {
+  for (const containerId of Object.keys(solutionItems)) {
+    if (!containerId.startsWith("v:")) continue;
+    const vehicleId = Number(containerId.slice(2));
+    if (solutionItems[containerId].length > 0 && !input.vehicles.some((v) => v.id === vehicleId)) {
       throw new Error(`Vehicle ${vehicleId} is in the solution but not on the map.`);
     }
-    const startIdx = idToIndex.get(fleet.nodeId);
-    if (startIdx === undefined) {
-      throw new Error(`Start node ${fleet.nodeId} for vehicle ${vehicleId} not found.`);
-    }
-
-    const fleetIndex = vehicleIdToFleetIndex.get(vehicleId);
-    if (fleetIndex === undefined) {
-      throw new Error(`Internal: missing fleet index for vehicle ${vehicleId}.`);
-    }
-
-    const sim = simulateVehiclePlan(
-      planKeys,
-      startIdx,
-      dm,
-      requestsById,
-      idToIndex,
-      nextStopId,
-    );
-
-    plans.push({
-      cost: sim.driveCost,
-      vehicle: {
-        index: fleetIndex,
-        capacity: fleet.capacity,
-        init_position: { index: startIdx },
-      },
-      departure_time: sim.departure_time,
-      arrival_time: sim.arrival_time,
-      actions: sim.actions,
-    });
   }
 
+  const vehiclePlans = buildVehiclePlans(input, graph);
+  const plans = vehiclePlans.filter((p) => !p.empty).map((p) => p.plan);
+
+  const { dropped: droppedRequests } = classifyRequests(solutionItems, requests);
+  let nextStopId = plans.reduce((s, p) => s + p.actions.length, 0) + 1;
   const droppedPayload = droppedRequests.map((r) => {
     const o = idToIndex.get(r.originNodeId!) ?? 0;
     const d = idToIndex.get(r.destinationNodeId!) ?? 0;
     const minTravel = Number.isFinite(dm[o][d]) ? Math.round(dm[o][d]) : 0;
-    const baseId = nextStopId.value;
-    nextStopId.value += 2;
+    const baseId = nextStopId;
+    nextStopId += 2;
     return {
       index: r.id,
-      pickup: makeUnservedLeg(baseId, r, "pickup", idToIndex),
-      drop_off: makeUnservedLeg(baseId + 1, r, "drop_off", idToIndex),
+      pickup: makeAction(baseId, r, "pickup", graph, maxDelaySeconds),
+      drop_off: makeAction(baseId + 1, r, "drop_off", graph, maxDelaySeconds),
       min_travel_time: minTravel,
     };
   });
@@ -299,6 +406,17 @@ export function buildSolutionExportObject(input: ExportSolutionInput): Record<st
   return {
     cost,
     cost_minutes,
+    // The vehicles of a fleet-sizing instance are a part of the solution.
+    ...(input.problemType === "fleet-sizing"
+      ? {
+          problem: input.problemType,
+          vehicles: vehiclePlans.map((p) => ({
+            index: p.fleetIndex,
+            capacity: p.vehicle.capacity,
+            initial_location: p.initNodeIndex,
+          })),
+        }
+      : {}),
     plans: plans as unknown[],
     dropped_requests: droppedPayload as unknown[],
   };

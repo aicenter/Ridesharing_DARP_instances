@@ -25,22 +25,31 @@ import { RequestGlyph } from "./components/RequestGlyph";
 import { captureCroppedFlowPng } from "./lib/captureFlowPng";
 import { exportInstanceZip } from "./lib/exportInstance";
 import { importInstanceFiles } from "./lib/importInstance";
-import { exportSolutionJsonString } from "./lib/exportSolution";
+import {
+  buildDistanceMatrix,
+  buildNodeIndex,
+  exportSolutionJsonString,
+} from "./lib/exportSolution";
+import { computeOnboardTiming } from "./lib/onboardTiming";
 import {
   DEFAULT_TRAVEL_TIME_SECONDS,
   DEFAULT_REQUEST_PICKUP_TIME_SECONDS,
   DEFAULT_VEHICLE_CAPACITY,
+  formatVehicleLocation,
   handleIdsForDirectedEdge,
   hasDirectedEdge,
   makeEdgeId,
+  vehicleNextLocation,
+  type ProblemType,
   type RoadEdgeData,
   type RequestBadge,
   type RequestState,
+  type VehicleLocation,
+  type VehicleState,
 } from "./lib/graphModel";
 import {
   buildInitialSolution,
   ensureVehicleColumns,
-  fleetFromNodes,
   type SolutionItems,
 } from "./lib/solutionModel";
 import { SolutionPanel } from "./components/SolutionPanel";
@@ -58,7 +67,7 @@ function newRoadNode(
     id,
     type: "road",
     position,
-    data: { logicalId, vehicles: [], requestBadges: [] },
+    data: { logicalId, requestBadges: [] },
   };
 }
 
@@ -76,9 +85,12 @@ function roadEdge(source: string, target: string, travelTime: number): Edge<Road
 function AppShell() {
   const [nodes, setNodes, onNodesChange] = useNodesState<RoadNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<RoadEdgeData>>([]);
+  const [vehicles, setVehicles] = useState<VehicleState[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<SelectedVehicle | null>(null);
   const [requests, setRequests] = useState<RequestState[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<SelectedRequest | null>(null);
+  const [problemType, setProblemType] = useState<ProblemType>("DARP");
+  const [maxDelaySeconds, setMaxDelaySeconds] = useState<number | null>(null);
   const [solutionOpen, setSolutionOpen] = useState(false);
   const [solutionItems, setSolutionItems] = useState<SolutionItems | null>(null);
 
@@ -111,100 +123,37 @@ function AppShell() {
     [deselectEdges],
   );
 
-  const addVehicleToNode = useCallback(
-    (nodeId: string) => {
-      const vid = nextVehicleIdRef.current++;
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.id === nodeId
-            ? {
-                ...n,
-                data: {
-                  ...n.data,
-                  vehicles: [...n.data.vehicles, { id: vid, capacity: DEFAULT_VEHICLE_CAPACITY }],
-                },
-              }
-            : n,
-        ),
-      );
-    },
-    [setNodes],
-  );
+  const addVehicle = useCallback((location: VehicleLocation) => {
+    const vid = nextVehicleIdRef.current++;
+    setVehicles((vs) => [...vs, { id: vid, capacity: DEFAULT_VEHICLE_CAPACITY, location }]);
+  }, []);
 
-  const moveVehicle = useCallback(
-    (fromNodeId: string, vehicleId: number, toNodeId: string) => {
-      if (fromNodeId === toNodeId) return;
-      setNodes((nds) => {
-        const from = nds.find((n) => n.id === fromNodeId);
-        const v = from?.data.vehicles.find((x) => x.id === vehicleId);
-        if (!v) return nds;
-        return nds.map((n) => {
-          if (n.id === fromNodeId) {
-            return {
-              ...n,
-              data: {
-                ...n.data,
-                vehicles: n.data.vehicles.filter((x) => x.id !== vehicleId),
-              },
-            };
-          }
-          if (n.id === toNodeId) {
-            return { ...n, data: { ...n.data, vehicles: [...n.data.vehicles, v] } };
-          }
-          return n;
-        });
-      });
-      setSelectedVehicle((sel) =>
-        sel?.vehicleId === vehicleId && sel.nodeId === fromNodeId
-          ? { nodeId: toNodeId, vehicleId }
-          : sel,
-      );
-    },
-    [setNodes],
-  );
+  const moveVehicle = useCallback((vehicleId: number, location: VehicleLocation) => {
+    setVehicles((vs) => vs.map((v) => (v.id === vehicleId ? { ...v, location } : v)));
+  }, []);
 
-  const setVehicleCapacity = useCallback(
-    (nodeId: string, vehicleId: number, capacity: number) => {
-      if (!Number.isFinite(capacity) || capacity < 0) return;
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.id === nodeId
-            ? {
-                ...n,
-                data: {
-                  ...n.data,
-                  vehicles: n.data.vehicles.map((x) =>
-                    x.id === vehicleId ? { ...x, capacity } : x,
-                  ),
-                },
-              }
-            : n,
-        ),
-      );
-    },
-    [setNodes],
-  );
+  const setVehicleCapacity = useCallback((vehicleId: number, capacity: number) => {
+    if (!Number.isFinite(capacity) || capacity < 0) return;
+    setVehicles((vs) => vs.map((v) => (v.id === vehicleId ? { ...v, capacity } : v)));
+  }, []);
+
+  /** Remove the vehicles; their onboard requests stay on the map as ordinary requests. */
+  const removeVehicles = useCallback((vehicleIds: Set<number>) => {
+    if (vehicleIds.size === 0) return;
+    setVehicles((vs) => vs.filter((v) => !vehicleIds.has(v.id)));
+    setRequests((rs) =>
+      rs.map((r) =>
+        r.onboardVehicleId !== null && vehicleIds.has(r.onboardVehicleId)
+          ? { ...r, onboardVehicleId: null, onboardPickupTimeSeconds: null }
+          : r,
+      ),
+    );
+    setSelectedVehicle((sel) => (sel && vehicleIds.has(sel.vehicleId) ? null : sel));
+  }, []);
 
   const removeVehicle = useCallback(
-    (nodeId: string, vehicleId: number) => {
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.id === nodeId
-            ? {
-                ...n,
-                data: {
-                  ...n.data,
-                  vehicles: n.data.vehicles.filter((v) => v.id !== vehicleId),
-                },
-              }
-            : n,
-        ),
-      );
-      setSelectedVehicle((sel) =>
-        sel?.nodeId === nodeId && sel.vehicleId === vehicleId ? null : sel,
-      );
-    },
-    [setNodes],
+    (vehicleId: number) => removeVehicles(new Set([vehicleId])),
+    [removeVehicles],
   );
 
   const addRequestToNode = useCallback(
@@ -217,6 +166,8 @@ function AppShell() {
           pickupTimeSeconds: DEFAULT_REQUEST_PICKUP_TIME_SECONDS,
           originNodeId: nodeId,
           destinationNodeId: null,
+          onboardVehicleId: null,
+          onboardPickupTimeSeconds: null,
         },
       ]);
       setSelectedRequest({ requestId: rid });
@@ -239,8 +190,15 @@ function AppShell() {
             return { ...r, destinationNodeId: nodeId };
           }
           // If already complete: dropping resets origin to this node and clears destination,
-          // so user can pick a new destination with the next drop.
-          return { ...r, originNodeId: nodeId, destinationNodeId: null };
+          // so user can pick a new destination with the next drop. Without a destination the
+          // request cannot stay onboard a vehicle.
+          return {
+            ...r,
+            originNodeId: nodeId,
+            destinationNodeId: null,
+            onboardVehicleId: null,
+            onboardPickupTimeSeconds: null,
+          };
         }),
       );
       setSelectedRequest({ requestId });
@@ -266,41 +224,97 @@ function AppShell() {
     [setRequests],
   );
 
-  const flatFleet = useMemo(() => fleetFromNodes(nodes), [nodes]);
+  const setRequestOnboard = useCallback(
+    (requestId: number, vehicleId: number | null) => {
+      if (vehicleId !== null) {
+        const request = requests.find((r) => r.id === requestId)!;
+        const vehicle = vehicles.find((v) => v.id === vehicleId)!;
+        if (!request.originNodeId || !request.destinationNodeId) {
+          window.alert(
+            `Set both origin and destination of request R${requestId} before putting it onboard.`,
+          );
+          return;
+        }
+        const othersOnboard = requests.filter(
+          (r) => r.onboardVehicleId === vehicleId && r.id !== requestId,
+        ).length;
+        if (othersOnboard >= vehicle.capacity) {
+          window.alert(`Vehicle ${vehicleId} is full (capacity ${vehicle.capacity}).`);
+          return;
+        }
+      }
+      // The pickup time set by the user belongs to the ride on the previous vehicle.
+      setRequests((rs) =>
+        rs.map((r) =>
+          r.id === requestId
+            ? { ...r, onboardVehicleId: vehicleId, onboardPickupTimeSeconds: null }
+            : r,
+        ),
+      );
+      setSelectedRequest({ requestId });
+    },
+    [requests, vehicles],
+  );
+
+  /** Set the pickup time of an onboard request, or return it to the default with `null`. */
+  const setOnboardPickupTime = useCallback((requestId: number, time: number | null) => {
+    if (time !== null && (!Number.isFinite(time) || time < 0)) return;
+    setRequests((rs) =>
+      rs.map((r) => (r.id === requestId ? { ...r, onboardPickupTimeSeconds: time } : r)),
+    );
+  }, []);
+
+  const onboardTiming = useMemo(() => {
+    const idToIndex = buildNodeIndex(nodes);
+    return computeOnboardTiming(
+      vehicles,
+      requests,
+      edges,
+      idToIndex,
+      buildDistanceMatrix(edges, idToIndex),
+    );
+  }, [nodes, edges, vehicles, requests]);
+  const hasOnboardRequests = requests.some((r) => r.onboardVehicleId !== null);
 
   useEffect(() => {
     if (!solutionOpen) return;
-    setSolutionItems((prev) => (prev ? ensureVehicleColumns(prev, flatFleet) : prev));
-  }, [flatFleet, solutionOpen]);
+    setSolutionItems((prev) => (prev ? ensureVehicleColumns(prev, vehicles) : prev));
+  }, [vehicles, solutionOpen]);
 
   const graphContextValue = useMemo(
     () => ({
+      vehicles,
       selectedVehicle,
       selectVehicle,
-      addVehicleToNode,
+      addVehicle,
       moveVehicle,
       setVehicleCapacity,
       removeVehicle,
+      requests,
       selectedRequest,
       selectRequest,
       addRequestToNode,
       dropRequestOnNode,
       setRequestPickupTime,
       removeRequest,
+      setRequestOnboard,
     }),
     [
+      vehicles,
       selectedVehicle,
       selectVehicle,
-      addVehicleToNode,
+      addVehicle,
       moveVehicle,
       setVehicleCapacity,
       removeVehicle,
+      requests,
       selectedRequest,
       selectRequest,
       addRequestToNode,
       dropRequestOnNode,
       setRequestPickupTime,
       removeRequest,
+      setRequestOnboard,
     ],
   );
 
@@ -405,20 +419,57 @@ function AppShell() {
   const onNodesDelete = useCallback(
     (deleted: RoadNodeType[]) => {
       const ids = new Set(deleted.map((n) => n.id));
-      setEdges((eds) => eds.filter((e) => !ids.has(e.source) && !ids.has(e.target)));
-      setSelectedVehicle((sel) => (sel && ids.has(sel.nodeId) ? null : sel));
+      const deletedEdgeIds = new Set(
+        edges.filter((e) => ids.has(e.source) || ids.has(e.target)).map((e) => e.id),
+      );
+      setEdges((eds) => eds.filter((e) => !deletedEdgeIds.has(e.id)));
+      // Vehicles go with the node or edge they are on.
+      removeVehicles(
+        new Set(
+          vehicles
+            .filter((v) =>
+              v.location.kind === "node"
+                ? ids.has(v.location.nodeId)
+                : deletedEdgeIds.has(v.location.edgeId),
+            )
+            .map((v) => v.id),
+        ),
+      );
       setRequests((rs) =>
         rs
-          .map((r) => ({
-            ...r,
-            originNodeId: r.originNodeId && ids.has(r.originNodeId) ? null : r.originNodeId,
-            destinationNodeId:
-              r.destinationNodeId && ids.has(r.destinationNodeId) ? null : r.destinationNodeId,
-          }))
+          .map((r) => {
+            const originNodeId =
+              r.originNodeId && ids.has(r.originNodeId) ? null : r.originNodeId;
+            const destinationNodeId =
+              r.destinationNodeId && ids.has(r.destinationNodeId) ? null : r.destinationNodeId;
+            return {
+              ...r,
+              originNodeId,
+              destinationNodeId,
+              // A request that lost an endpoint cannot stay onboard a vehicle.
+              ...(originNodeId === null || destinationNodeId === null
+                ? { onboardVehicleId: null, onboardPickupTimeSeconds: null }
+                : {}),
+            };
+          })
           .filter((r) => r.originNodeId !== null || r.destinationNodeId !== null),
       );
     },
-    [setEdges],
+    [edges, vehicles, setEdges, removeVehicles],
+  );
+
+  const onEdgesDelete = useCallback(
+    (deleted: Edge<RoadEdgeData>[]) => {
+      const ids = new Set(deleted.map((e) => e.id));
+      removeVehicles(
+        new Set(
+          vehicles
+            .filter((v) => v.location.kind === "edge" && ids.has(v.location.edgeId))
+            .map((v) => v.id),
+        ),
+      );
+    },
+    [vehicles, removeVehicles],
   );
 
   useEffect(() => {
@@ -442,11 +493,15 @@ function AppShell() {
 
   const selectedVehicleRecord = useMemo(() => {
     if (!selectedVehicle) return null;
-    const n = nodes.find((x) => x.id === selectedVehicle.nodeId);
-    const v = n?.data.vehicles.find((x) => x.id === selectedVehicle.vehicleId);
-    if (!n || !v) return null;
-    return { node: n, vehicle: v };
-  }, [nodes, selectedVehicle]);
+    return vehicles.find((x) => x.id === selectedVehicle.vehicleId) ?? null;
+  }, [vehicles, selectedVehicle]);
+
+  const selectedVehicleNext = selectedVehicleRecord
+    ? vehicleNextLocation(selectedVehicleRecord, edges)
+    : null;
+  const selectedVehicleOnboard = selectedVehicleRecord
+    ? requests.filter((r) => r.onboardVehicleId === selectedVehicleRecord.id)
+    : [];
 
   const selectedRequestRecord = useMemo(() => {
     if (!selectedRequest) return null;
@@ -454,6 +509,10 @@ function AppShell() {
     if (!r) return null;
     return r;
   }, [requests, selectedRequest]);
+
+  const selectedOnboardPickupTime = selectedRequestRecord
+    ? onboardTiming.pickupTimes.get(selectedRequestRecord.id)
+    : undefined;
 
   const setSelectedTravelTime = useCallback(
     (raw: string) => {
@@ -474,7 +533,7 @@ function AppShell() {
       if (!selectedVehicle) return;
       const n = Number(raw);
       if (!Number.isFinite(n) || n < 0) return;
-      setVehicleCapacity(selectedVehicle.nodeId, selectedVehicle.vehicleId, n);
+      setVehicleCapacity(selectedVehicle.vehicleId, n);
     },
     [selectedVehicle, setVehicleCapacity],
   );
@@ -495,8 +554,11 @@ function AppShell() {
       const json = exportSolutionJsonString({
         nodes,
         edges,
+        vehicles,
         requests,
         solutionItems,
+        problemType,
+        maxDelaySeconds,
       });
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -508,7 +570,7 @@ function AppShell() {
     } catch (e) {
       window.alert(e instanceof Error ? e.message : String(e));
     }
-  }, [nodes, edges, requests, solutionItems]);
+  }, [nodes, edges, vehicles, requests, solutionItems, problemType, maxDelaySeconds]);
 
   const handleExport = useCallback(async () => {
     const host = flowHostRef.current;
@@ -521,15 +583,32 @@ function AppShell() {
         pngBlob = null;
       }
     }
-    await exportInstanceZip({ nodes, edges, requests, pngBlob });
-  }, [nodes, edges, requests]);
+    try {
+      await exportInstanceZip({
+        nodes,
+        edges,
+        vehicles,
+        requests,
+        // The vehicle data export takes the current plans from the solution.
+        solutionItems: solutionItems ?? buildInitialSolution(vehicles, requests),
+        problemType,
+        maxDelaySeconds,
+        pngBlob,
+      });
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : String(e));
+    }
+  }, [nodes, edges, vehicles, requests, solutionItems, problemType, maxDelaySeconds]);
 
   const applyImportedFiles = useCallback(
     async (files: File[]) => {
       const data = await importInstanceFiles(files);
       setNodes(data.nodes);
       setEdges(data.edges);
+      setVehicles(data.vehicles);
       setRequests(data.requests);
+      setProblemType(data.problemType);
+      setMaxDelaySeconds(data.maxDelaySeconds);
       nextLogicalIdRef.current = data.nextLogicalId;
       nextVehicleIdRef.current = data.nextVehicleId;
       nextRequestIdRef.current = data.nextRequestId;
@@ -568,7 +647,7 @@ function AppShell() {
       if (edges.some((ed) => ed.selected)) return;
       if (selectedVehicle) {
         e.preventDefault();
-        removeVehicle(selectedVehicle.nodeId, selectedVehicle.vehicleId);
+        removeVehicle(selectedVehicle.vehicleId);
         return;
       }
       if (selectedRequest) {
@@ -595,7 +674,7 @@ function AppShell() {
             ref={importInputRef}
             type="file"
             multiple
-            accept=".csv,.yaml,.yml,.zip,text/csv,application/zip"
+            accept=".csv,.yaml,.yml,.json,.zip,text/csv,application/json,application/zip"
             className="app__file-input"
             aria-hidden
             tabIndex={-1}
@@ -613,7 +692,7 @@ function AppShell() {
             className="app__btn"
             onClick={() => {
               setSolutionOpen(true);
-              setSolutionItems((prev) => prev ?? buildInitialSolution(flatFleet, requests));
+              setSolutionItems((prev) => prev ?? buildInitialSolution(vehicles, requests));
             }}
           >
             Create solution
@@ -628,11 +707,11 @@ function AppShell() {
               );
               e.dataTransfer.effectAllowed = "copy";
             }}
-            title="Drag onto a node to park a vehicle there"
+            title="Drag onto a node to park a vehicle there, or onto an edge to place it en route"
           >
             <VehicleGlyph />
             <span>Vehicle</span>
-            <span className="vehicle-palette__hint">→ node</span>
+            <span className="vehicle-palette__hint">→ node / edge</span>
           </div>
           <div
             className="request-palette"
@@ -650,13 +729,44 @@ function AppShell() {
             <span>Request</span>
             <span className="vehicle-palette__hint">O→D</span>
           </div>
+          <label className="app__setting" title="Fleet-sizing: the vehicles are not an instance input; they are exported with the vehicle data instead of vehicles.csv">
+            <span>Problem</span>
+            <select
+              value={problemType}
+              onChange={(ev) => setProblemType(ev.target.value as ProblemType)}
+            >
+              <option value="DARP">DARP</option>
+              <option value="fleet-sizing">fleet-sizing</option>
+            </select>
+          </label>
+          <label className="app__setting" title="Maximum delay of the requests (max_delay, absolute mode). Leave empty to not set it.">
+            <span>Max delay (s)</span>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={maxDelaySeconds ?? ""}
+              onChange={(ev) => {
+                const n = Number(ev.target.value);
+                if (ev.target.value === "") setMaxDelaySeconds(null);
+                else if (Number.isFinite(n) && n >= 0) setMaxDelaySeconds(Math.round(n));
+              }}
+            />
+          </label>
+          {hasOnboardRequests ? (
+            <span className="app__setting" title="Time 0 is the pickup of the earliest picked up onboard request; the current time is the moment the vehicle positions describe.">
+              Current time: {onboardTiming.now}s
+            </span>
+          ) : null}
           <p className="app__hint">
             <strong>Import</strong> accepts several files at once (<code>dm.csv</code> required;{" "}
-            <code>requests.csv</code>, <code>vehicles.csv</code>, <code>config.yaml</code> optional) or a
-            single <code>.zip</code>.{" "}
+            <code>requests.csv</code>, <code>vehicles.csv</code>, <code>config.yaml</code>,{" "}
+            <code>vehicle_data.json</code> optional) or a single <code>.zip</code>.{" "}
             Connect nodes with handles; both directions added. Drag <strong>Vehicle</strong> onto a
-            node (default capacity {DEFAULT_VEHICLE_CAPACITY}). Drag chips between nodes to relocate.
-            Drag <strong>Request</strong> to set origin, then drag it again to set destination. Layout only.
+            node (default capacity {DEFAULT_VEHICLE_CAPACITY}) or onto an edge to place it en route.
+            Drag chips between nodes and edges to relocate.
+            Drag <strong>Request</strong> to set origin, then drag it again to set destination; drag
+            it onto a vehicle to put it onboard. Layout only.
           </p>
         </header>
 
@@ -672,6 +782,7 @@ function AppShell() {
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               onNodesDelete={onNodesDelete}
+              onEdgesDelete={onEdgesDelete}
               onSelectionChange={onSelectionChange}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
@@ -696,19 +807,32 @@ function AppShell() {
               <>
                 <h2 className="app__inspector-title">Selected vehicle</h2>
                 <p className="app__inspector-route">
-                  id {selectedVehicleRecord.vehicle.id} · node {selectedVehicleRecord.node.id}
+                  id {selectedVehicleRecord.id} · {formatVehicleLocation(selectedVehicleRecord, edges)}
                 </p>
+                {selectedVehicleNext ? (
+                  <p className="app__inspector-route">
+                    {selectedVehicleNext.remainingTime}s to node {selectedVehicleNext.nodeId}
+                  </p>
+                ) : null}
+                {selectedVehicleOnboard.length > 0 ? (
+                  <p className="app__inspector-route">
+                    Onboard: {selectedVehicleOnboard.map((r) => `R${r.id}`).join(", ")}
+                  </p>
+                ) : null}
                 <label className="app__field">
                   <span>Capacity</span>
                   <input
                     type="number"
                     min={0}
                     step={1}
-                    value={selectedVehicleRecord.vehicle.capacity}
+                    value={selectedVehicleRecord.capacity}
                     onChange={(ev) => setInspectorVehicleCapacity(ev.target.value)}
                   />
                 </label>
-                <p className="app__inspector-note">Delete / Backspace removes this vehicle.</p>
+                <p className="app__inspector-note">
+                  Drop a request chip on the vehicle to put it onboard. Delete / Backspace removes
+                  this vehicle.
+                </p>
               </>
             ) : selectedRequestRecord ? (
               <>
@@ -717,6 +841,54 @@ function AppShell() {
                   R{selectedRequestRecord.id} · O:{selectedRequestRecord.originNodeId ?? "?"} · D:
                   {selectedRequestRecord.destinationNodeId ?? "?"}
                 </p>
+                {selectedRequestRecord.onboardVehicleId !== null ? (
+                  <p className="app__inspector-route">
+                    Onboard: vehicle {selectedRequestRecord.onboardVehicleId}
+                    <br />
+                    <button
+                      type="button"
+                      className="app__inspector-btn"
+                      onClick={() => setRequestOnboard(selectedRequestRecord.id, null)}
+                    >
+                      Remove from vehicle
+                    </button>
+                  </p>
+                ) : null}
+                {selectedRequestRecord.onboardVehicleId === null ? null : selectedOnboardPickupTime ===
+                  undefined ? (
+                  <p className="app__inspector-note">
+                    There is no path from the request origin to the vehicle, so the request cannot
+                    be onboard.
+                  </p>
+                ) : (
+                  <>
+                    <label className="app__field">
+                      <span>Picked up at (s)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={selectedOnboardPickupTime}
+                        onChange={(ev) =>
+                          setOnboardPickupTime(selectedRequestRecord.id, Number(ev.target.value))
+                        }
+                      />
+                    </label>
+                    {selectedRequestRecord.onboardPickupTimeSeconds !== null ? (
+                      <button
+                        type="button"
+                        className="app__inspector-btn"
+                        onClick={() => setOnboardPickupTime(selectedRequestRecord.id, null)}
+                      >
+                        Reset to default
+                      </button>
+                    ) : (
+                      <p className="app__inspector-note">
+                        Default: the vehicle drove from the request origin by the shortest path.
+                      </p>
+                    )}
+                  </>
+                )}
                 <label className="app__field">
                   <span>Pickup time (s)</span>
                   <input
@@ -728,8 +900,8 @@ function AppShell() {
                   />
                 </label>
                 <p className="app__inspector-note">
-                  Drag the request chip to set the missing endpoint. Delete / Backspace removes this
-                  request.
+                  Drag the request chip to set the missing endpoint, or onto a vehicle to put the
+                  request onboard. Delete / Backspace removes this request.
                 </p>
               </>
             ) : selectedEdge ? (
@@ -761,10 +933,12 @@ function AppShell() {
             <SolutionPanel
               items={solutionItems}
               onItemsChange={setSolutionItems}
-              vehicles={flatFleet}
+              vehicles={vehicles}
+              requests={requests}
+              edges={edges}
               onClose={() => setSolutionOpen(false)}
               onResetFromGraph={() =>
-                setSolutionItems(buildInitialSolution(flatFleet, requests))
+                setSolutionItems(buildInitialSolution(vehicles, requests))
               }
               onExportSolution={handleExportSolution}
             />

@@ -10,9 +10,16 @@ export const DEFAULT_VEHICLE_CAPACITY = 4;
 /** Default pickup time for a newly created request (seconds). */
 export const DEFAULT_REQUEST_PICKUP_TIME_SECONDS = 0;
 
+/** A vehicle is either parked on a node or travelling along a directed edge. */
+export type VehicleLocation =
+  | { kind: "node"; nodeId: string }
+  /** `progress` is the travelled fraction of the edge, 0 (source) to 1 (target). */
+  | { kind: "edge"; edgeId: string; progress: number };
+
 export type VehicleState = {
   id: number;
   capacity: number;
+  location: VehicleLocation;
 };
 
 export type RequestState = {
@@ -20,7 +27,63 @@ export type RequestState = {
   pickupTimeSeconds: number;
   originNodeId: string | null;
   destinationNodeId: string | null;
+  /** Vehicle that already carries this request (picked up, not yet dropped off). */
+  onboardVehicleId: number | null;
+  /**
+   * Pickup time of an onboard request set by the user; `null` leaves it to the heuristic in
+   * `computeOnboardTiming`.
+   */
+  onboardPickupTimeSeconds: number | null;
 };
+
+/** In a fleet-sizing instance, the vehicles are not an input (no `vehicles.csv`). */
+export type ProblemType = "DARP" | "fleet-sizing";
+
+type EdgeEndpoints = { id: string; source: string; target: string };
+
+function edgeOfVehicle<E extends EdgeEndpoints>(edgeId: string, edges: E[]): E {
+  const edge = edges.find((e) => e.id === edgeId);
+  if (!edge) throw new Error(`Edge ${edgeId} not found.`);
+  return edge;
+}
+
+/** Node the vehicle starts from: its node, or the source of the edge it travels along. */
+export function vehicleStartNodeId(vehicle: VehicleState, edges: EdgeEndpoints[]): string {
+  const loc = vehicle.location;
+  return loc.kind === "node" ? loc.nodeId : edgeOfVehicle(loc.edgeId, edges).source;
+}
+
+/** Remaining travel time (seconds) to the edge target for a vehicle at `progress`. */
+export function remainingEdgeTravelTime(progress: number, travelTime: number): number {
+  return Math.round((1 - progress) * travelTime);
+}
+
+/**
+ * Where an en-route vehicle is heading: the target node of its edge and the remaining travel time.
+ * `null` for a vehicle parked on a node.
+ */
+export function vehicleNextLocation(
+  vehicle: VehicleState,
+  edges: Array<EdgeEndpoints & { data?: RoadEdgeData }>,
+): { nodeId: string; remainingTime: number } | null {
+  const loc = vehicle.location;
+  if (loc.kind === "node") return null;
+  const edge = edgeOfVehicle(loc.edgeId, edges);
+  return {
+    nodeId: edge.target,
+    remainingTime: remainingEdgeTravelTime(
+      loc.progress,
+      edge.data?.travelTime ?? DEFAULT_TRAVEL_TIME_SECONDS,
+    ),
+  };
+}
+
+export function formatVehicleLocation(vehicle: VehicleState, edges: EdgeEndpoints[]): string {
+  const loc = vehicle.location;
+  if (loc.kind === "node") return `node ${loc.nodeId}`;
+  const edge = edgeOfVehicle(loc.edgeId, edges);
+  return `edge ${edge.source} → ${edge.target}`;
+}
 
 export type RequestBadge = {
   id: number;

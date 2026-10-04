@@ -1,8 +1,7 @@
 import JSZip from "jszip";
-import type { Edge } from "@xyflow/react";
-import type { RoadNodeType } from "../components/RoadNode";
-import type { RoadEdgeData, RequestState } from "./graphModel";
-import { dijkstraAllPairs } from "./shortestPaths";
+import { buildDistanceMatrix, buildNodeIndex, type ExportSolutionInput } from "./exportSolution";
+import { buildVehicleDataExportObject, hasVehicleState } from "./exportVehicleData";
+import { vehicleStartNodeId, type ProblemType } from "./graphModel";
 
 function csvRow(fields: Array<string | number>): string {
   return `${fields.join(",")}\n`;
@@ -14,46 +13,45 @@ function yamlEscapeString(s: string): string {
   return JSON.stringify(s);
 }
 
-function buildConfigYaml(): string {
-  // Minimal config as requested: only filepaths.
+function buildConfigYaml(problemType: ProblemType, maxDelaySeconds: number | null): string {
+  // Minimal config: filepaths, and the settings that differ from the defaults.
   return [
+    ...(problemType === "fleet-sizing" ? [`problem: ${problemType}`] : []),
     `demand:`,
     `  filepath: ${yamlEscapeString("./requests.csv")}`,
-    `vehicles:`,
-    `  filepath: ${yamlEscapeString("./vehicles.csv")}`,
+    // The vehicles of a fleet-sizing instance are not an input.
+    ...(problemType === "DARP"
+      ? [`vehicles:`, `  filepath: ${yamlEscapeString("./vehicles.csv")}`]
+      : []),
     `dm_filepath: ${yamlEscapeString("./dm.csv")}`,
+    ...(maxDelaySeconds !== null
+      ? [`max_delay:`, `  mode: absolute`, `  seconds: ${maxDelaySeconds}`]
+      : []),
     ``,
   ].join("\n");
 }
 
-export type ExportInstanceInput = {
-  nodes: RoadNodeType[];
-  edges: Edge<RoadEdgeData>[];
-  requests: RequestState[];
+/** `solutionItems` supplies the `current_plan` of each vehicle in `vehicle_data.json`. */
+export type ExportInstanceInput = ExportSolutionInput & {
   /** Optional screenshot of the graph (cropped to nodes), e.g. `instance.png`. */
   pngBlob?: Blob | null;
 };
 
 export async function exportInstanceZip(input: ExportInstanceInput) {
-  // Export node ids as 0..n-1 by sorting by logicalId.
-  const nodesSorted = [...input.nodes].sort((a, b) => a.data.logicalId - b.data.logicalId);
-  const idToIndex = new Map<string, number>();
-  nodesSorted.forEach((n, idx) => idToIndex.set(n.id, idx));
+  const idToIndex = buildNodeIndex(input.nodes);
 
-  const nodeCount = nodesSorted.length;
+  const nodeCount = idToIndex.size;
   if (nodeCount === 0) {
     throw new Error("No nodes to export.");
   }
 
   // Build vehicles.csv (comma-separated, with header; preferred format per README)
+  // An en-route vehicle is listed at the source node of its edge.
   const vehiclesLines: string[] = [];
   vehiclesLines.push(csvRow(["position", "capacity"]));
-  const vehicles = nodesSorted.flatMap((n) =>
-    n.data.vehicles.map((v) => ({ nodeId: n.id, id: v.id, capacity: v.capacity })),
-  );
-  vehicles.sort((a, b) => a.id - b.id);
+  const vehicles = [...input.vehicles].sort((a, b) => a.id - b.id);
   for (const v of vehicles) {
-    const pos = idToIndex.get(v.nodeId);
+    const pos = idToIndex.get(vehicleStartNodeId(v, input.edges));
     if (pos === undefined) continue;
     vehiclesLines.push(csvRow([pos, v.capacity]));
   }
@@ -72,18 +70,7 @@ export async function exportInstanceZip(input: ExportInstanceInput) {
     reqLines.push(csvRow([r.id, o, d, Math.round(r.pickupTimeSeconds)]));
   }
 
-  // Build adjacency from directed edges with travelTime weights
-  const adj: Array<Array<{ to: number; w: number }>> = Array.from({ length: nodeCount }, () => []);
-  for (const e of input.edges) {
-    const s = idToIndex.get(e.source);
-    const t = idToIndex.get(e.target);
-    const w = e.data?.travelTime;
-    if (s === undefined || t === undefined) continue;
-    if (w === undefined || !Number.isFinite(w) || w < 0) continue;
-    adj[s].push({ to: t, w });
-  }
-
-  const dm = dijkstraAllPairs(nodeCount, adj);
+  const dm = buildDistanceMatrix(input.edges, idToIndex);
 
   // dm.csv: numeric matrix, no header; unreachable pairs written as `inf`.
   const dmLines: string[] = [];
@@ -97,9 +84,15 @@ export async function exportInstanceZip(input: ExportInstanceInput) {
 
   const zip = new JSZip();
   zip.file("requests.csv", reqLines.join(""));
-  zip.file("vehicles.csv", vehiclesLines.join(""));
+  if (input.problemType === "DARP") {
+    zip.file("vehicles.csv", vehiclesLines.join(""));
+  }
   zip.file("dm.csv", dmLines.join(""));
-  zip.file("config.yaml", buildConfigYaml());
+  zip.file("config.yaml", buildConfigYaml(input.problemType, input.maxDelaySeconds));
+  if (hasVehicleState(input)) {
+    const vehicleData = buildVehicleDataExportObject(input, idToIndex, dm);
+    zip.file("vehicle_data.json", `${JSON.stringify(vehicleData, null, 2)}\n`);
+  }
   if (input.pngBlob) {
     zip.file("instance.png", input.pngBlob);
   }
@@ -112,4 +105,3 @@ export async function exportInstanceZip(input: ExportInstanceInput) {
   a.click();
   URL.revokeObjectURL(url);
 }
-

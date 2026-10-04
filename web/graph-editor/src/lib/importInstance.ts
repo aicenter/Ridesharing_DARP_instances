@@ -4,9 +4,13 @@ import type { RoadNodeType } from "../components/RoadNode";
 import { layoutImportGraph } from "./layoutImportGraph";
 import {
   makeEdgeId,
+  type ProblemType,
   type RoadEdgeData,
   type RequestState,
+  type VehicleState,
 } from "./graphModel";
+import { buildDistanceMatrix, buildNodeIndex } from "./exportSolution";
+import { computeOnboardTiming } from "./onboardTiming";
 import { dijkstraAllPairs } from "./shortestPaths";
 
 const DM_INF_TOKENS = new Set(["inf", "infinity", "nan", "-1"]);
@@ -202,7 +206,10 @@ function roadEdge(source: string, target: string, travelTime: number): Edge<Road
 export type ImportInstanceResult = {
   nodes: RoadNodeType[];
   edges: Edge<RoadEdgeData>[];
+  vehicles: VehicleState[];
   requests: RequestState[];
+  problemType: ProblemType;
+  maxDelaySeconds: number | null;
   nextLogicalId: number;
   nextVehicleId: number;
   nextRequestId: number;
@@ -252,13 +259,20 @@ async function zipToBundle(file: File): Promise<ImportFileBundle> {
   return bundle;
 }
 
-/** Minimal config.yaml: resolve demand/vehicles/dm paths if non-default. */
-function parseConfigPaths(yamlText: string): {
+type InstanceConfig = {
   demand?: string;
   vehicles?: string;
   dm?: string;
-} {
-  const out: { demand?: string; vehicles?: string; dm?: string } = {};
+  problemType?: ProblemType;
+  maxDelaySeconds?: number;
+};
+
+/**
+ * Minimal config.yaml: resolve demand/vehicles/dm paths if non-default, the problem type, and the
+ * maximum delay in seconds (`max_delay` or its deprecated aliases).
+ */
+function parseConfig(yamlText: string): InstanceConfig {
+  const out: InstanceConfig = {};
   const lineMatch = (key: string, line: string): string | null => {
     const re = new RegExp(`^\\s*${key}\\s*:\\s*(.+?)\\s*$`);
     const m = line.match(re);
@@ -266,8 +280,20 @@ function parseConfigPaths(yamlText: string): {
   };
   let inDemand = false;
   let inVehicles = false;
+  let inMaxDelay = false;
   for (const raw of yamlText.split(/\r?\n/)) {
     const line = raw;
+    if (/^\S/.test(line)) {
+      inMaxDelay = /^(max_delay|max_travel_time_delay)\s*:/.test(line);
+    }
+    const problem = lineMatch("problem", line);
+    if (problem === "DARP" || problem === "fleet-sizing") out.problemType = problem;
+    const maxProlongation = lineMatch("max_prolongation", line);
+    if (maxProlongation) out.maxDelaySeconds = Number(maxProlongation);
+    if (inMaxDelay) {
+      const seconds = lineMatch("seconds", line);
+      if (seconds) out.maxDelaySeconds = Number(seconds);
+    }
     if (/^\s*demand\s*:/.test(line)) {
       inDemand = true;
       inVehicles = false;
@@ -298,6 +324,81 @@ function parseConfigPaths(yamlText: string): {
   return out;
 }
 
+/** The parts of `vehicle_data.json` (`JSON/vehicle_data_list.schema.json`) the editor reads. */
+type VehicleDataJson = {
+  fleet_sizing_vehicles?: Array<{ index: number; capacity: number; initial_location: number }>;
+  vehicle_data_list: Array<{
+    vehicle_index: number;
+    onboard_request_indices?: number[];
+    next_location_index?: number | null;
+    time_at_next_location?: number;
+    current_plan: {
+      actions: Array<{
+        departure_time: number;
+        action: { type: "pickup" | "drop_off"; request_index: number };
+      }>;
+    };
+  }>;
+};
+
+/**
+ * Apply the vehicle states: onboard requests with the pickup times from the current plan, and
+ * en-route vehicles moved from their node onto the edge towards their next location.
+ */
+function applyVehicleData(
+  vehicleData: VehicleDataJson,
+  vehicles: VehicleState[],
+  requests: RequestState[],
+  edges: Edge<RoadEdgeData>[],
+  warnings: string[],
+): void {
+  for (const vd of vehicleData.vehicle_data_list) {
+    const vehicle = vehicles.find((v) => v.id === vd.vehicle_index);
+    if (!vehicle) {
+      warnings.push(`vehicle_data.json: unknown vehicle index ${vd.vehicle_index} — skipped.`);
+      continue;
+    }
+
+    for (const requestIndex of vd.onboard_request_indices ?? []) {
+      const request = requests.find((r) => r.id === requestIndex);
+      if (!request) {
+        warnings.push(
+          `vehicle_data.json: unknown onboard request ${requestIndex} of vehicle ${vehicle.id} — skipped.`,
+        );
+        continue;
+      }
+      request.onboardVehicleId = vehicle.id;
+      const pickup = vd.current_plan.actions.find(
+        (a) => a.action.type === "pickup" && a.action.request_index === requestIndex,
+      );
+      request.onboardPickupTimeSeconds = pickup ? pickup.departure_time : null;
+    }
+
+    if (vd.next_location_index === undefined || vd.next_location_index === null) continue;
+    if (vehicle.location.kind !== "node") continue;
+    const edge = edges.find(
+      (e) =>
+        vehicle.location.kind === "node" &&
+        e.source === vehicle.location.nodeId &&
+        e.target === String(vd.next_location_index),
+    );
+    if (!edge) {
+      warnings.push(
+        `vehicle_data.json: no edge from node ${vehicle.location.nodeId} to next location ` +
+          `${vd.next_location_index} of vehicle ${vehicle.id} — vehicle left on its node.`,
+      );
+      continue;
+    }
+    const travelTime = edge.data!.travelTime;
+    const progress = travelTime > 0 ? 1 - (vd.time_at_next_location ?? 0) / travelTime : 0;
+    vehicle.location = {
+      kind: "edge",
+      edgeId: edge.id,
+      progress: Math.min(1, Math.max(0, progress)),
+    };
+  }
+}
+
 /**
  * Load instance data from a map of lowercase basename → file text (e.g. `dm.csv`, `config.yaml`).
  */
@@ -309,8 +410,9 @@ export function importInstanceFromBundle(bundle: ImportFileBundle): ImportInstan
   let dmNames = ["dm.csv"];
 
   const yamlText = bundleGet(bundle, ["config.yaml", "config.yml"]);
+  const config = yamlText ? parseConfig(yamlText) : {};
   if (yamlText) {
-    const paths = parseConfigPaths(yamlText);
+    const paths = config;
     if (paths.demand) demandNames = [paths.demand.split("/").pop() ?? paths.demand, paths.demand];
     if (paths.vehicles)
       vehiclesNames = [paths.vehicles.split("/").pop() ?? paths.vehicles, paths.vehicles];
@@ -342,7 +444,7 @@ export function importInstanceFromBundle(bundle: ImportFileBundle): ImportInstan
       id,
       type: "road",
       position: positions[i] ?? { x: 48 + i * 32, y: 48 },
-      data: { logicalId: i, vehicles: [], requestBadges: [] },
+      data: { logicalId: i, requestBadges: [] },
     });
   }
 
@@ -353,6 +455,10 @@ export function importInstanceFromBundle(bundle: ImportFileBundle): ImportInstan
     edges.push(roadEdge(s, t, e.w));
   }
 
+  const vehicleDataText = bundleGet(bundle, ["vehicle_data.json"]);
+  const vehicleData = vehicleDataText ? (JSON.parse(vehicleDataText) as VehicleDataJson) : null;
+
+  const vehicles: VehicleState[] = [];
   const vehiclesText = bundleGet(bundle, vehiclesNames);
   if (vehiclesText) {
     const tbl = parseCsvWithOptionalHeader(vehiclesText, true);
@@ -376,13 +482,26 @@ export function importInstanceFromBundle(bundle: ImportFileBundle): ImportInstan
             warnings.push(`Skipping vehicle row with invalid capacity: ${row.join(",")}`);
             continue;
           }
-          const nodeId = String(pos);
-          const node = nodes.find((x) => x.id === nodeId);
-          if (node) {
-            node.data.vehicles.push({ id: vid++, capacity: Math.round(cap) });
-          }
+          vehicles.push({
+            id: vid++,
+            capacity: Math.round(cap),
+            location: { kind: "node", nodeId: String(pos) },
+          });
         }
       }
+    }
+  } else if (vehicleData?.fleet_sizing_vehicles) {
+    // Fleet-sizing instances have no vehicles.csv; their vehicles come with the vehicle data.
+    for (const v of vehicleData.fleet_sizing_vehicles) {
+      if (!Number.isInteger(v.initial_location) || v.initial_location < 0 || v.initial_location >= n) {
+        warnings.push(`Skipping fleet-sizing vehicle ${v.index} with invalid initial location.`);
+        continue;
+      }
+      vehicles.push({
+        id: v.index,
+        capacity: v.capacity,
+        location: { kind: "node", nodeId: String(v.initial_location) },
+      });
     }
   } else {
     warnings.push("No vehicles.csv found — vehicles skipped.");
@@ -424,6 +543,8 @@ export function importInstanceFromBundle(bundle: ImportFileBundle): ImportInstan
           pickupTimeSeconds: Math.round(time),
           originNodeId: String(o),
           destinationNodeId: String(d),
+          onboardVehicleId: null,
+          onboardPickupTimeSeconds: null,
         });
         maxRequestId = Math.max(maxRequestId, id);
       }
@@ -434,15 +555,43 @@ export function importInstanceFromBundle(bundle: ImportFileBundle): ImportInstan
 
   requests.sort((a, b) => a.id - b.id);
 
+  if (vehicleData) {
+    applyVehicleData(vehicleData, vehicles, requests, edges, warnings);
+
+    // Pickup times that the default timing would produce anyway are not kept as user-set ones.
+    const idToIndex = buildNodeIndex(nodes);
+    const timing = computeOnboardTiming(
+      vehicles,
+      requests,
+      edges,
+      idToIndex,
+      buildDistanceMatrix(edges, idToIndex),
+    );
+    const defaultTiming = computeOnboardTiming(
+      vehicles,
+      requests.map((r) => ({ ...r, onboardPickupTimeSeconds: null })),
+      edges,
+      idToIndex,
+      buildDistanceMatrix(edges, idToIndex),
+    );
+    if (timing.now === defaultTiming.now) {
+      for (const r of requests) {
+        if (timing.pickupTimes.get(r.id) === defaultTiming.pickupTimes.get(r.id)) {
+          r.onboardPickupTimeSeconds = null;
+        }
+      }
+    }
+  }
+
   return {
     nodes,
     edges,
+    vehicles,
     requests,
+    problemType: config.problemType ?? "DARP",
+    maxDelaySeconds: config.maxDelaySeconds ?? null,
     nextLogicalId: n,
-    nextVehicleId: nodes.reduce((m, node) => {
-      const mx = node.data.vehicles.reduce((a, v) => Math.max(a, v.id), -1);
-      return Math.max(m, mx + 1);
-    }, 0),
+    nextVehicleId: vehicles.reduce((m, v) => Math.max(m, v.id + 1), 0),
     nextRequestId: maxRequestId + 1,
     warnings,
   };
@@ -456,7 +605,8 @@ export async function importInstanceZip(file: File): Promise<ImportInstanceResul
 
 /**
  * One or more loose files and/or a single zip. If exactly one file is `.zip`, loads the archive;
- * otherwise expects basenames like `dm.csv`, `requests.csv`, `vehicles.csv`, optional `config.yaml`.
+ * otherwise expects basenames like `dm.csv`, `requests.csv`, `vehicles.csv`, optional `config.yaml`
+ * and `vehicle_data.json`.
  * Do not mix a `.zip` with other files in the same selection.
  */
 export async function importInstanceFiles(files: FileList | File[]): Promise<ImportInstanceResult> {
