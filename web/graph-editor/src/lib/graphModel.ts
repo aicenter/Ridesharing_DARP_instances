@@ -1,3 +1,6 @@
+import type { Edge } from "@xyflow/react";
+import type { RoadNodeType } from "../components/RoadNode";
+
 /**
  * Default travel time (seconds) for new directed edges when linking two nodes.
  * Both directions created on connect use this initial value; each arc can be edited separately.
@@ -98,6 +101,32 @@ export type RoadEdgeData = {
 
 export function makeEdgeId(sourceNodeId: string, targetNodeId: string): string {
   return `e-${sourceNodeId}-${targetNodeId}`;
+}
+
+export function newRoadNode(
+  id: string,
+  logicalId: number,
+  position: { x: number; y: number },
+): RoadNodeType {
+  return {
+    id,
+    type: "road",
+    position,
+    data: { logicalId, requestBadges: [] },
+  };
+}
+
+/** Directed road edge with its travel time; the handles are assigned from the node positions. */
+export function newRoadEdge(source: string, target: string, travelTime: number): Edge<RoadEdgeData> {
+  return {
+    id: makeEdgeId(source, target),
+    type: "road",
+    source,
+    target,
+    data: { travelTime },
+    style: { stroke: "#6b7280", fill: "none", strokeWidth: 2 },
+    markerEnd: { type: "arrowclosed", width: 20, height: 20 },
+  };
 }
 
 export function hasDirectedEdge(

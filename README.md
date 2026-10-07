@@ -668,6 +668,73 @@ npm run dev
 Then open the URL printed in the console in your browser.
 
 
+### Headless instance builder
+Small instances can also be produced without the GUI, e.g., by an LLM or a test script. The builder takes an *instance spec*: a JSON file describing the road graph with travel times, the vehicles and the requests (schema: [`JSON/instance_spec.schema.json`](JSON/instance_spec.schema.json)). It validates the spec, derives the distance matrix from the edges, writes the instance files, and renders a picture of the instance with the graph editor running in a headless browser.
+
+```bash
+cd web/graph-editor
+npm install
+npx playwright install chromium   # once; on Linux also: npx playwright install-deps chromium
+npm run build-instance -- examples/small-darp.json --out ../../my-instance
+```
+
+The output directory then contains `config.yaml`, `requests.csv`, `vehicles.csv` (DARP only), `dm.csv`, `vehicle_data.json` (only with vehicle state: en-route vehicles or onboard requests) and `instance.png`. The command prints one JSON summary to stdout: on success the written files, element counts and warnings; on an invalid spec the `stage` (`schema` or `semantic`) and the list of `errors`. Exit codes: 0 success, 1 invalid spec (nothing written), 2 files written but no picture (the error is in `pngError`).
+
+Options:
+
+- `--no-png`: skip the picture; no browser needed.
+- `--zip`: additionally write `instance.zip` with all files (the GUI export format).
+- `--url <url>`: render in an already running editor (`npm run dev`) instead of starting one.
+- `--timeout <ms>` (default 60000), `--viewport <w>x<h>` (default 1600x1000).
+- environment `DARP_CHROMIUM_PATH`: use this Chromium/Chrome binary instead of the one installed by Playwright.
+
+Example spec ([`web/graph-editor/examples/small-darp.json`](web/graph-editor/examples/small-darp.json)):
+
+```json
+{
+  "nodes": [
+    { "id": 0, "x": 0, "y": 0 }, { "id": 1, "x": 1, "y": 0 },
+    { "id": 2, "x": 2, "y": 0 }, { "id": 3, "x": 1, "y": 1 }
+  ],
+  "edges": [
+    { "from": 0, "to": 1, "travel_time": 120, "bidirectional": true },
+    { "from": 1, "to": 2, "travel_time": 90, "bidirectional": true },
+    { "from": 1, "to": 3, "travel_time": 60, "bidirectional": true },
+    { "from": 3, "to": 2, "travel_time": 200 }
+  ],
+  "vehicles": [
+    { "position": 0, "capacity": 4 },
+    { "position": 1, "capacity": 2, "en_route_to": 2, "remaining_time": 30, "onboard": [{ "request": 1 }] }
+  ],
+  "requests": [
+    { "id": 0, "origin": 0, "destination": 2, "time": 0 },
+    { "id": 1, "origin": 1, "destination": 3, "time": 0 },
+    { "id": 2, "origin": 3, "destination": 0, "time": 300 }
+  ],
+  "settings": { "problem": "DARP", "max_delay_seconds": 300 }
+}
+```
+
+| field | meaning |
+|---|---|
+| `nodes[].id` | node index; the ids must be exactly `0..n-1` |
+| `nodes[].x`, `nodes[].y` | position in the picture in layout units (`settings.layout_unit_px` pixels, default 256; `y` grows downwards). Either all nodes have a position or none, in which case the graph is laid out automatically |
+| `edges[]` | directed road segments `from → to` with `travel_time` in seconds; `bidirectional: true` adds the opposite edge too. The distance matrix is the all-pairs shortest travel time |
+| `vehicles[]` | the array index is the vehicle index. `position` is the vehicle node, `capacity` its seats. An en-route vehicle gives `en_route_to` (target node of the edge it is on) and `remaining_time` (seconds left on that edge). `onboard` lists the requests it carries, optionally with their `pickup_time` (default: picked up as late as possible) |
+| `requests[]` | `id`, `origin`, `destination` (node indices, must differ) and the desired pickup `time` in seconds |
+| `settings` | `problem` (`DARP`, default, or `fleet-sizing`: no `vehicles.csv`, vehicles go to `vehicle_data.json`), `max_delay_seconds` (written as absolute `max_delay`), `current_time` (seconds; default derived from the onboard requests, written as the vehicles' `operation_start`), `layout_unit_px` |
+
+Checks beyond the schema report, e.g., unknown node references, duplicate edges, requests onboard two vehicles or exceeding the capacity, en-route vehicles without the edge, and onboard requests whose vehicle could not have reached its position. Unreachable requests and zero travel times are warnings.
+
+From Python, call the builder as a subprocess and parse its stdout:
+
+```python
+import json, subprocess
+summary = json.loads(subprocess.run(
+    ["npm", "run", "--silent", "build-instance", "--", "spec.json", "--out", "out"],
+    cwd="web/graph-editor", capture_output=True, text=True, check=False).stdout)
+```
+
 ## Solution Checker
 To check the validity of the solutions, we provide a solution checker implemented in Python in file `darpinstances.solution_checker.py`. It can be used in two ways:
 

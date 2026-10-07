@@ -1,0 +1,24 @@
+{
+  "nodes": [
+    { "id": 0, "x": 0, "y": 0 },
+    { "id": 1, "x": 1, "y": 0 },
+    { "id": 2, "x": 2, "y": 0 },
+    { "id": 3, "x": 1, "y": 1 }
+  ],
+  "edges": [
+    { "from": 0, "to": 1, "travel_time": 120, "bidirectional": true },
+    { "from": 1, "to": 2, "travel_time": 90, "bidirectional": true },
+    { "from": 1, "to": 3, "travel_time": 60, "bidirectional": true },
+    { "from": 3, "to": 2, "travel_time": 200 }
+  ],
+  "vehicles": [
+    { "position": 0, "capacity": 4 },
+    { "position": 1, "capacity": 2, "en_route_to": 2, "remaining_time": 30, "onboard": [{ "request": 1 }] }
+  ],
+  "requests": [
+    { "id": 0, "origin": 0, "destination": 2, "time": 0 },
+    { "id": 1, "origin": 1, "destination": 3, "time": 0 },
+    { "id": 2, "origin": 3, "destination": 0, "time": 300 }
+  ],
+  "settings": { "problem": "DARP", "max_delay_seconds": 300 }
+}

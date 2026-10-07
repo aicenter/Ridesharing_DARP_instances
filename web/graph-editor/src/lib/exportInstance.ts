@@ -43,13 +43,23 @@ function buildConfigYaml(
   ].join("\n");
 }
 
-/** `solutionItems` supplies the `current_plan` of each vehicle in `vehicle_data.json`. */
-export type ExportInstanceInput = ExportSolutionInput & {
-  /** Optional screenshot of the graph (cropped to nodes), e.g. `instance.png`. */
-  pngBlob?: Blob | null;
+/** Contents of the instance files by file name. */
+export type InstanceFiles = {
+  "config.yaml": string;
+  "requests.csv": string;
+  "dm.csv": string;
+  /** Absent for a fleet-sizing instance: its vehicles are not an input. */
+  "vehicles.csv"?: string;
+  /** Present if the editor holds vehicle state, see `hasVehicleState`. */
+  "vehicle_data.json"?: string;
 };
 
-export async function exportInstanceZip(input: ExportInstanceInput) {
+/**
+ * Build the instance files from the editor state; throws if the state is not consistent (see
+ * `resolveOnboardTiming`). The `solutionItems` supply the `current_plan` of each vehicle in
+ * `vehicle_data.json`.
+ */
+export function buildInstanceFiles(input: ExportSolutionInput): InstanceFiles {
   const idToIndex = buildNodeIndex(input.nodes);
 
   const nodeCount = idToIndex.size;
@@ -94,17 +104,34 @@ export async function exportInstanceZip(input: ExportInstanceInput) {
     );
   }
 
-  const zip = new JSZip();
-  zip.file("requests.csv", reqLines.join(""));
-  if (input.problemType === "DARP") {
-    zip.file("vehicles.csv", vehiclesLines.join(""));
-  }
-  zip.file("dm.csv", dmLines.join(""));
   const timing = resolveOnboardTiming(input, { idToIndex, dm });
-  zip.file("config.yaml", buildConfigYaml(input.problemType, input.maxDelaySeconds, timing.now));
+  const files: InstanceFiles = {
+    "config.yaml": buildConfigYaml(input.problemType, input.maxDelaySeconds, timing.now),
+    "requests.csv": reqLines.join(""),
+    "dm.csv": dmLines.join(""),
+  };
+  if (input.problemType === "DARP") {
+    files["vehicles.csv"] = vehiclesLines.join("");
+  }
   if (hasVehicleState(input)) {
     const vehicleData = buildVehicleDataExportObject(input, idToIndex, dm);
-    zip.file("vehicle_data.json", `${JSON.stringify(vehicleData, null, 2)}\n`);
+    files["vehicle_data.json"] = `${JSON.stringify(vehicleData, null, 2)}\n`;
+  }
+  return files;
+}
+
+export type ExportInstanceInput = ExportSolutionInput & {
+  /** Optional screenshot of the graph (cropped to nodes), e.g. `instance.png`. */
+  pngBlob?: Blob | null;
+};
+
+/** Download the instance files (and the screenshot, if any) as `instance.zip`. */
+export async function exportInstanceZip(input: ExportInstanceInput) {
+  const files = buildInstanceFiles(input);
+
+  const zip = new JSZip();
+  for (const [name, text] of Object.entries(files)) {
+    zip.file(name, text);
   }
   if (input.pngBlob) {
     zip.file("instance.png", input.pngBlob);

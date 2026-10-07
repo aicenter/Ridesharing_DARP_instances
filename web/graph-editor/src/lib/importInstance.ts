@@ -1,9 +1,9 @@
-import { MarkerType, type Edge } from "@xyflow/react";
+import type { Edge } from "@xyflow/react";
 import JSZip from "jszip";
 import type { RoadNodeType } from "../components/RoadNode";
 import { layoutImportGraph } from "./layoutImportGraph";
 import {
-  makeEdgeId,
+  newRoadEdge,
   type ProblemType,
   type RoadEdgeData,
   type RequestState,
@@ -189,18 +189,6 @@ function edgesMatchingDm(dm: number[][]): Array<{ from: number; to: number; w: n
   }
 
   throw new Error("Could not realize dm.csv within iteration budget.");
-}
-
-function roadEdge(source: string, target: string, travelTime: number): Edge<RoadEdgeData> {
-  return {
-    id: makeEdgeId(source, target),
-    type: "road",
-    source,
-    target,
-    data: { travelTime },
-    style: { stroke: "#6b7280", fill: "none", strokeWidth: 2 },
-    markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20 },
-  };
 }
 
 export type ImportInstanceResult = {
@@ -460,7 +448,7 @@ export function importInstanceFromBundle(bundle: ImportFileBundle): ImportInstan
   for (const e of inferredEdges) {
     const s = String(e.from);
     const t = String(e.to);
-    edges.push(roadEdge(s, t, e.w));
+    edges.push(newRoadEdge(s, t, e.w));
   }
 
   const vehicleDataText = bundleGet(bundle, ["vehicle_data.json"]);

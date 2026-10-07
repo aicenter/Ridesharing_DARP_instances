@@ -1,7 +1,6 @@
 import {
   Background,
   Controls,
-  MarkerType,
   MiniMap,
   ReactFlow,
   useEdgesState,
@@ -24,7 +23,7 @@ import { VehicleGlyph } from "./components/VehicleGlyph";
 import { RequestGlyph } from "./components/RequestGlyph";
 import { captureCroppedFlowPng } from "./lib/captureFlowPng";
 import { exportInstanceZip } from "./lib/exportInstance";
-import { importInstanceFiles } from "./lib/importInstance";
+import { importInstanceFiles, type ImportInstanceResult } from "./lib/importInstance";
 import {
   buildDistanceMatrix,
   buildNodeIndex,
@@ -38,7 +37,8 @@ import {
   formatVehicleLocation,
   handleIdsForDirectedEdge,
   hasDirectedEdge,
-  makeEdgeId,
+  newRoadEdge,
+  newRoadNode,
   vehicleNextLocation,
   type ProblemType,
   type RoadEdgeData,
@@ -53,34 +53,14 @@ import {
   type SolutionItems,
 } from "./lib/solutionModel";
 import { SolutionPanel } from "./components/SolutionPanel";
+import { useHeadlessBridge } from "./useHeadlessBridge";
 import "./App.css";
 
 const nodeTypes = { road: RoadNode };
 const edgeTypes = { road: RoadEdge };
 
-function newRoadNode(
-  id: string,
-  logicalId: number,
-  position: { x: number; y: number },
-): RoadNodeType {
-  return {
-    id,
-    type: "road",
-    position,
-    data: { logicalId, requestBadges: [] },
-  };
-}
-
-function roadEdge(source: string, target: string, travelTime: number): Edge<RoadEdgeData> {
-  return {
-    id: makeEdgeId(source, target),
-    type: "road",
-    source,
-    target,
-    data: { travelTime },
-    markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20 },
-  };
-}
+/** `?headless=1` exposes the editor to the headless instance builder, see `lib/headlessApi.ts`. */
+const HEADLESS = new URLSearchParams(window.location.search).get("headless") === "1";
 
 function AppShell() {
   const [nodes, setNodes, onNodesChange] = useNodesState<RoadNodeType>([]);
@@ -350,7 +330,7 @@ function AppShell() {
         const pushIfMissing = (s: string, t: string, sh: string, th: string) => {
           if (!hasDirectedEdge(next, s, t)) {
             next.push({
-              ...roadEdge(s, t, DEFAULT_TRAVEL_TIME_SECONDS),
+              ...newRoadEdge(s, t, DEFAULT_TRAVEL_TIME_SECONDS),
               sourceHandle: sh,
               targetHandle: th,
             });
@@ -584,6 +564,30 @@ function AppShell() {
     currentTimeSeconds,
   ]);
 
+  const getExportInput = useCallback(
+    () => ({
+      nodes,
+      edges,
+      vehicles,
+      requests,
+      // The vehicle data export takes the current plans from the solution.
+      solutionItems: solutionItems ?? buildInitialSolution(vehicles, requests),
+      problemType,
+      maxDelaySeconds,
+      currentTimeSeconds,
+    }),
+    [
+      nodes,
+      edges,
+      vehicles,
+      requests,
+      solutionItems,
+      problemType,
+      maxDelaySeconds,
+      currentTimeSeconds,
+    ],
+  );
+
   const handleExport = useCallback(async () => {
     const host = flowHostRef.current;
     const rf = rfInstanceRef.current;
@@ -596,35 +600,14 @@ function AppShell() {
       }
     }
     try {
-      await exportInstanceZip({
-        nodes,
-        edges,
-        vehicles,
-        requests,
-        // The vehicle data export takes the current plans from the solution.
-        solutionItems: solutionItems ?? buildInitialSolution(vehicles, requests),
-        problemType,
-        maxDelaySeconds,
-        currentTimeSeconds,
-        pngBlob,
-      });
+      await exportInstanceZip({ ...getExportInput(), pngBlob });
     } catch (e) {
       window.alert(e instanceof Error ? e.message : String(e));
     }
-  }, [
-    nodes,
-    edges,
-    vehicles,
-    requests,
-    solutionItems,
-    problemType,
-    maxDelaySeconds,
-    currentTimeSeconds,
-  ]);
+  }, [nodes, getExportInput]);
 
-  const applyImportedFiles = useCallback(
-    async (files: File[]) => {
-      const data = await importInstanceFiles(files);
+  const applyInstance = useCallback(
+    (data: ImportInstanceResult) => {
       setNodes(data.nodes);
       setEdges(data.edges);
       setVehicles(data.vehicles);
@@ -638,15 +621,25 @@ function AppShell() {
       setSelectedVehicle(null);
       setSelectedRequest(null);
       deselectEdges();
-      if (data.warnings.length > 0) {
-        window.alert(data.warnings.join("\n"));
-      }
       requestAnimationFrame(() => {
         rfInstanceRef.current?.fitView({ padding: 0.2, duration: 240 });
       });
     },
     [deselectEdges, setEdges, setNodes, setRequests],
   );
+
+  const applyImportedFiles = useCallback(
+    async (files: File[]) => {
+      const data = await importInstanceFiles(files);
+      applyInstance(data);
+      if (data.warnings.length > 0) {
+        window.alert(data.warnings.join("\n"));
+      }
+    },
+    [applyInstance],
+  );
+
+  useHeadlessBridge(HEADLESS, { applyInstance, getExportInput, flowHostRef, rfInstanceRef });
 
   const onImportFileChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
