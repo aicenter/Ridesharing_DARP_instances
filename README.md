@@ -123,7 +123,7 @@ The instance configuration file has the following structure (**bold** fields are
     - *`positions_set`*: id of the set of positions used to generate the demand.
     - *`time_set`*: id of the set of times used to generate the demand.
 - `dist_filepath`: path to a node-to-node distance matrix in metres (same format as `dm`), needed only for distance-based cost. The matrix contains integer metres, quantized once at the source that generated it (mirroring the integer seconds of the travel time matrix), so all consumers see identical distances.
-- `dm_filepath`: path to the distance matrix file. Set to `<area_dir>/dm.hd5` if not provided
+- `dm_filepath`: path to the distance matrix file, relative to the instance directory. If not provided, `<area_dir>/dm.h5` is used, falling back to `<area_dir>/dm.csv` if the HDF5 file does not exist
 - *`map`*:
     - *`SRID`*: id of the spatial reference system used for spherical projection.
     - *`SRID_plane`*: id of the spatial reference system used for planar projection.

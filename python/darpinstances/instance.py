@@ -167,7 +167,7 @@ def load_instance_config(config_file_path: Path, set_defaults: bool = True) -> d
     logging.info(f"Loading instance config from {config_file_path_abs}")
     with open(config_file_path_abs, 'r') as config_file:
         config = yaml.load(config_file, Loader=DarpinstancesTimestampLoader)
-        config['config_dir'] = config_file_path.parent
+        config['config_dir'] = config_file_path_abs.parent
 
         if set_defaults:
             defaults = {
@@ -179,6 +179,30 @@ def load_instance_config(config_file_path: Path, set_defaults: bool = True) -> d
 
             _set_config_defaults(config, defaults)
         return config
+
+
+def resolve_instance_dm_filepath(instance_config: Dict) -> Path:
+    """
+    Resolve the distance matrix path of an instance config. Relative paths are
+    resolved from the config directory (``config_dir``, set by
+    load_instance_config), or from the current working directory when the
+    config was built in code:
+
+    - ``dm_filepath``, when set,
+    - otherwise ``<area_dir>/dm.h5``, falling back to ``<area_dir>/dm.csv``
+      (the shared area matrix, the same rule as the C++ instance reader),
+    - otherwise the Road Graph Tool rules (``<export.dir>/dm.{csv,h5}``) for
+      configs produced by the generation pipeline.
+    """
+    if 'dm_filepath' not in instance_config and 'area_dir' in instance_config:
+        area_dir = Path(instance_config['area_dir'])
+        if not area_dir.is_absolute():
+            area_dir = Path(instance_config.get('config_dir', '.')) / area_dir
+        dm_filepath = area_dir / 'dm.h5'
+        if not dm_filepath.exists():
+            dm_filepath = area_dir / 'dm.csv'
+        return dm_filepath
+    return Path(resolve_dm_filepath(instance_config))
 
 
 def instance_problem_from_config(instance_config: Dict) -> str:
@@ -880,7 +904,7 @@ def load_instance(
             travel_time_provider = GridTravelTimeProvider(size, distance)
             logging.info("Using grid travel time provider (size=%s, distance=%s)", size, distance)
         else:
-            dm_filepath = resolve_dm_filepath(instance_config)
+            dm_filepath = resolve_instance_dm_filepath(instance_config)
             check_file_exists(dm_filepath)
             logging.info("Reading dm from: {}".format(os.path.realpath(dm_filepath)))
             travel_time_provider = MatrixTravelTimeProvider.read_from_file(dm_filepath)
