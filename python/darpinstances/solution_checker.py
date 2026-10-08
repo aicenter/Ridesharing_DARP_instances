@@ -50,9 +50,19 @@ class Failure(Enum):
 
 
 class SolutionChecker:
-    def __init__(self, max_error_count: int = 10):
+    """
+    Checks DARP solutions against the instance constraints.
+
+    allow_late_arrival: accept an action arrival later than the schedule recomputed from the
+    travel time matrix. Needed for solutions of online solvers, where a vehicle re-routed on
+    its way to an action drives a longer route than the direct leg between two actions. An
+    arrival earlier than the recomputed schedule is never accepted.
+    """
+
+    def __init__(self, max_error_count: int = 10, allow_late_arrival: bool = False):
         self.error_count = 0
         self.max_error_count = max_error_count
+        self.allow_late_arrival = allow_late_arrival
 
     def _increment_error(self):
         self.error_count += 1
@@ -212,6 +222,26 @@ class SolutionChecker:
             time += timedelta(seconds=int(travel_time))
             arrival_time = time
 
+            # arrival time check: the reported arrival must match the schedule recomputed
+            # from the travel time matrix, otherwise a falsified schedule could mask violations.
+            # With allow_late_arrival, a later reported arrival is accepted: an online solver
+            # can re-route a vehicle on its way to an action, so the real route is longer than
+            # the direct leg. The schedule then continues from the reported arrival and the
+            # extra time counts as driving. An earlier arrival is never accepted.
+            if action_data.arrival_time is not None and action_data.arrival_time != time:
+                if self.allow_late_arrival and action_data.arrival_time > time:
+                    late_seconds = (action_data.arrival_time - time).total_seconds()
+                    total_drive_seconds += late_seconds
+                    continuous_drive_seconds += late_seconds
+                    time = action_data.arrival_time
+                    arrival_time = time
+                else:
+                    fail(
+                        Failure.ARRIVAL_TIME_MISMATCH,
+                        f"[{plan_counter}. plan, {action_index + 1}. Action] Arrival time mismatch (expected {time}, "
+                        f"was {action_data.arrival_time}) when handling request {action_data.action.request.index}",
+                    )
+
             # per-vehicle continuous drive limit: checked on arrival, before any
             # pause at this stop can reset the counter
             if (
@@ -226,16 +256,6 @@ class SolutionChecker:
                         plan_counter, continuous_drive_seconds, vehicle.max_drive_time_without_pause, request.index
                     ),
                 )
-
-            # arrival time check: the reported arrival must exactly match the schedule recomputed
-            # from the travel time matrix, otherwise a falsified schedule could mask violations
-            if action_data.arrival_time is not None:
-                if action_data.arrival_time != time:
-                    fail(
-                        Failure.ARRIVAL_TIME_MISMATCH,
-                        f"[{plan_counter}. plan, {action_index + 1}. Action] Arrival time mismatch (expected {time}, "
-                        f"was {action_data.arrival_time}) when handling request {action_data.action.request.index}",
-                    )
 
             # max time check. Note that max_pickup_delay is already included in the action max
             # time, it is added to both max pickup time and max drop off time on instance load.
@@ -801,6 +821,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         ),
     )
     parser.add_argument(
+        '--allow-late-arrival',
+        action='store_true',
+        help=(
+            'Accept action arrivals later than the schedule recomputed from the travel time matrix '
+            '(for online solutions, where a re-routed vehicle drives a longer route than the direct leg). '
+            'Earlier arrivals are still rejected.'
+        ),
+    )
+    parser.add_argument(
         '--report', type=Path, required=False, help='Write the JSON verdict to this file in addition to stdout'
     )
     parser.add_argument(
@@ -834,7 +863,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     instance, solution, fleet_sizing = load_data(
         solution_file_path, instance_path, fleet_sizing=args.fleet_sizing
     )
-    solution_checker = SolutionChecker(max_error_count=args.max_errors)
+    solution_checker = SolutionChecker(max_error_count=args.max_errors, allow_late_arrival=args.allow_late_arrival)
 
     ok = False
     aborted = False

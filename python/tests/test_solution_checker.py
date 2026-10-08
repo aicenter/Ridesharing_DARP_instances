@@ -3,6 +3,7 @@ Tests for the solution checker fixes:
 - max-time check no longer adds max_pickup_delay a second time (it is already
   included in the action max times on instance load),
 - arrival times must exactly match the schedule recomputed from the matrix,
+  unless allow_late_arrival is set, which accepts later (never earlier) arrivals,
 - max_ride_time / max_route_duration are loaded from the instance config,
 - dropped_requests entries are read via the schema key "index" ("id" fallback),
 - action service time is read via the schema key "service_duration",
@@ -138,11 +139,11 @@ def write_solution(tmp_path: Path, solution: dict, name: str = "solution.json") 
     return path
 
 
-def check(solution_dict: dict, tmp_path: Path, config_name: str = "config.yaml"):
+def check(solution_dict: dict, tmp_path: Path, config_name: str = "config.yaml", **checker_kwargs):
     instance, time_loader = load_fixture(config_name)
     solution_path = write_solution(tmp_path, solution_dict)
     solution = darpinstances.solution.load_solution(solution_path, instance, time_loader)
-    checker = SolutionChecker()
+    checker = SolutionChecker(**checker_kwargs)
     return checker.check_solution(instance, solution)
 
 
@@ -173,6 +174,57 @@ def test_arrival_time_mismatch_fails(tmp_path):
     actions[1]["arrival_time"] = 1201
     actions[1]["departure_time"] = 1201
     ok, failures = check(solution, tmp_path)
+    assert not ok
+    assert failures[Failure.ARRIVAL_TIME_MISMATCH] == 1
+
+
+def late_arrival_solution() -> dict:
+    """R0 served alone; the vehicle arrives at the pickup 50 s later than the direct leg
+    (re-routed on the way) and the rest of the schedule continues from the real arrival."""
+    solution = single_request_solution()
+    actions = solution["plans"][0]["actions"]
+    actions[0]["arrival_time"] = 1050  # computed: 1000
+    actions[0]["departure_time"] = 1050
+    actions[1]["arrival_time"] = 1250
+    actions[1]["departure_time"] = 1250
+    solution["plans"][0]["arrival_time"] = 1250
+    return solution
+
+
+def test_late_arrival_rejected_by_default(tmp_path):
+    ok, failures = check(late_arrival_solution(), tmp_path)
+    assert not ok
+    assert failures[Failure.ARRIVAL_TIME_MISMATCH] == 1
+
+
+def test_late_arrival_accepted_with_flag(tmp_path):
+    ok, failures = check(late_arrival_solution(), tmp_path, allow_late_arrival=True)
+    assert ok
+    assert all(count == 0 for count in failures.values())
+
+
+def test_late_arrival_still_bounded_by_max_time(tmp_path):
+    # pickup at 1150 > max pickup time 1120: the flag does not hide delays
+    solution = late_arrival_solution()
+    actions = solution["plans"][0]["actions"]
+    actions[0]["arrival_time"] = 1150
+    actions[0]["departure_time"] = 1150
+    actions[1]["arrival_time"] = 1350
+    actions[1]["departure_time"] = 1350
+    solution["plans"][0]["arrival_time"] = 1350
+    ok, failures = check(solution, tmp_path, allow_late_arrival=True)
+    assert not ok
+    assert failures[Failure.ARRIVAL_TIME_MISMATCH] == 0
+    assert failures[Failure.MAX_TIME] == 1
+
+
+def test_early_arrival_rejected_with_flag(tmp_path):
+    solution = single_request_solution()
+    actions = solution["plans"][0]["actions"]
+    actions[1]["arrival_time"] = 1199  # computed: 1200
+    actions[1]["departure_time"] = 1199
+    solution["plans"][0]["arrival_time"] = 1199
+    ok, failures = check(solution, tmp_path, allow_late_arrival=True)
     assert not ok
     assert failures[Failure.ARRIVAL_TIME_MISMATCH] == 1
 
@@ -249,6 +301,17 @@ def test_cli_exit_code_and_verdict_on_valid_solution(tmp_path):
     assert returncode == 0
     assert verdict["ok"] is True
     assert verdict["plans_checked"] == 1
+
+
+def test_cli_allow_late_arrival_flag(tmp_path):
+    solution_path = write_solution(tmp_path, late_arrival_solution())
+    returncode, verdict = run_cli(solution_path, "config.yaml")
+    assert returncode == 1
+    assert verdict["ok"] is False
+
+    returncode, verdict = run_cli(solution_path, "config.yaml", "--allow-late-arrival")
+    assert returncode == 0
+    assert verdict["ok"] is True
 
 
 def test_cli_exit_code_verdict_and_report_on_invalid_solution(tmp_path):

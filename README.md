@@ -747,13 +747,14 @@ To check the validity of the solutions, we provide a solution checker implemente
 The script can be run from the command line with the following arguments:
 
 ```bash
-python darpinstances/solution_checker.py <solution_file> [-i, --instance <instance_path>]
+python darpinstances/solution_checker.py <solution_file> [-i, --instance <instance_path>] [--allow-late-arrival]
 ```
 
 where:
 
 - `<solution_file>` is the path to the JSON solution file to be checked and 
 - `<instance_path>` is the path to the YAML instance configuration file. If the instance path is not provided, the script will use the `instance` field from the experiment configuration file named `config.yaml` located in the same directory as the solution file.
+- `--allow-late-arrival` accepts action arrivals later than the schedule recomputed from the travel time matrix. By default, the reported arrival time of each action has to equal the departure from the previous action plus the travel time between the two actions. Solutions of online solvers cannot always satisfy this: a vehicle re-routed on its way to an action continues from the node it was heading to, so its real route is longer than the direct leg. With this flag, a later arrival is accepted, the schedule continues from the reported arrival, and the extra time counts as driving for the driver limits. Arrivals earlier than the recomputed schedule are always rejected. The same option is available as the `allow_late_arrival` argument of the `SolutionChecker` constructor.
 
 
 ## Citation
