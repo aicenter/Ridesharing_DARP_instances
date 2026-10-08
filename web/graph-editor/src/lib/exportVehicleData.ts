@@ -39,6 +39,8 @@ export function buildVehicleDataExportObject(
     vehicle_data_list: vehiclePlans.map((p) => ({
       vehicle_index: p.fleetIndex,
       actual_plan_departure_time: p.plan.departure_time,
+      // the node the vehicle last departed from: the source of its edge, or the node it stands at
+      from_location_index: p.initNodeIndex,
       onboard_request_indices: p.onboardRequests.map((r) => r.id),
       ...(p.nextLocation
         ? {

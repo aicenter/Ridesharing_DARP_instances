@@ -39,6 +39,7 @@ describe("buildInstanceFiles", () => {
     };
     expect(vehicleData.vehicle_data_list[1]).toMatchObject({
       vehicle_index: 1,
+      from_location_index: 1,
       onboard_request_indices: [1],
       next_location_index: 2,
       time_at_next_location: 30,

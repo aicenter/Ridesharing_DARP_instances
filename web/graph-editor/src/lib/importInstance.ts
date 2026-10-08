@@ -326,6 +326,7 @@ type VehicleDataJson = {
   vehicle_data_list: Array<{
     vehicle_index: number;
     onboard_request_indices?: number[];
+    from_location_index?: number;
     next_location_index?: number | null;
     time_at_next_location?: number;
     current_plan: {
@@ -372,15 +373,15 @@ function applyVehicleData(
 
     if (vd.next_location_index === undefined || vd.next_location_index === null) continue;
     if (vehicle.location.kind !== "node") continue;
+    // the edge the vehicle is on starts at the node it last departed from (its listed position when absent)
+    const sourceNodeId =
+      vd.from_location_index === undefined ? vehicle.location.nodeId : String(vd.from_location_index);
     const edge = edges.find(
-      (e) =>
-        vehicle.location.kind === "node" &&
-        e.source === vehicle.location.nodeId &&
-        e.target === String(vd.next_location_index),
+      (e) => e.source === sourceNodeId && e.target === String(vd.next_location_index),
     );
     if (!edge) {
       warnings.push(
-        `vehicle_data.json: no edge from node ${vehicle.location.nodeId} to next location ` +
+        `vehicle_data.json: no edge from node ${sourceNodeId} to next location ` +
           `${vd.next_location_index} of vehicle ${vehicle.id} — vehicle left on its node.`,
       );
       continue;

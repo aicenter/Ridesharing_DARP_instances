@@ -416,10 +416,11 @@ Vehicle data object describes the state of a single vehicle. It has the followin
 
 - **`actual_plan_departure_time`**: the time the vehicle departed from its initial position.
 - **`current_plan`**: the current plan of the vehicle.
-- `next_location_index`: the index of the next location in the current plan.
+- **`from_location_index`**: the index of the node the vehicle last departed from (its last executed action, or the next location it was committed to when the current plan was built), or the node it stands at. The vehicle leaves it at the arrival time of the first action of the current plan minus the travel time to that action.
+- `next_location_index`: the index of the next node on the path of the vehicle; it lies on the shortest path from the `from_location_index` node to the first action of the current plan.
 - `onboard_request_indices`: list of indices of the requests currently onboard the vehicle
 - **`vehicle_index`**: index of the vehicle in the fleet
-- `time_at_next_location`: the time to reach the next location in the current plan.
+- `time_at_next_location`: the remaining time to reach the next location, relative to the current time.
 
 ### Vehicles Data List
 Vehicles data list object describes the state of the whole fleet. It has the following fields (required fields are in bold):
