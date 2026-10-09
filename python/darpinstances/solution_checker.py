@@ -227,12 +227,14 @@ class SolutionChecker:
             # With allow_late_arrival, a later reported arrival is accepted: an online solver
             # can re-route a vehicle on its way to an action, so the real route is longer than
             # the direct leg. The schedule then continues from the reported arrival and the
-            # extra time counts as driving. An earlier arrival is never accepted.
+            # extra time counts as driving, for the driver limits and for the travel time
+            # cost alike. An earlier arrival is never accepted.
             if action_data.arrival_time is not None and action_data.arrival_time != time:
                 if self.allow_late_arrival and action_data.arrival_time > time:
                     late_seconds = (action_data.arrival_time - time).total_seconds()
                     total_drive_seconds += late_seconds
                     continuous_drive_seconds += late_seconds
+                    travel_time_total += late_seconds
                     time = action_data.arrival_time
                     arrival_time = time
                 else:

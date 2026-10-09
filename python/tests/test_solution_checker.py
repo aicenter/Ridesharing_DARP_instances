@@ -180,7 +180,8 @@ def test_arrival_time_mismatch_fails(tmp_path):
 
 def late_arrival_solution() -> dict:
     """R0 served alone; the vehicle arrives at the pickup 50 s later than the direct leg
-    (re-routed on the way) and the rest of the schedule continues from the real arrival."""
+    (re-routed on the way) and the rest of the schedule continues from the real arrival.
+    The extra 50 s count as driving, so the cost is 50 above the direct-leg cost."""
     solution = single_request_solution()
     actions = solution["plans"][0]["actions"]
     actions[0]["arrival_time"] = 1050  # computed: 1000
@@ -188,6 +189,8 @@ def late_arrival_solution() -> dict:
     actions[1]["arrival_time"] = 1250
     actions[1]["departure_time"] = 1250
     solution["plans"][0]["arrival_time"] = 1250
+    solution["plans"][0]["cost"] += 50
+    solution["cost"] += 50
     return solution
 
 
