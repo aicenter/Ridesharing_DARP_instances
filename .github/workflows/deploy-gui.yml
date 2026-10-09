@@ -1,0 +1,43 @@
+# Builds the graph editor and uploads it over FTP to the hosting (fido.ninja/darp-editor/).
+# Secrets: FTP_SERVER, FTP_USERNAME, FTP_PASSWORD. Variables: FTP_PROTOCOL (ftp or ftps),
+# FTP_SERVER_DIR (the target folder relative to the FTP root, e.g. www/darp-editor/).
+name: Deploy graph editor
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/graph-editor/**"
+      - "JSON/instance_spec.schema.json"
+      - ".github/workflows/deploy-gui.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-gui
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/graph-editor
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/graph-editor/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Upload dist/ over FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ${{ vars.FTP_PROTOCOL || 'ftps' }}
+          local-dir: web/graph-editor/dist/
+          server-dir: ${{ vars.FTP_SERVER_DIR }}

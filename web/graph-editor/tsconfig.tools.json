@@ -24,6 +24,7 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": [
-    "tools"
+    "tools",
+    "server"
   ]
 }

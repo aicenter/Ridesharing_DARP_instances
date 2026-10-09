@@ -658,7 +658,7 @@ Configurable parameters:
 ## Graph Editor
 For creating small instances by hand (e.g., for testing or illustration), we provide a simple web-based GUI tool located in [`web/graph-editor`](web/graph-editor). In the editor, you can draw a road graph with travel times, place vehicles and requests on its nodes, and export the result as an instance in the format described in the [Instances](#instances) section (`config.yaml`, `requests.csv`, `vehicles.csv`, and `dm.csv`). Existing instances of a reasonable size can be imported as well. The editor also supports vehicle states: requests can be placed onboard a vehicle, and vehicles can be positioned along an edge. If used, the vehicle states are exported to an additional `vehicle_data.json` file in the format described in the [Dynamic (Online) DARP Instances](#dynamic-online-darp-instances) section. Additionally, a solution for the instance can be composed manually and exported to a JSON [solution file](#solution-file).
 
-The tool is still under development, and so far, it is not hosted anywhere. To use it, run it locally (requires [Node.js](https://nodejs.org/)):
+The editor is hosted at <https://fido.ninja/darp-editor/>. It is still under development; to run it locally instead (requires [Node.js](https://nodejs.org/)):
 
 ```bash
 cd web/graph-editor
@@ -686,6 +686,7 @@ Options:
 - `--no-png`: skip the picture; no browser needed.
 - `--zip`: additionally write `instance.zip` with all files (the GUI export format).
 - `--url <url>`: render in an already running editor (`npm run dev`) instead of starting one.
+- `--service <url>`: build through the [hosted builder service](#hosted-builder-service) instead of locally; no browser needed.
 - `--timeout <ms>` (default 60000), `--viewport <w>x<h>` (default 1600x1000).
 - environment `DARP_CHROMIUM_PATH`: use this Chromium/Chrome binary instead of the one installed by Playwright.
 
@@ -735,6 +736,34 @@ summary = json.loads(subprocess.run(
     ["npm", "run", "--silent", "build-instance", "--", "spec.json", "--out", "out"],
     cwd="web/graph-editor", capture_output=True, text=True, check=False).stdout)
 ```
+
+#### Hosted builder service
+The builder also runs as a public, best-effort HTTP service, so an LLM tool or a script can create instances without installing anything:
+
+- `POST <service-url>/instances` with the spec as JSON body (`Content-Type: application/json`) returns `{ ok, files, png, counts, warnings }`: `files` maps the file names to their contents, `png` is the base64-encoded picture (`null` with `?png=0`, or on a render failure, which is then described in `pngError` and makes `ok` false). An invalid spec gives HTTP 400 with the same `{ ok: false, stage, errors }` object the CLI prints.
+- With `Accept: application/zip`, the response is `instance.zip` with all files and the picture (the GUI export format).
+- `GET <service-url>/schema` returns the spec schema; `GET <service-url>/` is a copy of the graph editor.
+- Limits: 1 MiB body, at most 200 nodes, 2000 directed edges, 100 vehicles and 500 requests per spec. The service scales to zero when unused, so the first request after a pause takes a few seconds. There is no authentication; please do not script bulk generation against it.
+
+```bash
+curl -s -X POST "<service-url>/instances" -H "content-type: application/json" --data @spec.json
+curl -s -X POST "<service-url>/instances" -H "content-type: application/json" -H "accept: application/zip" --data @spec.json -o instance.zip
+```
+
+```python
+import base64, json, pathlib, urllib.request
+req = urllib.request.Request("<service-url>/instances", data=pathlib.Path("spec.json").read_bytes(),
+                             headers={"Content-Type": "application/json"})
+with urllib.request.urlopen(req) as response:
+    result = json.load(response)
+out = pathlib.Path("out"); out.mkdir(exist_ok=True)
+for name, text in result["files"].items():
+    (out / name).write_text(text)
+if result["png"]:
+    (out / "instance.png").write_bytes(base64.b64decode(result["png"]))
+```
+
+The service lives in [`web/graph-editor/server`](web/graph-editor/server); [`web/graph-editor/DEPLOY.md`](web/graph-editor/DEPLOY.md) describes how it and the editor are deployed.
 
 ## Solution Checker
 To check the validity of the solutions, we provide a solution checker implemented in Python in file `darpinstances.solution_checker.py`. It can be used in two ways:

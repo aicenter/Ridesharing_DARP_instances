@@ -20,7 +20,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['tools/**/*.ts'],
+    files: ['tools/**/*.ts', 'server/**/*.ts'],
     languageOptions: {
       globals: { ...globals.browser, ...globals.node },
     },

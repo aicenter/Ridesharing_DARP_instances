@@ -1,0 +1,15 @@
+# Files gcloud run deploy --source uploads to Cloud Build (same as .dockerignore).
+.git
+.idea
+.vscode
+.codex
+.pytest_cache
+figures
+QGIS
+SQL
+python
+presentation-final.pptx
+*.pptx
+**/node_modules
+**/dist
+**/__pycache__

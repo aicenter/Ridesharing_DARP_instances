@@ -3,32 +3,30 @@
  * instance files and a picture of the instance, using the graph editor code.
  *
  *   npm run build-instance -- <spec.json> --out <dir> [--no-png] [--zip] [--url <editor url>]
+ *                                                     [--service <builder service url>]
  *                                                     [--timeout <ms>] [--viewport <w>x<h>]
  *
- * Prints one JSON summary to stdout. Exit codes: 0 ok, 1 invalid spec or files not written,
- * 2 files written but no picture.
+ * With `--service`, the spec is built by the hosted builder service instead of locally (no
+ * browser needed). Prints one JSON summary to stdout. Exit codes: 0 ok, 1 invalid spec or files
+ * not written, 2 files written but no picture.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import Ajv2020, { type ErrorObject } from "ajv/dist/2020";
 import JSZip from "jszip";
-import { buildInstanceFiles, type InstanceFiles } from "../src/lib/exportInstance";
-import { expectedDomCounts } from "../src/lib/headlessApi";
-import type { ImportInstanceResult } from "../src/lib/importInstance";
+import type { InstanceFiles } from "../src/lib/exportInstance";
+import { DEFAULT_VIEWPORT, EditorRenderer, type Viewport } from "./editorRenderer";
 import {
-  buildEditorStateFromSpec,
-  InstanceSpecError,
-  toExportInput,
-  type InstanceSpec,
-} from "../src/lib/instanceSpec";
+  buildFromSpec,
+  loadSpecValidator,
+  type BuildFailure,
+  type ElementCounts,
+} from "./instancePipeline";
 
 const EDITOR_ROOT = fileURLToPath(new URL("..", import.meta.url));
-const SCHEMA_PATH = fileURLToPath(new URL("../../../JSON/instance_spec.schema.json", import.meta.url));
 const PNG_NAME = "instance.png";
 const ZIP_NAME = "instance.zip";
-const READY_TIMEOUT_MS = 15_000;
 
 type Options = {
   specPath: string;
@@ -36,8 +34,9 @@ type Options = {
   png: boolean;
   zip: boolean;
   url: string | null;
+  service: string | null;
   timeoutMs: number;
-  viewport: { width: number; height: number };
+  viewport: Viewport;
 };
 
 class UsageError extends Error {}
@@ -51,12 +50,14 @@ function parseOptions(argv: string[]): Options {
       "no-png": { type: "boolean", default: false },
       zip: { type: "boolean", default: false },
       url: { type: "string" },
+      service: { type: "string" },
       timeout: { type: "string", default: "60000" },
-      viewport: { type: "string", default: "1600x1000" },
+      viewport: { type: "string", default: `${DEFAULT_VIEWPORT.width}x${DEFAULT_VIEWPORT.height}` },
     },
   });
   if (positionals.length !== 1) throw new UsageError("Expected exactly one spec file.");
   if (!values.out) throw new UsageError("Missing --out <dir>.");
+  if (values.service && values.url) throw new UsageError("--service and --url exclude each other.");
   const timeoutMs = Number(values.timeout);
   if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
     throw new UsageError(`Invalid --timeout: ${values.timeout}`);
@@ -69,41 +70,45 @@ function parseOptions(argv: string[]): Options {
     png: !values["no-png"],
     zip: values.zip,
     url: values.url ?? null,
+    service: values.service ?? null,
     timeoutMs,
     viewport: { width: Number(vp[1]), height: Number(vp[2]) },
   };
 }
 
-function formatSchemaError(e: ErrorObject): string {
-  const where = e.instancePath === "" ? "/" : e.instancePath;
-  const extra =
-    e.keyword === "additionalProperties"
-      ? ` (${String((e.params as { additionalProperty?: string }).additionalProperty)})`
-      : "";
-  return `${where}: ${e.message ?? e.keyword}${extra}`;
-}
-
-async function validateSpec(raw: unknown): Promise<string[]> {
-  const schema = JSON.parse(await readFile(SCHEMA_PATH, "utf8")) as object;
-  const ajv = new Ajv2020({ allErrors: true, strict: true });
-  const validate = ajv.compile(schema);
-  if (validate(raw)) return [];
-  return (validate.errors ?? []).map(formatSchemaError);
-}
-
-type Failure = { ok: false; stage: "input" | "schema" | "semantic" | "files"; errors: string[] };
-
-function fail(stage: Failure["stage"], errors: string[]): never {
-  const failure: Failure = { ok: false, stage, errors };
+function fail(failure: BuildFailure): never {
   console.log(JSON.stringify(failure, null, 2));
   process.exit(1);
 }
 
-/** Render the state in the editor and return the PNG bytes. */
-async function renderPng(state: ImportInstanceResult, opts: Options): Promise<Buffer> {
-  const { createServer } = await import("vite");
-  const { chromium } = await import("playwright");
+/** What the builder produces before anything is written. */
+type Built = {
+  files: InstanceFiles;
+  png: Buffer | null;
+  pngError: string | null;
+  counts: ElementCounts;
+  warnings: string[];
+};
 
+/** Builds the spec locally: pipeline in this process, picture in a headless browser. */
+async function buildLocally(raw: unknown, opts: Options): Promise<Built> {
+  const built = buildFromSpec(raw, await loadSpecValidator());
+  if (!built.ok) fail(built);
+
+  let png: Buffer | null = null;
+  let pngError: string | null = null;
+  if (opts.png) {
+    try {
+      png = await renderPng(built.state, opts);
+    } catch (e) {
+      pngError = e instanceof Error ? e.message : String(e);
+    }
+  }
+  return { files: built.files, png, pngError, counts: built.counts, warnings: built.warnings };
+}
+
+async function renderPng(state: Parameters<EditorRenderer["render"]>[1], opts: Options): Promise<Buffer> {
+  const { createServer } = await import("vite");
   const server = opts.url
     ? null
     : await createServer({
@@ -112,45 +117,59 @@ async function renderPng(state: ImportInstanceResult, opts: Options): Promise<Bu
         server: { host: "127.0.0.1", hmr: false, open: false },
         logLevel: "silent",
       });
-  let browser: Awaited<ReturnType<typeof chromium.launch>> | null = null;
+  let renderer: EditorRenderer | null = null;
   try {
-    let baseUrl = opts.url;
+    let editorUrl = opts.url;
     if (server) {
       await server.listen();
-      baseUrl = server.resolvedUrls?.local[0] ?? null;
-      if (!baseUrl) throw new Error("The Vite dev server did not report a URL.");
+      editorUrl = server.resolvedUrls?.local[0] ?? null;
+      if (!editorUrl) throw new Error("The Vite dev server did not report a URL.");
     }
-    const pageUrl = new URL(baseUrl!);
-    pageUrl.searchParams.set("headless", "1");
-
-    browser = await chromium.launch({
-      executablePath: process.env.DARP_CHROMIUM_PATH || undefined,
-    });
-    const context = await browser.newContext({
+    renderer = await EditorRenderer.launch({
+      chromiumPath: process.env.DARP_CHROMIUM_PATH,
       viewport: opts.viewport,
-      deviceScaleFactor: 2,
-      colorScheme: "light",
     });
-    const page = await context.newPage();
-    page.on("pageerror", (err) => console.error(`[page] ${err.message}`));
-    await page.goto(pageUrl.toString(), { waitUntil: "load", timeout: opts.timeoutMs });
-    await page.waitForFunction(() => window.__darpEditor !== undefined, undefined, {
-      timeout: opts.timeoutMs,
-    });
-
-    await page.evaluate((s) => window.__darpEditor!.loadState(s), state);
-    await page.evaluate(
-      ([expected, timeoutMs]) => window.__darpEditor!.whenReady(expected, timeoutMs),
-      [expectedDomCounts(state), READY_TIMEOUT_MS] as const,
-    );
-    const dataUrl = await page.evaluate(() => window.__darpEditor!.capturePng());
-    if (!dataUrl) throw new Error("The editor returned no picture.");
-    const comma = dataUrl.indexOf(",");
-    return Buffer.from(dataUrl.slice(comma + 1), "base64");
+    return await renderer.render(editorUrl!, state, opts.timeoutMs);
   } finally {
-    await browser?.close();
+    await renderer?.close();
     await server?.close();
   }
+}
+
+/** Response of the builder service's `POST /instances`. */
+type ServiceResponse =
+  | BuildFailure
+  | {
+      ok: boolean;
+      files: InstanceFiles;
+      png: string | null;
+      pngError?: string;
+      counts: ElementCounts;
+      warnings: string[];
+    };
+
+/** Builds the spec through the hosted builder service. */
+async function buildRemotely(raw: unknown, opts: Options): Promise<Built> {
+  const url = new URL("instances", opts.service!.endsWith("/") ? opts.service! : `${opts.service}/`);
+  if (!opts.png) url.searchParams.set("png", "0");
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(raw),
+    signal: AbortSignal.timeout(opts.timeoutMs),
+  });
+  const body = (await response.json()) as ServiceResponse;
+  if (!("files" in body)) {
+    if (response.ok) throw new Error(`Unexpected response from ${url}: ${JSON.stringify(body)}`);
+    fail(body);
+  }
+  return {
+    files: body.files,
+    png: body.png === null ? null : Buffer.from(body.png, "base64"),
+    pngError: body.pngError ?? null,
+    counts: body.counts,
+    warnings: body.warnings,
+  };
 }
 
 async function writeZip(outDir: string, files: InstanceFiles, png: Buffer | null): Promise<string> {
@@ -169,66 +188,40 @@ async function main(argv: string[]): Promise<number> {
   try {
     raw = JSON.parse(await readFile(opts.specPath, "utf8"));
   } catch (e) {
-    fail("input", [`${opts.specPath}: ${e instanceof Error ? e.message : String(e)}`]);
+    fail({
+      ok: false,
+      stage: "input",
+      errors: [`${opts.specPath}: ${e instanceof Error ? e.message : String(e)}`],
+    });
   }
 
-  const schemaErrors = await validateSpec(raw);
-  if (schemaErrors.length > 0) fail("schema", schemaErrors);
-
-  let state: ImportInstanceResult;
-  try {
-    state = buildEditorStateFromSpec(raw as InstanceSpec);
-  } catch (e) {
-    if (e instanceof InstanceSpecError) fail("semantic", e.problems);
-    throw e;
-  }
-
-  let files: InstanceFiles;
-  try {
-    files = buildInstanceFiles(toExportInput(state));
-  } catch (e) {
-    fail("files", [e instanceof Error ? e.message : String(e)]);
-  }
+  const built = opts.service ? await buildRemotely(raw, opts) : await buildLocally(raw, opts);
 
   await mkdir(opts.outDir, { recursive: true });
   const written: Record<string, string> = {};
-  for (const [name, text] of Object.entries(files)) {
+  for (const [name, text] of Object.entries(built.files)) {
     const filePath = path.join(opts.outDir, name);
     await writeFile(filePath, text);
     written[name] = filePath;
   }
-
-  let png: Buffer | null = null;
-  let pngError: string | null = null;
-  if (opts.png) {
-    try {
-      png = await renderPng(state, opts);
-      const pngPath = path.join(opts.outDir, PNG_NAME);
-      await writeFile(pngPath, png);
-      written[PNG_NAME] = pngPath;
-    } catch (e) {
-      pngError = e instanceof Error ? e.message : String(e);
-    }
+  if (built.png) {
+    const pngPath = path.join(opts.outDir, PNG_NAME);
+    await writeFile(pngPath, built.png);
+    written[PNG_NAME] = pngPath;
   }
-
-  if (opts.zip) written[ZIP_NAME] = await writeZip(opts.outDir, files, png);
+  if (opts.zip) written[ZIP_NAME] = await writeZip(opts.outDir, built.files, built.png);
 
   const summary = {
-    ok: pngError === null,
+    ok: built.pngError === null,
     outDir: opts.outDir,
     files: written,
     png: written[PNG_NAME] ?? null,
-    ...(pngError !== null ? { pngError } : {}),
-    counts: {
-      nodes: state.nodes.length,
-      edges: state.edges.length,
-      vehicles: state.vehicles.length,
-      requests: state.requests.length,
-    },
-    warnings: state.warnings,
+    ...(built.pngError !== null ? { pngError: built.pngError } : {}),
+    counts: built.counts,
+    warnings: built.warnings,
   };
   console.log(JSON.stringify(summary, null, 2));
-  return pngError === null ? 0 : 2;
+  return built.pngError === null ? 0 : 2;
 }
 
 main(process.argv.slice(2)).then(
@@ -237,7 +230,7 @@ main(process.argv.slice(2)).then(
     if (e instanceof UsageError) {
       console.error(`build-instance: ${e.message}`);
       console.error(
-        "usage: build-instance <spec.json> --out <dir> [--no-png] [--zip] [--url <editor url>] [--timeout <ms>] [--viewport <w>x<h>]",
+        "usage: build-instance <spec.json> --out <dir> [--no-png] [--zip] [--url <editor url>] [--service <url>] [--timeout <ms>] [--viewport <w>x<h>]",
       );
     } else {
       console.error(e instanceof Error ? (e.stack ?? e.message) : String(e));

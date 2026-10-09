@@ -76,3 +76,53 @@ describe("build-instance (no browser)", () => {
     });
   });
 });
+
+describe.skipIf(!process.env.DARP_E2E)("builder service (end to end)", () => {
+  it("renders through the service, also via the CLI --service flag", { timeout: 180_000 }, async () => {
+    const distIndex = path.join(EDITOR_ROOT, "dist", "index.html");
+    await stat(distIndex); // the service serves the built editor: run `npm run build` first
+    const { createApp } = await import("../server/app");
+    const { EditorRenderer } = await import("./editorRenderer");
+    const { loadSpecValidator } = await import("./instancePipeline");
+
+    const renderer = await EditorRenderer.launch({ chromiumPath: process.env.DARP_CHROMIUM_PATH });
+    const server = createApp({
+      validate: await loadSpecValidator(),
+      distDir: path.join(EDITOR_ROOT, "dist"),
+      renderer,
+    });
+    try {
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+
+      const res = await fetch(`${base}/instances`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: await readFile(path.join(EDITOR_ROOT, "examples", "small-darp.json")),
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { ok: boolean; png: string | null };
+      expect(body.ok).toBe(true);
+      const png = Buffer.from(body.png!, "base64");
+      expect(png.subarray(0, 4)).toEqual(PNG_MAGIC);
+      expect(png.length).toBeGreaterThan(5_000);
+
+      const outDir = await mkdtemp(path.join(tmpdir(), "darp-instance-"));
+      const result = await runBuilder([
+        path.join(EDITOR_ROOT, "examples", "small-darp.json"),
+        "--out",
+        outDir,
+        "--service",
+        base,
+      ]);
+      expect(result.stderr).toBe("");
+      expect(result.code).toBe(0);
+      const summary = JSON.parse(result.stdout) as { ok: boolean; png: string | null };
+      expect(summary.ok).toBe(true);
+      expect((await readFile(summary.png!)).subarray(0, 4)).toEqual(PNG_MAGIC);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await renderer.close();
+    }
+  });
+});

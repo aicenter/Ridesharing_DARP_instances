@@ -1,0 +1,15 @@
+# Build context of the Dockerfile: only the graph editor and the spec schema are needed.
+.git
+.idea
+.vscode
+.codex
+.pytest_cache
+figures
+QGIS
+SQL
+python
+presentation-final.pptx
+*.pptx
+**/node_modules
+**/dist
+**/__pycache__
