@@ -5,6 +5,7 @@ import os
 import os.path
 import sys
 from datetime import timedelta
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 from typing import Tuple, Set, Optional, Dict, List
@@ -15,6 +16,13 @@ import darpinstances.experiments
 import darpinstances.inout
 import darpinstances.instance
 from darpinstances.cordeau_benchmark import load as load_cordeau
+from darpinstances.cost_model import (
+    COMPONENTS_BY_KEY,
+    COST_TOLERANCE,
+    MEASURED_COMPONENT_KEYS,
+    CostWeights,
+    sum_contributions,
+)
 from darpinstances.inout import check_file_exists
 from darpinstances.instance import DARPInstance, TravelTimeProvider
 from darpinstances.instance_objects import SLOT_TYPES, Request, Action, ActionType
@@ -47,6 +55,17 @@ class Failure(Enum):
     SOLUTION_COST = auto()
     REQUEST_SERVED_TWICE = auto()
     REQUEST_NOT_SERVED = auto()
+    PLAN_COST_COMPONENT = auto()
+    SOLUTION_COST_COMPONENT = auto()
+
+
+@dataclass
+class PlanCost:
+    """Cost of one plan computed by the checker, with its per-component breakdown."""
+
+    total: float = 0.0
+    raw: Dict[str, float] = field(default_factory=dict)  # component key -> measured quantity
+    weighted: Dict[str, float] = field(default_factory=dict)  # component key -> weighted contribution
 
 
 class SolutionChecker:
@@ -63,6 +82,8 @@ class SolutionChecker:
         self.error_count = 0
         self.max_error_count = max_error_count
         self.allow_late_arrival = allow_late_arrival
+        # computed cost of the last checked solution with its breakdown (set by check_solution)
+        self.last_cost: Optional[PlanCost] = None
 
     def _increment_error(self):
         self.error_count += 1
@@ -77,7 +98,7 @@ class SolutionChecker:
         used_vehicles: set,
         failures: Dict[Failure, int],
         fleet_sizing: bool = False,
-    ) -> Tuple[int, bool, Set[Request]]:
+    ) -> Tuple[PlanCost, bool, Set[Request]]:
         plan_ok = True
 
         def fail(failure: Failure, message: str):
@@ -124,12 +145,10 @@ class SolutionChecker:
         total_drive_seconds = 0.0
         continuous_drive_seconds = 0.0
 
-        # components of the generalized weighted cost model
-        travel_time_total = 0.0
-        distance_total = 0.0
-        ride_time_total = 0.0
-        passenger_delay_total = 0.0
-        earliness_total = 0.0
+        # raw quantities of the measured components of the generalized weighted
+        # cost model (see darpinstances.cost_model); the constants are added by
+        # CostWeights.contributions
+        raw: Dict[str, float] = {key: 0.0 for key in MEASURED_COMPONENT_KEYS}
 
         if not fleet_sizing and not config.virtual_vehicles:
             if vehicle_index in used_vehicles:
@@ -214,7 +233,7 @@ class SolutionChecker:
             travel_time = travel_time / travel_time_divider
 
             if distance_provider is not None and leg_from_node is not None:
-                distance_total += distance_provider.get_travel_time(leg_from_node, action_data.action.node)
+                raw["distance"] += distance_provider.get_travel_time(leg_from_node, action_data.action.node)
 
             total_drive_seconds += travel_time
             continuous_drive_seconds += travel_time
@@ -234,7 +253,7 @@ class SolutionChecker:
                     late_seconds = (action_data.arrival_time - time).total_seconds()
                     total_drive_seconds += late_seconds
                     continuous_drive_seconds += late_seconds
-                    travel_time_total += late_seconds
+                    raw["travel_time"] += late_seconds
                     time = action_data.arrival_time
                     arrival_time = time
                 else:
@@ -338,7 +357,7 @@ class SolutionChecker:
                         ),
                     )
 
-            travel_time_total += travel_time
+            raw["travel_time"] += travel_time
 
             # passenger delay cost component: drop-off delay versus the ideal
             # direct ride starting at the desired pickup time. Under per-request
@@ -351,9 +370,9 @@ class SolutionChecker:
                 )
                 drop_off_delay_seconds = (time - min_drop_off_time).total_seconds()
                 if per_request_accounting:
-                    passenger_delay_total += drop_off_delay_seconds - request.pickup_action.service_time
+                    raw["passenger_delay"] += drop_off_delay_seconds - request.pickup_action.service_time
                 else:
-                    passenger_delay_total += drop_off_delay_seconds * passengers.total_travellers
+                    raw["passenger_delay"] += drop_off_delay_seconds * passengers.total_travellers
 
             # vehicle id check
             required_vehicle_id = action_data.action.request.constraints.required_vehicle_id
@@ -439,12 +458,12 @@ class SolutionChecker:
                                     plan_counter, request.index, earliness, required_arrival, max_earliness
                                 ),
                             )
-                        earliness_total += earliness
+                        raw["earliness"] += earliness
 
                 if per_request_accounting:
-                    ride_time_total += ride_seconds
+                    raw["ride_time"] += ride_seconds
                 else:
-                    ride_time_total += ride_seconds * passengers.total_travellers
+                    raw["ride_time"] += ride_seconds * passengers.total_travellers
 
             # service time
             time += timedelta(seconds=int(action_data.action.service_time))
@@ -506,9 +525,9 @@ class SolutionChecker:
                 previous_action.node, vehicle.initial_position
             )
             travel_time_to_depot = travel_time_to_depot / travel_time_divider
-            travel_time_total += travel_time_to_depot
+            raw["travel_time"] += travel_time_to_depot
             if distance_provider is not None:
-                distance_total += distance_provider.get_travel_time(
+                raw["distance"] += distance_provider.get_travel_time(
                     previous_action.node, vehicle.initial_position
                 )
             time += timedelta(seconds=int(travel_time_to_depot))
@@ -567,39 +586,76 @@ class SolutionChecker:
             )
 
         # generalized weighted cost; the default weights reproduce the legacy
-        # cost exactly (total travel time + weighted drop-off delay + capital cost)
-        plan_duration_seconds = (time - plan.departure_time).total_seconds() if plan.actions else 0.0
-        cost = (
-            cost_weights.travel_time_weight * travel_time_total
-            + cost_weights.distance_weight * distance_total
-            + cost_weights.ride_time_weight * ride_time_total
-            + cost_weights.passenger_delay_weight * passenger_delay_total
-            + cost_weights.earliness_weight * earliness_total
-            + cost_weights.plan_duration_weight * plan_duration_seconds
-        )
-        if plan.actions:
-            cost += cost_weights.fixed_plan_cost
-        # legacy behavior: the capital cost applies to every plan in the solution
-        cost += cost_weights.vehicle_capital_cost
+        # cost exactly (total travel time + weighted drop-off delay + capital cost
+        # per non-empty plan)
+        raw["plan_duration"] = (time - plan.departure_time).total_seconds() if plan.actions else 0.0
+        non_empty_plan = bool(plan.actions)
+        weighted = cost_weights.contributions(raw, non_empty_plan)
+        cost = sum(weighted.values())
+        plan_cost = PlanCost(cost, raw, weighted)
 
         # cost check
-        if plan.cost is not None and abs(cost - plan.cost) > 1:
+        if plan.cost is not None and abs(cost - plan.cost) > COST_TOLERANCE:
             fail(
                 Failure.PLAN_COST,
-                "{} plan cost mismatch. expected: {}, computed: {}".format(plan_counter, plan.cost, cost),
+                "[{}. plan] plan cost mismatch. reported: {}, computed: {} = {}".format(
+                    plan_counter, plan.cost, cost, cost_weights.describe(raw, non_empty_plan)
+                ),
             )
+
+        # optional per-component breakdown check
+        if plan.cost_components is not None:
+            for key, message in self._component_mismatches(plan.cost_components, weighted, raw, cost_weights):
+                fail(Failure.PLAN_COST_COMPONENT, "[{}. plan] {}".format(plan_counter, message))
 
         if plan_ok:
             logging.debug("[{}. plan] with {} actions OK".format(plan_counter, len(plan.actions)))
         else:
             logging.warning("[{}. plan] with {} actions NOT OK".format(plan_counter, len(plan.actions)))
 
-        return cost, plan_ok, served_requests
+        return plan_cost, plan_ok, served_requests
+
+    @staticmethod
+    def _component_mismatches(
+        reported: Dict[str, float],
+        computed: Dict[str, float],
+        raw: Optional[Dict[str, float]],
+        cost_weights: CostWeights,
+    ) -> List[Tuple[str, str]]:
+        """
+        Mismatches between a reported `cost_components` breakdown (component
+        key -> weighted contribution) and the computed one; omitted components
+        mean 0, unknown keys are reported as a mismatch.
+        """
+        mismatches = []
+        for key, value in reported.items():
+            if key not in COMPONENTS_BY_KEY:
+                mismatches.append((key, "unknown cost component '{}' reported (known: {})".format(
+                    key, sorted(COMPONENTS_BY_KEY))))
+                continue
+            expected = computed.get(key, 0.0)
+            if abs(float(value) - expected) > COST_TOLERANCE:
+                component = COMPONENTS_BY_KEY[key]
+                detail = ""
+                if raw is not None and key in raw:
+                    detail = " ({} {} x {})".format(raw[key], component.unit, cost_weights.weight(key))
+                mismatches.append((key, "cost component '{}' mismatch: reported {}, computed {}{}".format(
+                    key, value, expected, detail)))
+        for key, expected in computed.items():
+            if key not in reported and abs(expected) > COST_TOLERANCE:
+                mismatches.append((key, "cost component '{}' missing: reported 0, computed {}".format(key, expected)))
+        return mismatches
 
     def check_solution(
         self, instance: DARPInstance, solution: Solution, fleet_sizing: bool = False
     ) -> Tuple[bool, Dict[Failure, int]]:
+        """
+        Check the solution. Besides the verdict, the computed cost and its
+        per-component breakdown are kept in `self.last_cost` (a PlanCost over
+        all plans) for reporting.
+        """
         failures = {failure: 0 for failure in Failure}
+        self.last_cost: Optional[PlanCost] = None
 
         if not solution.feasible:
             logging.info("Solution is infeasible")
@@ -609,14 +665,16 @@ class SolutionChecker:
         solution_ok = True
         served_requests = set()
         total_cost = 0.0
+        plan_costs: List[PlanCost] = []
 
         plan_counter = 1
 
         for plan in solution.vehicle_plans:
-            cost, plan_ok, plan_served_requests = self.check_plan(
+            plan_cost, plan_ok, plan_served_requests = self.check_plan(
                 plan, plan_counter, instance, used_vehicles, failures, fleet_sizing=fleet_sizing
             )
-            total_cost += cost
+            total_cost += plan_cost.total
+            plan_costs.append(plan_cost)
             if not plan_ok:
                 solution_ok = False
 
@@ -641,14 +699,28 @@ class SolutionChecker:
                 self._increment_error()
 
         # total cost check
+        total_weighted = sum_contributions(plan_cost.weighted for plan_cost in plan_costs)
+        total_raw = sum_contributions(plan_cost.raw for plan_cost in plan_costs)
+        self.last_cost = PlanCost(total_cost, total_raw, total_weighted)
         if solution.cost is not None:
-            if abs(total_cost - solution.cost) > 1:
+            if abs(total_cost - solution.cost) > COST_TOLERANCE:
                 logging.warning(
-                    "Solution cost not computed correctly. Solution cost: {}, total cost of all plans: {}".format(
-                        solution.cost, total_cost
+                    "Solution cost not computed correctly. Solution cost: {}, total cost of all plans: {} = {}".format(
+                        solution.cost,
+                        total_cost,
+                        " + ".join("{} {}".format(key, value) for key, value in total_weighted.items() if value),
                     )
                 )
                 failures[Failure.SOLUTION_COST] += 1
+                solution_ok = False
+                self._increment_error()
+
+        # optional per-component breakdown check at the solution level
+        if solution.cost_components is not None:
+            cost_weights = instance.darp_instance_config.cost_weights
+            for key, message in self._component_mismatches(solution.cost_components, total_weighted, None, cost_weights):
+                logging.warning("Solution {}".format(message))
+                failures[Failure.SOLUTION_COST_COMPONENT] += 1
                 solution_ok = False
                 self._increment_error()
 
@@ -798,15 +870,28 @@ def build_verdict(
     failures: Dict[Failure, int],
     error_count: int,
     aborted: bool = False,
+    reported_cost: Optional[float] = None,
+    computed_cost: Optional[PlanCost] = None,
 ) -> Dict:
-    """Machine-readable check result, printed as one JSON line by the CLI."""
-    return {
+    """
+    Machine-readable check result, printed as one JSON line by the CLI. When
+    the cost was computed, `cost` holds the reported total, the computed total
+    and the computed per-component breakdown (weighted contributions).
+    """
+    verdict = {
         "ok": bool(ok) and not aborted,
         "plans_checked": plans_checked,
         "failures": {failure.name: count for failure, count in failures.items() if count > 0},
         "error_count": error_count,
         "aborted": aborted,
     }
+    if computed_cost is not None:
+        verdict["cost"] = {
+            "reported": reported_cost,
+            "computed": computed_cost.total,
+            "components": dict(computed_cost.weighted),
+        }
+    return verdict
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -878,7 +963,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         aborted = True
 
     verdict = build_verdict(
-        ok, len(solution.vehicle_plans), failures, solution_checker.error_count, aborted
+        ok,
+        len(solution.vehicle_plans),
+        failures,
+        solution_checker.error_count,
+        aborted,
+        reported_cost=solution.cost,
+        computed_cost=getattr(solution_checker, "last_cost", None),
     )
     print(json.dumps(verdict))
     if args.report:

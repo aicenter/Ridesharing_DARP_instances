@@ -35,19 +35,23 @@ class Solution:
     def __init__(
         self,
         vehicle_plans: Iterable[VehiclePlan],
-        cost: Optional[int],
+        cost: Optional[float],
         dropped_requests=Optional[Set[int]],
-        feasible=True
+        feasible=True,
+        cost_components: Optional[Dict[str, float]] = None,
     ):
         """
         Constructor
         :param vehicle_plans: List of vehicle plans
         :param cost: Total cost
         :param dropped_requests: Set of dropped requests' indices
+        :param cost_components: optional per-component breakdown of the cost
+            (component key -> weighted contribution)
         """
         self.vehicle_plans = vehicle_plans
         self.cost = cost
         self.feasible = feasible
+        self.cost_components = cost_components
         if dropped_requests is None:
             self.dropped_requests = []
         else:
@@ -139,7 +143,9 @@ class SolutionLoader:
             # the schema requires "index"; "id" is accepted for backward compatibility
             key = "index" if "index" in request else "id"
             dropped_requests.add(int(request[key]))
-        return Solution(vehicle_plans, json_data["cost"], dropped_requests)
+        return Solution(
+            vehicle_plans, json_data["cost"], dropped_requests, cost_components=json_data.get("cost_components")
+        )
 
     def load_csv_solution(self, filepath, request_map, simulation_start_time: datetime, vehicle_capacity: int) \
         -> Tuple[Solution, Series[Vehicle]]:
@@ -293,7 +299,14 @@ class SolutionLoader:
         departure_datetime = self.time_loader.load_time_field(json_data["departure_time"])
         arrival_datetime = self.time_loader.load_time_field(json_data["arrival_time"])
 
-        vh_plan = VehiclePlan(vehicle, actions_data_list, json_data["cost"], departure_datetime, arrival_datetime)
+        vh_plan = VehiclePlan(
+            vehicle,
+            actions_data_list,
+            json_data["cost"],
+            departure_datetime,
+            arrival_datetime,
+            cost_components=json_data.get("cost_components"),
+        )
         return vh_plan, mismatch_actions_count
 
     def _load_action_from_dict(self, action_dict: Dict, request_map: Dict[int, Request]) -> Action:

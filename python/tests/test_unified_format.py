@@ -388,3 +388,139 @@ def test_empty_time_without_deadline_is_rejected(instance_dir):
     patch_request(instance_dir, 1, "time", None)
     with pytest.raises(ValueError, match="required_arrival_time"):
         load_requests(instance_dir)
+
+
+# ------------------------------------------------------- generalized cost model
+
+# weighted contributions of the valid solution under the fixture weights (sum 1018.5)
+VALID_COST_COMPONENTS = {
+    "travel_time": 420.0,
+    "distance": 42.0,
+    "ride_time": 410.0,
+    "passenger_delay": 64.0,
+    "earliness": 24.0,
+    "plan_duration": 23.5,
+    "fixed_plan": 10.0,
+    "vehicle_capital": 25.0,
+}
+
+
+def failure_counts(failures):
+    return {failure.name: count for failure, count in failures.items() if count}
+
+
+def test_float_cost_accepted(instance_dir):
+    solution = valid_solution()
+    solution["cost"] = 1018.5
+    solution["plans"][0]["cost"] = 1018.5
+    ok, failures = check(instance_dir, solution)
+    assert ok, failure_counts(failures)
+
+
+def test_cost_components_accepted(instance_dir):
+    solution = valid_solution()
+    solution["cost_components"] = dict(VALID_COST_COMPONENTS)
+    solution["plans"][0]["cost_components"] = dict(VALID_COST_COMPONENTS)
+    ok, failures = check(instance_dir, solution)
+    assert ok, failure_counts(failures)
+
+
+def test_cost_components_omitted_zero_components_accepted(instance_dir):
+    # a zero-weight component may be left out of the breakdown
+    patch_config(instance_dir, "cost", {"travel_time_weight": 1.0})
+    solution = valid_solution()
+    solution["cost"] = 420
+    solution["plans"][0]["cost"] = 420
+    solution["plans"][0]["cost_components"] = {"travel_time": 420}
+    ok, failures = check(instance_dir, solution)
+    assert ok, failure_counts(failures)
+
+
+def test_cost_component_mismatch_reported(instance_dir):
+    solution = valid_solution()
+    components = dict(VALID_COST_COMPONENTS)
+    components["ride_time"] = 300.0
+    solution["plans"][0]["cost_components"] = components
+    ok, failures = check(instance_dir, solution)
+    assert not ok
+    assert failures[Failure.PLAN_COST_COMPONENT] == 1
+    assert failures[Failure.PLAN_COST] == 0
+
+
+def test_cost_component_missing_reported(instance_dir):
+    # a non-zero component left out of the breakdown is a mismatch
+    solution = valid_solution()
+    components = dict(VALID_COST_COMPONENTS)
+    del components["ride_time"]
+    solution["plans"][0]["cost_components"] = components
+    ok, failures = check(instance_dir, solution)
+    assert not ok
+    assert failures[Failure.PLAN_COST_COMPONENT] == 1
+
+
+def test_solution_cost_component_sum_checked(instance_dir):
+    solution = valid_solution()
+    components = dict(VALID_COST_COMPONENTS)
+    components["travel_time"] = 400.0
+    solution["cost_components"] = components
+    ok, failures = check(instance_dir, solution)
+    assert not ok
+    assert failures[Failure.SOLUTION_COST_COMPONENT] == 1
+    assert failures[Failure.PLAN_COST_COMPONENT] == 0
+
+
+def test_unknown_cost_component_key_rejected(instance_dir):
+    solution = valid_solution()
+    solution["plans"][0]["cost_components"] = {"foo": 1.0}
+    ok, failures = check(instance_dir, solution)
+    assert not ok
+    assert failures[Failure.PLAN_COST_COMPONENT] >= 1
+
+
+def test_unknown_cost_config_key_rejected(instance_dir):
+    patch_config(instance_dir, "cost", {"travel_time_weight": 1.0, "foo": 1})
+    with pytest.raises(ValueError, match="foo"):
+        check(instance_dir, valid_solution())
+
+
+def test_capital_cost_not_charged_for_empty_plan(instance_dir):
+    # a second vehicle with an empty plan: no fixed or capital cost, so the
+    # solution cost stays 1018.5
+    vehicles_path = instance_dir / "vehicles.json"
+    vehicles = json.loads(vehicles_path.read_text(encoding="utf-8"))
+    second = copy.deepcopy(vehicles[0])
+    second["id"] = 1
+    vehicles.append(second)
+    vehicles_path.write_text(json.dumps(vehicles), encoding="utf-8")
+
+    solution = valid_solution()
+    solution["plans"].append({
+        "cost": 0, "vehicle": {"index": 1}, "departure_time": 800, "arrival_time": 800, "actions": [],
+    })
+    ok, failures = check(instance_dir, solution)
+    assert ok, failure_counts(failures)
+
+    solution["plans"][1]["cost"] = 35  # fixed 10 + capital 25 would be wrong
+    ok, failures = check(instance_dir, solution)
+    assert not ok
+    assert failures[Failure.PLAN_COST] == 1
+
+
+def test_checker_keeps_cost_breakdown(instance_dir):
+    instance, _, time_loader = darpinstances.solution_checker.load_instance(instance_dir / "config.yaml")
+    solution_path = instance_dir / "solution.json"
+    solution_path.write_text(json.dumps(valid_solution()), encoding="utf-8")
+    solution = darpinstances.solution.load_solution(solution_path, instance, time_loader)
+    checker = SolutionChecker(max_error_count=1000)
+    checker.check_solution(instance, solution)
+    assert checker.last_cost.total == pytest.approx(1018.5)
+    for key, value in VALID_COST_COMPONENTS.items():
+        assert checker.last_cost.weighted[key] == pytest.approx(value)
+    assert checker.last_cost.raw["travel_time"] == pytest.approx(420)
+
+    verdict = darpinstances.solution_checker.build_verdict(
+        True, 1, {failure: 0 for failure in Failure}, 0, reported_cost=solution.cost, computed_cost=checker.last_cost
+    )
+    assert verdict["cost"]["reported"] == 1018
+    assert verdict["cost"]["computed"] == pytest.approx(1018.5)
+    assert verdict["cost"]["components"]["ride_time"] == pytest.approx(410)

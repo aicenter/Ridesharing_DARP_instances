@@ -16,6 +16,8 @@ from tqdm.autonotebook import tqdm
 
 import darpinstances.log
 from darpinstances.inout import check_file_exists
+# CostWeights is defined in cost_model and re-exported here for backward compatibility
+from darpinstances.cost_model import CostWeights  # noqa: F401
 from darpinstances.instance_objects import SLOT_TYPES, Coordinate, Passengers, Request, RequestConstraints, Vehicle
 from darpinstances.utils import TimeLoader, DarpinstancesTimestampLoader
 from darpinstances.travel_time_provider import (
@@ -25,57 +27,6 @@ from darpinstances.travel_time_provider import (
     GridTravelTimeProvider,
 )
 from roadgraphtool.distance_matrix_generator import resolve_dm_filepath
-
-
-class CostWeights:
-    """
-    Weights of the generalized solution cost model:
-
-        cost = travel_time_weight * total_travel_time [s]
-             + distance_weight * total_distance [m]
-             + ride_time_weight * sum of passenger ride times [s]
-             + passenger_delay_weight * sum of passenger delays [s]
-             + earliness_weight * sum of arrival earliness before required arrival times [s]
-             + plan_duration_weight * plan duration [s]
-             + fixed_plan_cost (for each non-empty plan)
-             + vehicle_capital_cost (for each non-empty plan)
-
-    The defaults reproduce the original DARP cost exactly: total travel time,
-    plus drop-off delay weighted by the legacy relative_delay_cost, plus the
-    vehicle capital cost.
-    """
-
-    def __init__(
-        self,
-        travel_time_weight: float = 1.0,
-        distance_weight: float = 0.0,
-        ride_time_weight: float = 0.0,
-        passenger_delay_weight: float = 0.0,
-        earliness_weight: float = 0.0,
-        plan_duration_weight: float = 0.0,
-        fixed_plan_cost: float = 0.0,
-        vehicle_capital_cost: float = 0.0,
-        accounting: str = "per_traveller",
-    ):
-        self.travel_time_weight = travel_time_weight
-        self.distance_weight = distance_weight
-        self.ride_time_weight = ride_time_weight
-        self.passenger_delay_weight = passenger_delay_weight
-        self.earliness_weight = earliness_weight
-        self.plan_duration_weight = plan_duration_weight
-        self.fixed_plan_cost = fixed_plan_cost
-        self.vehicle_capital_cost = vehicle_capital_cost
-        # how the passenger components accumulate:
-        # - 'per_traveller' (default, legacy): ride time and drop-off delay are
-        #   multiplied by the request's total travellers, and the delay is
-        #   measured from the desired pickup time (it includes the rider's own
-        #   boarding service time),
-        # - 'per_request' (allocator-style): ride time and delay are counted
-        #   once per request, and the delay is measured from the pickup
-        #   DEPARTURE (net of the boarding service time).
-        if accounting not in ("per_traveller", "per_request"):
-            raise ValueError(f"Unknown cost accounting mode: {accounting}")
-        self.accounting = accounting
 
 
 class DARPInstanceConfiguration:
@@ -852,24 +803,12 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
 
 def _load_cost_weights(instance_config: dict) -> CostWeights:
     """
-    Load the generalized cost model weights. The defaults reproduce the legacy
-    cost exactly: travel time, plus drop-off delay weighted by
-    demand.relative_delay_cost, plus vehicles.capital_cost per used vehicle.
+    Load the generalized cost model weights from the ``cost:`` section (see
+    darpinstances.cost_model). The defaults reproduce the legacy cost exactly:
+    travel time, plus drop-off delay weighted by demand.relative_delay_cost,
+    plus vehicles.capital_cost per non-empty plan. Unknown keys are rejected.
     """
-    cost_config = instance_config.get('cost', {})
-    relative_delay_cost = instance_config.get('demand', {}).get('relative_delay_cost', 0)
-    vehicle_capital_cost = instance_config.get('vehicles', {}).get('capital_cost', 0) or 0
-    return CostWeights(
-        travel_time_weight=cost_config.get('travel_time_weight', 1.0),
-        distance_weight=cost_config.get('distance_weight', 0.0),
-        ride_time_weight=cost_config.get('ride_time_weight', 0.0),
-        passenger_delay_weight=cost_config.get('passenger_delay_weight', relative_delay_cost),
-        earliness_weight=cost_config.get('earliness_weight', 0.0),
-        plan_duration_weight=cost_config.get('plan_duration_weight', 0.0),
-        fixed_plan_cost=cost_config.get('fixed_plan_cost', 0.0),
-        vehicle_capital_cost=cost_config.get('vehicle_capital_cost', vehicle_capital_cost),
-        accounting=cost_config.get('accounting', 'per_traveller'),
-    )
+    return CostWeights.from_config(instance_config)
 
 
 def load_instance(

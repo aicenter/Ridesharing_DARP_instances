@@ -161,11 +161,36 @@ cost:
   earliness_weight: 0.0       # per second of arrival before required_arrival_time
   plan_duration_weight: 0.0   # per second of plan duration
   fixed_plan_cost: 0.0        # per non-empty plan
-  vehicle_capital_cost: 0.0   # per plan
+  vehicle_capital_cost: 0.0   # per non-empty plan
   accounting: per_traveller   # or per_request, see below
 ```
 
-The defaults reproduce the legacy cost exactly: total travel time + `demand.relative_delay_cost` × drop-off delay + `vehicles.capital_cost` (the two legacy fields remain as the defaults of the corresponding weights).
+The cost of a plan is the sum of the weighted components below; the cost of a solution is the sum of its plan costs. The defaults reproduce the legacy cost exactly: total travel time + `demand.relative_delay_cost` × drop-off delay + `vehicles.capital_cost` per non-empty plan (the two legacy fields remain as the defaults of the corresponding weights). Costs are real numbers (the solution checker tolerates a difference of 1 cost unit per plan and per solution). Keys under `cost` other than the ones below are rejected by the loader.
+
+| Component | Config weight | Quantity [unit] | Default | Legacy fallback | Applies to |
+|-----------|---------------|-----------------|---------|-----------------|------------|
+| `travel_time` | `travel_time_weight` | vehicle travel time [s], including accepted late arrivals (`--allow-late-arrival`) and the priced depot return | 1.0 | | every leg |
+| `distance` | `distance_weight` | vehicle travel distance [m], requires `dist_filepath` | 0.0 | | every leg |
+| `ride_time` | `ride_time_weight` | ride from the pickup departure to the drop-off arrival [passenger-s] | 0.0 | | every drop-off (scaled by `accounting`) |
+| `passenger_delay` | `passenger_delay_weight` | drop-off delay versus the ideal direct ride starting at the desired pickup time [passenger-s] | 0.0 | `demand.relative_delay_cost` | every drop-off (scaled by `accounting`) |
+| `earliness` | `earliness_weight` | arrival before `required_arrival_time` [s] | 0.0 | | every drop-off |
+| `plan_duration` | `plan_duration_weight` | plan departure to the end of the last action or the depot return [s] | 0.0 | | non-empty plans |
+| `fixed_plan` | `fixed_plan_cost` | constant | 0.0 | | non-empty plans |
+| `vehicle_capital` | `vehicle_capital_cost` | constant | 0.0 | `vehicles.capital_cost` | non-empty plans |
+
+The components are defined once, in the registry `COST_COMPONENTS` of [`python/darpinstances/cost_model.py`](python/darpinstances/cost_model.py), which drives the config loading, the solution checker and the schema tests.
+
+##### Per-component breakdown (`cost_components`)
+
+Solution files may report, per plan and for the whole solution, the optional object `cost_components` mapping component keys (first column above) to their **weighted contributions**, which sum to `cost` (see [`JSON/cost_components.schema.json`](JSON/cost_components.schema.json)). Omitted components contribute 0. When present, the solution checker validates every reported component against its own computation (`PLAN_COST_COMPONENT`, `SOLUTION_COST_COMPONENT` failures).
+
+##### Adding a cost component
+
+1. Add a `CostComponent` entry to `COST_COMPONENTS` in `python/darpinstances/cost_model.py` (key, config weight key, unit, default, how it is measured, optional legacy fallback).
+2. Accumulate its raw quantity in `SolutionChecker.check_plan` (`raw["<key>"] += ...`) in `python/darpinstances/solution_checker.py`; constants need no accumulation.
+3. Add the key to `JSON/cost_components.schema.json` (the tests in `python/tests/test_cost_model.py` enforce that the schema and the registry agree).
+4. Add a row to the table above and a `CHANGELOG.md` entry.
+5. Solvers: implement the component in the C++ cost evaluator of DARP-Benchmark, or leave it in its list of unsupported weights so that the benchmark rejects instances with a non-zero weight.
 
 `accounting` selects how the passenger components accumulate:
 
@@ -447,8 +472,9 @@ The `<method>` folders are `ih` for [Insertion Heuristic]() and `vga` for [Vehic
 The solution is stored in `🗎 config.yaml-solution.json` and contains the following fields:
 
 `🗎 config.yaml-solution.json`
-- `cost` - total cost (total travel time of all vehicles) of the solution in seconds.
-- `cost_minutes` - total cost of the solution in minutes, rounded.
+- `cost` - total [generalized cost](#generalized-cost-model-cost-config-section) of the solution, a real number: the sum of the plan costs. Under the default cost weights it equals the total travel time of all vehicles in seconds.
+- `cost_minutes` - `cost / 60`, rounded to whole minutes (legacy convenience field).
+- `cost_components` - optional [per-component breakdown](#per-component-breakdown-cost_components) of `cost`; the same object may be present in each plan.
 - `dropped_requests` - list of requests that were dropped in this solution.
 - `plans` - list of vehicle plans; each plan contains a list of actions determining which requests are served by the given vehicle and in which order. The actions are "pickup" and "drop_off".
 
@@ -776,8 +802,10 @@ To check the validity of the solutions, we provide a solution checker implemente
 The script can be run from the command line with the following arguments:
 
 ```bash
-python darpinstances/solution_checker.py <solution_file> [-i, --instance <instance_path>] [--allow-late-arrival]
+python darpinstances/solution_checker.py <solution_file> [-i, --instance <instance_path>] [--allow-late-arrival] [--report <file>] [--max-errors <n>]
 ```
+
+The last line printed to stdout is a JSON verdict: `ok`, `plans_checked`, `failures` (failure class → count), `error_count`, `aborted`, and, for feasible solutions, `cost` with the `reported` total, the `computed` total and the computed per-component breakdown `components` (component key → weighted contribution). The exit code is 1 when the solution is not OK. The cost of each plan and of the solution is recomputed from the instance [cost model](#generalized-cost-model-cost-config-section); a mismatch is reported as `PLAN_COST` / `SOLUTION_COST` together with the computed breakdown, and a reported `cost_components` object is validated component by component (`PLAN_COST_COMPONENT` / `SOLUTION_COST_COMPONENT`).
 
 where:
 

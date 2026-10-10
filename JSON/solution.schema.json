@@ -16,14 +16,18 @@
             ]
         },
         "cost": {
-            "type": "integer",
+            "type": "number",
             "default": 0,
-            "title": "Total objective cost over all vehicles (seconds)"
+            "title": "Total generalized cost over all plans (sum of the plan costs); equals the total travel time in seconds under the default cost weights"
         },
         "cost_minutes": {
             "type": "integer",
             "default": 0,
-            "title": "Same total cost expressed in whole minutes (rounded)"
+            "title": "cost / 60 rounded to whole minutes (legacy convenience field)"
+        },
+        "cost_components": {
+            "title": "Optional per-component breakdown of cost (weighted contributions summing to cost)",
+            "$ref": "cost_components.schema.json"
         },
         "vehicles": {
             "type": "array",

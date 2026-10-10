@@ -33,15 +33,18 @@ class VehiclePlan:
         self,
         vehicle: Optional[Vehicle],
         actions: List[ActionData],
-        cost: Optional[int] = None,
+        cost: Optional[float] = None,
         departure_time: Optional[datetime] = None,
-        arrival_time: Optional[datetime] = None
+        arrival_time: Optional[datetime] = None,
+        cost_components: Optional[Dict[str, float]] = None,
     ):
         self.departure_time = departure_time
         self.arrival_time = arrival_time
         self.actions = actions
         self.vehicle = vehicle
         self.cost = cost
+        # optional per-component breakdown of the cost (component key -> weighted contribution)
+        self.cost_components = cost_components
 
     def __str__(self):
         return 'plan: {} Cost {}'.format(' '.join([str(a) for a in self.actions]), self.cost)

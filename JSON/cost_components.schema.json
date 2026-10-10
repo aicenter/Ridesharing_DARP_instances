@@ -1,0 +1,41 @@
+{
+    "$schema": "https://json-schema.org/draft/2019-09/schema",
+    "$id": "https://github.com/aicenter/Ridesharing_DARP_instances/blob/main/JSON/cost_components.schema.json",
+    "type": "object",
+    "title": "Per-component breakdown of a generalized cost: component key -> weighted contribution, in the same unit as `cost`; the contributions sum to `cost`. Omitted components contribute 0.",
+    "additionalProperties": false,
+    "properties": {
+        "travel_time": {
+            "type": "number",
+            "title": "Weighted contribution of travel_time (vehicle travel time, including accepted late arrivals and the priced depot return); omitted = 0"
+        },
+        "distance": {
+            "type": "number",
+            "title": "Weighted contribution of distance (vehicle travel distance; requires dist_filepath); omitted = 0"
+        },
+        "ride_time": {
+            "type": "number",
+            "title": "Weighted contribution of ride_time (ride from the pickup departure to the drop-off arrival); omitted = 0"
+        },
+        "passenger_delay": {
+            "type": "number",
+            "title": "Weighted contribution of passenger_delay (drop-off delay versus the ideal direct ride starting at the desired pickup time); omitted = 0"
+        },
+        "earliness": {
+            "type": "number",
+            "title": "Weighted contribution of earliness (arrival before required_arrival_time); omitted = 0"
+        },
+        "plan_duration": {
+            "type": "number",
+            "title": "Weighted contribution of plan_duration (plan departure to the end of the last action or the depot return; 0 for empty plans); omitted = 0"
+        },
+        "fixed_plan": {
+            "type": "number",
+            "title": "Weighted contribution of fixed_plan (constant per non-empty plan); omitted = 0"
+        },
+        "vehicle_capital": {
+            "type": "number",
+            "title": "Weighted contribution of vehicle_capital (constant per non-empty plan (the legacy vehicle capital cost)); omitted = 0"
+        }
+    }
+}

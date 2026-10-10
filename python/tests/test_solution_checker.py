@@ -325,3 +325,36 @@ def test_cli_exit_code_verdict_and_report_on_invalid_solution(tmp_path):
     assert verdict["ok"] is False
     assert report_path.exists()
     assert json.loads(report_path.read_text(encoding="utf-8")) == verdict
+
+
+def test_cli_verdict_reports_cost_breakdown(tmp_path):
+    solution_path = write_solution(tmp_path, single_request_solution())
+    returncode, verdict = run_cli(solution_path, "config.yaml")
+    assert returncode == 0
+    assert verdict["cost"]["reported"] == 300
+    assert verdict["cost"]["computed"] == 300
+    assert verdict["cost"]["components"]["travel_time"] == 300
+    assert verdict["cost"]["components"]["vehicle_capital"] == 0
+
+
+def test_fixture_solution_matches_solution_schema():
+    jsonschema = pytest.importorskip("jsonschema")
+    referencing = pytest.importorskip("referencing")
+    from referencing.jsonschema import DRAFT201909
+
+    json_dir = Path(__file__).resolve().parents[2] / "JSON"
+    schemas = {path.name: json.loads(path.read_text(encoding="utf-8")) for path in json_dir.glob("*.schema.json")}
+    registry = referencing.Registry()
+    for name, schema in schemas.items():
+        resource = referencing.Resource.from_contents(schema, default_specification=DRAFT201909)
+        registry = registry.with_resource(schema["$id"], resource).with_resource(name, resource)
+    validator = jsonschema.Draft201909Validator(schemas["solution.schema.json"], registry=registry)
+
+    solution = two_request_solution()
+    solution["cost"] = 420.5
+    solution["cost_components"] = {"travel_time": 420.5}
+    validator.validate(solution)
+
+    solution["cost_components"] = {"foo": 1}
+    with pytest.raises(jsonschema.ValidationError):
+        validator.validate(solution)

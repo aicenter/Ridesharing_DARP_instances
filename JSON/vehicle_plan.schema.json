@@ -12,8 +12,12 @@
     ],
     "properties": {
         "cost": {
-            "type": "integer",
-            "title": "Cost of this vehicle's route (seconds)"
+            "type": "number",
+            "title": "Generalized cost of this vehicle's route; equals its travel time in seconds under the default cost weights"
+        },
+        "cost_components": {
+            "title": "Optional per-component breakdown of cost (weighted contributions summing to cost)",
+            "$ref": "cost_components.schema.json"
         },
         "vehicle": {
             "type": "object",
