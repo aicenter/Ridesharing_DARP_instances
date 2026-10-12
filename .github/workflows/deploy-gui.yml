@@ -40,4 +40,4 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ${{ vars.FTP_PROTOCOL || 'ftps' }}
           local-dir: web/graph-editor/dist/
-          server-dir: ${{ vars.FTP_SERVER_DIR }}
+          server-dir: www/darp-instances-editor/
