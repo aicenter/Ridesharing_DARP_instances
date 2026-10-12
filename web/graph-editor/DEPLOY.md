@@ -4,8 +4,8 @@ Two deployables live in this directory:
 
 | what | where | how |
 |---|---|---|
-| the editor (static files from `npm run build`) | <https://fido.ninja/darp-editor/> | GitHub Actions workflow [`deploy-gui.yml`](../../.github/workflows/deploy-gui.yml), FTP upload on every push to `main` touching `web/graph-editor/` |
-| the builder service (`server/`, `POST /instances`) | Google Cloud Run, service `darp-builder` | [`Dockerfile`](../../Dockerfile) at the repository root, `gcloud run deploy --source .` |
+| the editor (static files from `npm run build`) | <https://fido.ninja/darp-instances-editor/> | GitHub Actions workflow [`deploy-gui.yml`](../../.github/workflows/deploy-gui.yml), FTP upload on every push to `main` touching `web/graph-editor/` |
+| the builder service (`server/`, `POST /instances`) | <https://mi.fido.ninja> (Google Cloud Run, service `darp-builder`) | [`Dockerfile`](../../Dockerfile) at the repository root, `gcloud run deploy --source .` |
 
 The editor build uses a relative base (`base: './'` in `vite.config.ts`), so the same `dist/` works in the hosting subfolder and at the root of the service.
 
@@ -14,7 +14,7 @@ The editor build uses a relative base (`base: './'` in `vite.config.ts`), so the
 Repository settings → Secrets and variables → Actions:
 
 - secrets `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD`;
-- variables `FTP_PROTOCOL` (`ftp` or `ftps`) and `FTP_SERVER_DIR` (target folder relative to the FTP root, e.g. `www/darp-editor/`; the action creates it and keeps its sync state in `.ftp-deploy-sync-state.json` there).
+- variables `FTP_PROTOCOL` (`ftp` or `ftps`) and `FTP_SERVER_DIR` (target folder relative to the FTP root, e.g. `www/darp-instances-editor/`; the action creates it and keeps its sync state in `.ftp-deploy-sync-state.json` there).
 
 The workflow runs the unit tests, builds, and uploads `dist/`. It can also be started by hand from the Actions tab (`workflow_dispatch`).
 
@@ -50,9 +50,18 @@ gcloud run deploy darp-builder --source . \
 Check:
 
 ```bash
-URL=https://darp-builder-1094879102833.europe-west1.run.app
+URL=https://mi.fido.ninja   # or the *.run.app URL printed by the deployment
 curl -s "$URL/health"
 curl -s -X POST "$URL/instances" -H "content-type: application/json" --data @web/graph-editor/examples/small-darp.json | head -c 300
+```
+
+### Custom domain
+
+`mi.fido.ninja` is a Cloud Run domain mapping to the service; the DNS of `fido.ninja` (Namecheap) has a CNAME `mi` → `ghs.googlehosted.com`. Google issues and renews the certificate. The mapping is independent of the deployments, so it needs no care after a redeploy. One-time setup, if ever needed again:
+
+```bash
+gcloud domains verify fido.ninja          # adds a TXT record at the domain apex
+gcloud beta run domain-mappings create --service darp-builder --domain mi.fido.ninja --region europe-west1
 ```
 
 ### Running the container locally

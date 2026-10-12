@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "build-instance": "tsx tools/build-instance.ts",
+    "og-image": "tsx tools/og-image.ts",
     "test": "vitest run",
     "serve": "tsx server/main.ts",
     "start": "npm run serve"

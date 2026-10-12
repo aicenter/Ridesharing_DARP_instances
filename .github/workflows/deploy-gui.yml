@@ -1,6 +1,6 @@
-# Builds the graph editor and uploads it over FTP to the hosting (fido.ninja/darp-editor/).
+# Builds the graph editor and uploads it over FTP to the hosting (fido.ninja/darp-instances-editor/).
 # Secrets: FTP_SERVER, FTP_USERNAME, FTP_PASSWORD. Variables: FTP_PROTOCOL (ftp or ftps),
-# FTP_SERVER_DIR (the target folder relative to the FTP root, e.g. www/darp-editor/).
+# FTP_SERVER_DIR (the target folder relative to the FTP root, e.g. www/darp-instances-editor/).
 name: Deploy graph editor
 
 on:

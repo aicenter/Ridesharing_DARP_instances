@@ -10,7 +10,15 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+} from "react";
 import {
   GraphEditorProvider,
   GRAPH_EDITOR_DND_MIME,
@@ -19,6 +27,7 @@ import {
 } from "./GraphEditorContext";
 import { RoadEdge } from "./components/RoadEdge";
 import { RoadNode, type RoadNodeType } from "./components/RoadNode";
+import { NodeGlyph } from "./components/NodeGlyph";
 import { VehicleGlyph } from "./components/VehicleGlyph";
 import { RequestGlyph } from "./components/RequestGlyph";
 import { captureCroppedFlowPng } from "./lib/captureFlowPng";
@@ -73,6 +82,7 @@ function AppShell() {
   const [maxDelaySeconds, setMaxDelaySeconds] = useState<number | null>(null);
   const [currentTimeSeconds, setCurrentTimeSeconds] = useState<number | null>(null);
   const [solutionOpen, setSolutionOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [solutionItems, setSolutionItems] = useState<SolutionItems | null>(null);
 
   const nextLogicalIdRef = useRef(0);
@@ -300,17 +310,54 @@ function AppShell() {
     ],
   );
 
-  const addNode = useCallback(() => {
-    const logicalId = nextLogicalIdRef.current++;
-    const id = String(logicalId);
-    setNodes((nds) => {
-      const offset = nds.length * 28;
-      return [
-        ...nds,
-        newRoadNode(id, logicalId, { x: 80 + offset, y: 120 + (offset % 140) }),
-      ];
-    });
-  }, [setNodes]);
+  /** Adds a node at `position` (flow coordinates); without it, the node is staggered after the existing ones. */
+  const addNode = useCallback(
+    (position?: { x: number; y: number }) => {
+      const logicalId = nextLogicalIdRef.current++;
+      const id = String(logicalId);
+      setNodes((nds) => {
+        const offset = nds.length * 28;
+        const pos = position ?? { x: 80 + offset, y: 120 + (offset % 140) };
+        return [...nds, newRoadNode(id, logicalId, pos)];
+      });
+    },
+    [setNodes],
+  );
+
+  const onCanvasDragOver = useCallback((e: DragEvent) => {
+    if (!e.dataTransfer.types.includes(GRAPH_EDITOR_DND_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  // Nodes dropped on a node or an edge are handled (or swallowed) there; the pane only places new nodes.
+  const onCanvasDrop = useCallback(
+    (e: DragEvent) => {
+      const raw = e.dataTransfer.getData(GRAPH_EDITOR_DND_MIME);
+      if (!raw) return;
+      let payload: { kind?: string };
+      try {
+        payload = JSON.parse(raw) as { kind?: string };
+      } catch {
+        return;
+      }
+      if (payload?.kind !== "new-node") return;
+      e.preventDefault();
+      const rf = rfInstanceRef.current;
+      if (!rf) return;
+      addNode(rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+    },
+    [addNode],
+  );
+
+  useEffect(() => {
+    if (!helpOpen) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setHelpOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [helpOpen]);
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -679,10 +726,7 @@ function AppShell() {
     <GraphEditorProvider value={graphContextValue}>
       <div className="app">
         <header className="app__toolbar">
-          <h1 className="app__title">Road network sketcher</h1>
-          <button type="button" className="app__btn" onClick={addNode}>
-            Add node
-          </button>
+          <h1 className="app__title">DARP instance sketcher</h1>
           <button type="button" className="app__btn" onClick={() => void handleExport()}>
             Export
           </button>
@@ -713,6 +757,28 @@ function AppShell() {
           >
             Create solution
           </button>
+          <div
+            className="node-palette"
+            draggable
+            role="button"
+            tabIndex={0}
+            onClick={() => addNode()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                addNode();
+              }
+            }}
+            onDragStart={(e) => {
+              e.dataTransfer.setData(GRAPH_EDITOR_DND_MIME, JSON.stringify({ kind: "new-node" }));
+              e.dataTransfer.effectAllowed = "copy";
+            }}
+            title="Click to add a node, or drag onto the canvas to place it there"
+          >
+            <NodeGlyph />
+            <span>Node</span>
+            <span className="vehicle-palette__hint">click / drag</span>
+          </div>
           <div
             className="vehicle-palette"
             draggable
@@ -800,17 +866,66 @@ function AppShell() {
               </button>
             ) : null}
           </label>
-          <p className="app__hint">
-            <strong>Import</strong> accepts several files at once (<code>dm.csv</code> required;{" "}
-            <code>requests.csv</code>, <code>vehicles.csv</code>, <code>config.yaml</code>,{" "}
-            <code>vehicle_data.json</code> optional) or a single <code>.zip</code>.{" "}
-            Connect nodes with handles; both directions added. Drag <strong>Vehicle</strong> onto a
-            node (default capacity {DEFAULT_VEHICLE_CAPACITY}) or onto an edge to place it en route.
-            Drag chips between nodes and edges to relocate.
-            Drag <strong>Request</strong> to set origin, then drag it again to set destination; drag
-            it onto a vehicle to put it onboard. Layout only.
-          </p>
+          <button
+            type="button"
+            className="app__help-btn"
+            aria-label="Help"
+            aria-haspopup="dialog"
+            aria-expanded={helpOpen}
+            title="Help"
+            onClick={() => setHelpOpen(true)}
+          >
+            ?
+          </button>
         </header>
+
+        {helpOpen ? (
+          <div className="app__help-backdrop" onClick={() => setHelpOpen(false)}>
+            <div
+              className="app__help-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="app-help-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="app__help-header">
+                <h2 id="app-help-title" className="app__help-title">
+                  Help
+                </h2>
+                <button
+                  type="button"
+                  className="app__help-close"
+                  aria-label="Close help"
+                  onClick={() => setHelpOpen(false)}
+                >
+                  ×
+                </button>
+              </div>
+              <ul className="app__help-list">
+                <li>
+                  <strong>Import</strong> accepts several files at once (<code>dm.csv</code>{" "}
+                  required; <code>requests.csv</code>, <code>vehicles.csv</code>,{" "}
+                  <code>config.yaml</code>, <code>vehicle_data.json</code> optional) or a single{" "}
+                  <code>.zip</code>.
+                </li>
+                <li>
+                  <strong>Node</strong>: click to add a node, or drag it onto the canvas to place it
+                  there. Connect nodes with handles; both directions are added.
+                </li>
+                <li>
+                  Drag <strong>Vehicle</strong> onto a node (default capacity{" "}
+                  {DEFAULT_VEHICLE_CAPACITY}) or onto an edge to place it en route. Drag chips
+                  between nodes and edges to relocate.
+                </li>
+                <li>
+                  Drag <strong>Request</strong> to set origin, then drag it again to set
+                  destination; drag it onto a vehicle to put it onboard.
+                </li>
+                <li>Layout only: the node positions are not exported.</li>
+              </ul>
+            </div>
+          </div>
+        ) : null}
 
         <div className="app__main">
           <div className="app__flow" ref={flowHostRef}>
@@ -820,6 +935,8 @@ function AppShell() {
               onInit={(inst) => {
                 rfInstanceRef.current = inst;
               }}
+              onDragOver={onCanvasDragOver}
+              onDrop={onCanvasDrop}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}

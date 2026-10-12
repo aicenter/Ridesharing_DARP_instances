@@ -46,13 +46,88 @@
   border: 0;
 }
 
-.app__hint {
-  margin: 0;
-  flex: 1 1 220px;
-  font-size: 0.85rem;
-  opacity: 0.85;
+.app__help-btn {
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border, #ccc);
+  background: var(--btn-bg, #f4f4f5);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.app__help-btn:hover {
+  filter: brightness(0.97);
+}
+
+.app__help-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.app__help-dialog {
+  width: min(100%, 560px);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 16px 20px 20px;
+  border-radius: 10px;
+  border: 1px solid var(--border, #e5e4e7);
+  background: #fff;
+  color: inherit;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
   text-align: left;
-  min-width: min(100%, 280px);
+}
+
+.app__help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.app__help-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.app__help-close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.app__help-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.app__help-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.app__help-list li + li {
+  margin-top: 6px;
 }
 
 .app__main {
@@ -186,6 +261,29 @@
 .vehicle-glyph {
   flex-shrink: 0;
   display: block;
+}
+
+.node-glyph {
+  flex-shrink: 0;
+  display: block;
+}
+
+.node-palette {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 2px dashed #555;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  user-select: none;
+}
+
+.node-palette:active {
+  cursor: grabbing;
 }
 
 .vehicle-palette {
@@ -504,6 +602,28 @@
     background: #241b2f;
     border-color: #a78bfa;
     color: #f3f4f6;
+  }
+
+  .node-palette {
+    background: #1e1e1e;
+    border-color: #aaa;
+    color: #f3f4f6;
+  }
+
+  .app__help-btn {
+    background: #2a2a2a;
+    color: #f3f4f6;
+    border-color: #444;
+  }
+
+  .app__help-dialog {
+    background: #1e1e1e;
+    border-color: #444;
+    color: #f3f4f6;
+  }
+
+  .app__help-close:hover {
+    background: rgba(255, 255, 255, 0.1);
   }
 
   .road-node__request-chip {
