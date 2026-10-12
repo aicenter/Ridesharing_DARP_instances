@@ -50,7 +50,7 @@ gcloud run deploy darp-builder --source . \
 Check:
 
 ```bash
-URL=https://darp-builder-....run.app
+URL=https://darp-builder-1094879102833.europe-west1.run.app
 curl -s "$URL/health"
 curl -s -X POST "$URL/instances" -H "content-type: application/json" --data @web/graph-editor/examples/small-darp.json | head -c 300
 ```

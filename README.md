@@ -766,19 +766,19 @@ summary = json.loads(subprocess.run(
 #### Hosted builder service
 The builder also runs as a public, best-effort HTTP service, so an LLM tool or a script can create instances without installing anything:
 
-- `POST <service-url>/instances` with the spec as JSON body (`Content-Type: application/json`) returns `{ ok, files, png, counts, warnings }`: `files` maps the file names to their contents, `png` is the base64-encoded picture (`null` with `?png=0`, or on a render failure, which is then described in `pngError` and makes `ok` false). An invalid spec gives HTTP 400 with the same `{ ok: false, stage, errors }` object the CLI prints.
+- `POST https://darp-builder-1094879102833.europe-west1.run.app/instances` with the spec as JSON body (`Content-Type: application/json`) returns `{ ok, files, png, counts, warnings }`: `files` maps the file names to their contents, `png` is the base64-encoded picture (`null` with `?png=0`, or on a render failure, which is then described in `pngError` and makes `ok` false). An invalid spec gives HTTP 400 with the same `{ ok: false, stage, errors }` object the CLI prints.
 - With `Accept: application/zip`, the response is `instance.zip` with all files and the picture (the GUI export format).
-- `GET <service-url>/schema` returns the spec schema; `GET <service-url>/` is a copy of the graph editor.
+- `GET https://darp-builder-1094879102833.europe-west1.run.app/schema` returns the spec schema; `GET https://darp-builder-1094879102833.europe-west1.run.app/` is a copy of the graph editor.
 - Limits: 1 MiB body, at most 200 nodes, 2000 directed edges, 100 vehicles and 500 requests per spec. The service scales to zero when unused, so the first request after a pause takes a few seconds. There is no authentication; please do not script bulk generation against it.
 
 ```bash
-curl -s -X POST "<service-url>/instances" -H "content-type: application/json" --data @spec.json
-curl -s -X POST "<service-url>/instances" -H "content-type: application/json" -H "accept: application/zip" --data @spec.json -o instance.zip
+curl -s -X POST "https://darp-builder-1094879102833.europe-west1.run.app/instances" -H "content-type: application/json" --data @spec.json
+curl -s -X POST "https://darp-builder-1094879102833.europe-west1.run.app/instances" -H "content-type: application/json" -H "accept: application/zip" --data @spec.json -o instance.zip
 ```
 
 ```python
 import base64, json, pathlib, urllib.request
-req = urllib.request.Request("<service-url>/instances", data=pathlib.Path("spec.json").read_bytes(),
+req = urllib.request.Request("https://darp-builder-1094879102833.europe-west1.run.app/instances", data=pathlib.Path("spec.json").read_bytes(),
                              headers={"Content-Type": "application/json"})
 with urllib.request.urlopen(req) as response:
     result = json.load(response)
