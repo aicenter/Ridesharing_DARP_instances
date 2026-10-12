@@ -51,7 +51,7 @@ Check:
 
 ```bash
 URL=https://darp-builder-....run.app
-curl -s "$URL/healthz"
+curl -s "$URL/health"
 curl -s -X POST "$URL/instances" -H "content-type: application/json" --data @web/graph-editor/examples/small-darp.json | head -c 300
 ```
 

@@ -150,7 +150,7 @@ describe("other routes", () => {
     const schema = await fetch(`${base}/schema`);
     expect(schema.status).toBe(200);
     expect(((await schema.json()) as { $id: string }).$id).toBe("instance_spec.schema.json");
-    expect(await (await fetch(`${base}/healthz`)).json()).toEqual({ ok: true });
+    expect(await (await fetch(`${base}/health`)).json()).toEqual({ ok: true });
   });
 
   it.skipIf(!existsSync(`${DIST_DIR}/index.html`))("serves the built editor", async () => {

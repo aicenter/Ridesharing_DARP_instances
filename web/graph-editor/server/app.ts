@@ -244,7 +244,8 @@ export function createApp(opts: AppOptions): Server {
       res.end(schemaText);
       return;
     }
-    if (url.pathname === "/healthz" && method === "GET") return sendJson(res, 200, { ok: true });
+    // Not /healthz: Google's front end answers that path itself (404) before Cloud Run.
+    if (url.pathname === "/health" && method === "GET") return sendJson(res, 200, { ok: true });
     if (method === "GET" || method === "HEAD") return serveStatic(url.pathname, res);
     sendJson(res, 405, { error: "method not allowed" });
   }
