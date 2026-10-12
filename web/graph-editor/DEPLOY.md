@@ -24,7 +24,7 @@ One-time setup (Google Cloud CLI installed, <https://cloud.google.com/sdk/docs/i
 
 ```bash
 gcloud init                                  # log in, pick (or create) the project
-gcloud config set run/region europe-west1
+gcloud config set run/region europe-west1   # optional: default region, so later commands can omit --region
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
 ```
 
