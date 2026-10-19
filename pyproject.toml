@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name='darpinstances'
+version='0.0.1'
+dependencies=[
+    'geoalchemy2',
+    'geojson',
+    'geopandas',
+    'h5py',
+    'numpy',
+    'osmnx',
+    'pandas',
+    'pandera',
+    'plotly',
+    'psycopg2-binary',
+    'pyyaml',
+    'roadgraphtool',
+    'scikit-learn',
+    'scipy',
+    'sqlalchemy',
+    'tqdm'
+]
+requires-python='>=3.8'
+authors=[
+    { name="David Fiedler", email="david.fido.fiedler@gmail.com" },
+    { name="Jan Mrkos", email="mrkosjan@gmail.com" }
+]
+description='Tools to create DARP benchmark instances, define the solution format, and process the results.'
+license='GPL-3.0-only'
+
+[tool.setuptools.packages.find]
+where=['python']
+include=['darpinstances*']
+
+[tool.uv.sources]
+roadgraphtool = { git = "https://github.com/aicenter/road-graph-tool", branch = "main" }

@@ -521,12 +521,15 @@ The following data sources were used to generate demand and travel time data:
 The steps to create your own instances are:
 
 1. clone and locally install the [road-graph-tool](https://github.com/aicenter/road-graph-tool) package (so far, we are unable to keep the PyPI version up to date),
-1. clone and locally install the package for this repository,
+1. clone and locally install the package for this repository: `pip install -e <clone dir>`,
 1. prepare the configuration files for the database server. See the [configuration section](#configuration) for details.
 1. If you are starting with a fresh database, you need to install the SQL tables, functions, etc. For that, call `python python/scripts/install_sql.py <path_to_road-graph-tool_config_file>`.
 1. Use your custom code to import zone and demand data to the database. See the [zone and demand import section](#zone-and-demand-import) for details.
 1. Call `python python/scripts/main.py <path_to_YAML_config_file>`. This script calls both the main pipeline of Road Graph Tool and the processing steps for the instance creation.
 
+
+### Granting a user the minimal privileges to run the instance creation
+To let another existing database role import demand, call `python python/scripts/grant_privileges.py <path_to_road-graph-tool_config_file> <role>` with a config connecting as a user who can grant the privileges (e.g., the owner of the tables). This also grants the Road Graph Tool privileges.
 
 ### Zone and Demand Import
 For each data source, the zone and demand input format is different. Therefore, we cannot provide a generic code for the import. However, you can find the example code for the import in the [demand cell script](python/nb/demand.py).
