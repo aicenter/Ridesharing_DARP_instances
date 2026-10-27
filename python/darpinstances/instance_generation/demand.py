@@ -256,7 +256,7 @@ def load_demand(config: Dict, nodes: gpd.GeoDataFrame):
         params={
             'area_id': config['area_id'],
             'demand_dataset_ids': _to_int_list(config['demand']['dataset']),
-            'trip_location_set_id': int(config['demand']['positions_set']),
+            'trip_location_set_id': int(config['demand']['trip_location_set']),
             'trip_time_set_ids': _to_int_list(config['demand'].get('time_set')),
             'start_time': config['demand'].get('min_time'),
             'end_time': config['demand'].get('max_time'),
