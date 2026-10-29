@@ -122,7 +122,7 @@ The instance configuration file has the following structure (**bold** fields are
     - *`mode`*: mode used for creating the demand. Can be 'load' for loading the demand from the file or 'generate' for generating the demand
     - *`positions_set`*: id of the set of positions used to generate the demand.
     - *`time_set`*: id of the set of times used to generate the demand.
-- `dist_filepath`: path to a node-to-node distance matrix in metres (same format as `dm`), needed only for distance-based cost. The matrix contains integer metres, quantized once at the source that generated it (mirroring the integer seconds of the travel time matrix), so all consumers see identical distances.
+- `dist_filepath`: path to a node-to-node distance matrix in metres (same format as `dm`), needed only for distance-based cost; a non-zero `cost.distance_weight` without it is an error. The matrix contains integer metres, quantized once at the source that generated it (mirroring the integer seconds of the travel time matrix), so all consumers see identical distances. [Road Graph Tool](https://github.com/aicenter/road-graph-tool) generates it next to the travel time matrix with `dm_generator.distance_matrix: true`: the lengths of the fastest paths of the travel time matrix (ties broken by the shorter path), rounded once per pair.
 - `dm_filepath`: path to the distance matrix file, relative to the instance directory. If not provided, `<area_dir>/dm.h5` is used, falling back to `<area_dir>/dm.csv` if the HDF5 file does not exist
 - *`map`*:
     - *`SRID`*: id of the spatial reference system used for spherical projection.
