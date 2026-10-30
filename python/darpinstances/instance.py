@@ -596,15 +596,27 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
     request_data['min_travel_time'] = [travel_time_provider.get_travel_time(start_node, end_node) / travel_time_divider
         for start_node, end_node in zip(request_data['start_node'], request_data['end_node'])]
 
+    # service times per stop: the pickup_service_time / dropoff_service_time cell, otherwise the service_time cell
+    # (both stops), otherwise the instance-wide service_time of the config, otherwise 0
+    global_service_time = int(instance_config.get('service_time', 0))
+
+    def _resolve_service_times(stop_column: str) -> pd.Series:
+        resolved = pd.Series(global_service_time, index=request_data.index, dtype='float64')
+        for column in ('service_time', stop_column):
+            if column in request_data.columns:
+                resolved = pd.to_numeric(request_data[column]).combine_first(resolved)
+        return resolved.astype(int)
+
+    request_data['pickup_service_time'] = _resolve_service_times('pickup_service_time')
+    request_data['dropoff_service_time'] = _resolve_service_times('dropoff_service_time')
+
     # derive the desired pickup time for pure-deadline (ALAP) rows: 'time' may
     # be left empty only when required_arrival_time is set (README §Requests
     # Files) — earliest departure = max(request_time, required_arrival_time
-    # − min travel time − service_time), with the request_time term dropped
-    # when that column is absent
+    # − min travel time − pickup service time), with the request_time term
+    # dropped when that column is absent
     if 'required_arrival_time' not in request_data.columns:
         request_data['required_arrival_time'] = None
-    if 'service_time' not in request_data.columns:
-        request_data['service_time'] = 0
 
     def _derive_desired_pickup(time_value, request_time, required_arrival_raw, service_time, min_travel_time):
         # pandas coerces None to NaT in datetime columns — treat both as absent
@@ -616,8 +628,7 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
                 "'time' may be left empty only for pure-deadline (ALAP) requests"
             )
         deadline = time_loader.load_time_field(required_arrival_raw)
-        service_seconds = 0 if service_time is None or pd.isna(service_time) else int(service_time)
-        derived = deadline - timedelta(seconds=round(min_travel_time) + service_seconds)
+        derived = deadline - timedelta(seconds=round(min_travel_time) + int(service_time))
         if request_time is not None and not pd.isna(request_time) and request_time > derived:
             derived = request_time
         return derived
@@ -625,7 +636,7 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
     request_data['time'] = [
         _derive_desired_pickup(*fields) for fields in zip(
             request_data['time'], request_data['request_time'], request_data['required_arrival_time'],
-            request_data['service_time'], request_data['min_travel_time'])
+            request_data['pickup_service_time'], request_data['min_travel_time'])
     ]
 
     # min pickup time
@@ -774,8 +785,6 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
             token.strip() for token in str(required_equipment_raw).split(';') if token.strip()
         }
 
-        service_time = int(cell(row, 'service_time', 0))
-
         requests.append(
             Request(
                 row.id,
@@ -787,8 +796,8 @@ def load_demand(demand_file: TextIO, instance_config: dict, travel_time_provider
                 row.end_node,
                 max_drop_off_time,
                 math.ceil(min_travel_time),
-                service_time,
-                service_time,
+                row.pickup_service_time,
+                row.dropoff_service_time,
                 passengers=passengers,
                 constraints=constraints,
                 walk_to_origin=float(cell(row, 'walk_to_origin_m', 0.0)),

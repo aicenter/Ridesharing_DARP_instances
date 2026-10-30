@@ -333,6 +333,40 @@ def test_service_time_enforced(instance_dir):
     assert failures[Failure.DEPARTURE_TIME] >= 1
 
 
+def service_times(instance_dir: Path) -> list[tuple[int, int]]:
+    instance, _, _ = darpinstances.solution_checker.load_instance(instance_dir / "config.yaml")
+    return [
+        (request.pickup_action.service_time, request.drop_off_action.service_time) for request in instance.requests
+    ]
+
+
+def test_per_stop_service_times_override_service_time(instance_dir):
+    patch_request(instance_dir, 0, "pickup_service_time", 25)
+    patch_request(instance_dir, 1, "dropoff_service_time", 40)
+    assert service_times(instance_dir) == [(25, 10), (0, 40)]
+
+
+def test_global_service_time_for_empty_cells(instance_dir):
+    patch_config(instance_dir, "service_time", 15)
+    patch_request(instance_dir, 1, "service_time", None)
+    assert service_times(instance_dir) == [(10, 10), (15, 15)]
+
+
+def test_global_service_time_without_service_columns(instance_dir):
+    patch_config(instance_dir, "service_time", 15)
+    requests_path = instance_dir / "requests.csv"
+    pd.read_csv(requests_path).drop(columns="service_time").to_csv(requests_path, index=False)
+    assert service_times(instance_dir) == [(15, 15), (15, 15)]
+
+
+def test_drop_off_service_time_enforced(instance_dir):
+    # D0 departs at 1370 after its 10 s service time; with 30 s, the departure is too early
+    patch_request(instance_dir, 0, "dropoff_service_time", 30)
+    ok, failures = check(instance_dir, valid_solution())
+    assert not ok
+    assert failures[Failure.DEPARTURE_TIME] >= 1
+
+
 def test_generalized_cost_check(instance_dir):
     solution = valid_solution()
     solution["plans"][0]["cost"] = 900

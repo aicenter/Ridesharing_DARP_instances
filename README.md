@@ -75,7 +75,7 @@ With each action (pickup/drop-off) a *service duration* is associated. We may al
 - *boarding duration* for pickup,
 - *unboarding duration* for drop-off.
 
-(In the file formats, the JSON schemas call this field `service_duration`; the `requests.csv` column keeps its legacy name `service_time`.)
+(In the file formats, the JSON schemas call this field `service_duration`; the `requests.csv` columns keep the legacy name `service_time`: `pickup_service_time`, `dropoff_service_time`, and `service_time` for both stops.)
 
 
 ## Time Format
@@ -146,6 +146,7 @@ The instance configuration file has the following structure (**bold** fields are
     - *`vehicle_count`*: the number of vehicles in the vehicle file.
     
 - *`save_shp`*: whether to save the shapefiles for the instance.
+- `service_time`: the service time (seconds) of every pickup and drop-off whose request sets none, see the service time columns of the [Requests Files](#requests-files). Default 0.
 - `start_time`: the start time of the instance. This time is used to calculate times that are specified in seconds. If not provided, the instance start time is set to the [Unix timestamp](https://en.wikipedia.org/wiki/Unix_time) 0 (1970-01-01 00:00:00).
 
 The per-request constraints (`max_delay`, `max_travel_delay`, `max_pickup_delay`, `max_ride_time`, `max_walking_distance`) act as instance-wide baselines that individual requests can override, see [Requests Files](#requests-files).
@@ -213,7 +214,9 @@ All further columns are optional. Attribute columns:
 
 | column | meaning |
 | --- | --- |
-| `service_time` | boarding/alighting time at both stops of this request (seconds, default 0) |
+| `service_time` | boarding/alighting time at both stops of this request (seconds); empty: the instance-wide `service_time` of the [configuration file](#instance-configuration-file), default 0 |
+| `pickup_service_time` | boarding time at the pickup (seconds); empty: the request's `service_time` |
+| `dropoff_service_time` | alighting time at the drop-off (seconds); empty: the request's `service_time` |
 | `passengers_standard` | passengers occupying one `standard` slot each (default 1) |
 | `passengers_wheelchair` | passengers occupying one `wheelchair` slot each (default 0) |
 | `passengers_electric_wheelchair` | passengers occupying one `electric_wheelchair` slot each (default 0) |
