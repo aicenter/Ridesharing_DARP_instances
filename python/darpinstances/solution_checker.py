@@ -32,6 +32,7 @@ from darpinstances.utils import TimeLoader
 
 class Failure(Enum):
     PLAN_DEPARTURE_TIME = auto()
+    PLAN_ARRIVAL_TIME_MISMATCH = auto()
     ARRIVAL_TIME_MISMATCH = auto()
     DEPARTURE_TIME = auto()
     VEHICLE_REUSED = auto()
@@ -567,6 +568,14 @@ class SolutionChecker:
                 "[{}. plan] Total drive time {} s exceeds the vehicle limit {} s.".format(
                     plan_counter, total_drive_seconds, vehicle.max_drive_time
                 ),
+            )
+
+        # plan arrival time check: the reported end of the plan must match the recomputed one (the end of the last
+        # action, plus the return leg if it is included), otherwise the plan duration would be misreported
+        if not fleet_sizing and plan.actions and plan.arrival_time is not None and plan.arrival_time != time:
+            fail(
+                Failure.PLAN_ARRIVAL_TIME_MISMATCH,
+                f"[{plan_counter}. plan] Plan arrival time mismatch (expected {time}, was {plan.arrival_time})",
             )
 
         # max route time check

@@ -81,6 +81,7 @@ def test_distance_on_depot_return_leg(tmp_path):
     # the return leg 2 -> 0 adds 300 s and 300 000 m
     solution = single_request_solution()
     solution["cost"] = solution["plans"][0]["cost"] = 600 + 600
+    solution["plans"][0]["arrival_time"] += 300
 
     ok, failures, cost = check(config_path, solution, tmp_path)
 

@@ -165,6 +165,15 @@ def test_max_time_has_no_extra_pickup_delay_slack(tmp_path):
     assert not ok
 
 
+def test_plan_arrival_time_mismatch_fails(tmp_path):
+    # the plan reported to end after its pickup although its drop-off ends at 1200
+    solution = single_request_solution()
+    solution["plans"][0]["arrival_time"] = 1000
+    ok, failures = check(solution, tmp_path)
+    assert not ok
+    assert failures[Failure.PLAN_ARRIVAL_TIME_MISMATCH] == 1
+
+
 def test_arrival_time_mismatch_fails(tmp_path):
     # one-second deviation from the recomputed schedule; previously only warned
     solution = single_request_solution()

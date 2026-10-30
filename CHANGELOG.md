@@ -4,6 +4,7 @@
 
 ### Code
 
+- added: the solution checker verifies the plan arrival time against the recomputed end of the plan (`PLAN_ARRIVAL_TIME_MISMATCH`); previously a misreported plan end went unnoticed, and with it the plan duration
 - added: separate pickup and drop-off service times (`pickup_service_time`, `dropoff_service_time` request columns, falling back to the request's `service_time`) and an instance-wide default `service_time` in the instance config
 - added: a non-zero `cost.distance_weight` without `dist_filepath` is rejected on instance load; the README documents the generation of the distance matrix by Road Graph Tool (`dm_generator.distance_matrix`)
 - added: the graph editor is hosted at <https://fido.ninja/darp-instances-editor/> (deployed by the `deploy-gui` GitHub workflow over FTP) and the headless instance builder runs as an HTTP service (`web/graph-editor/server`, `POST /instances`, containerized by the root `Dockerfile` for Google Cloud Run); the CLI gained `--service <url>` to build through it without a local browser
