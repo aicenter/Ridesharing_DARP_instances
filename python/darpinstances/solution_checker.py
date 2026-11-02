@@ -52,6 +52,7 @@ class Failure(Enum):
     EXCLUSIVE_RIDE = auto()
     MAX_WALKING_DISTANCE = auto()
     MAX_ROUTE_DURATION = auto()
+    MIN_PLAN_REVENUE = auto()
     PLAN_COST = auto()
     SOLUTION_COST = auto()
     REQUEST_SERVED_TWICE = auto()
@@ -305,7 +306,8 @@ class SolutionChecker:
                 for slot, count in slot_demand.items():
                     slot_load[slot] += count
                 child_seat_load += passengers.children_in_seat
-                if not fleet_sizing and vehicle is not None:
+                # in fleet sizing, the placeholder vehicles have the instance-wide capacity (vehicles.capacity)
+                if vehicle is not None:
                     fits = any(
                         all(slot_load[slot] <= configuration.get(slot, 0) for slot in SLOT_TYPES)
                         for configuration in vehicle.configurations
@@ -578,11 +580,10 @@ class SolutionChecker:
                 f"[{plan_counter}. plan] Plan arrival time mismatch (expected {time}, was {plan.arrival_time})",
             )
 
-        # max route time check
+        # max route time check; in fleet sizing, the plan departs at its first action
         max_route_duration = config.max_route_duration
         if (
-            not fleet_sizing
-            and max_route_duration
+            max_route_duration
             and time - plan.departure_time > timedelta(seconds=int(max_route_duration))
         ):
             fail(
@@ -592,6 +593,22 @@ class SolutionChecker:
                     time - plan.departure_time,
                     max_route_duration
                     ),
+            )
+
+        # minimum plan revenue: the revenue of the requests the plan serves
+        if (
+            plan.actions
+            and config.min_plan_revenue
+            and len(served_requests) * config.request_revenue < config.min_plan_revenue
+        ):
+            fail(
+                Failure.MIN_PLAN_REVENUE,
+                "[{}. plan] Plan revenue {} ({} requests) is below the minimum plan revenue {}".format(
+                    plan_counter,
+                    len(served_requests) * config.request_revenue,
+                    len(served_requests),
+                    config.min_plan_revenue,
+                ),
             )
 
         # generalized weighted cost; the default weights reproduce the legacy

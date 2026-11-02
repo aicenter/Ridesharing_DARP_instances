@@ -100,6 +100,7 @@ class SolutionLoader:
                 request_map,
                 vehicle_map,
                 fleet_sizing=fleet_sizing,
+                fleet_sizing_capacity=instance.darp_instance_config.vehicle_capacity,
             )
         elif filepath.suffix.lower() == '.csv':
             peek = pd.read_csv(filepath, nrows=0)
@@ -117,7 +118,13 @@ class SolutionLoader:
                 return solution
 
     def load_json_solution(
-        self, filepath, use_virtual_vehicles, request_map, vehicle_map, fleet_sizing: bool = False
+        self,
+        filepath,
+        use_virtual_vehicles,
+        request_map,
+        vehicle_map,
+        fleet_sizing: bool = False,
+        fleet_sizing_capacity: Optional[int] = None,
     ):
         json_data = load_json(filepath)
 
@@ -129,7 +136,12 @@ class SolutionLoader:
         total_missmatch_actions = 0
         for json_plan in json_data["plans"]:
             plan, mismatch_actions_count = self._load_plan(
-                json_plan, use_virtual_vehicles, vehicle_map, request_map, fleet_sizing=fleet_sizing
+                json_plan,
+                use_virtual_vehicles,
+                vehicle_map,
+                request_map,
+                fleet_sizing=fleet_sizing,
+                fleet_sizing_capacity=fleet_sizing_capacity,
             )
             vehicle_plans.append(plan)
             total_missmatch_actions += mismatch_actions_count
@@ -258,11 +270,14 @@ class SolutionLoader:
         vehicle_map: Dict[int, Vehicle],
         request_map: Dict[int, Request],
         fleet_sizing: bool = False,
+        fleet_sizing_capacity: Optional[int] = None,
     ) -> Tuple[VehiclePlan, int]:
         if fleet_sizing:
             v = json_data["vehicle"]
             vid = int(v.get("index", v.get("id", 0)))
-            vehicle = Vehicle(vid, 0, [{"standard": 999}], None, None)
+            # the instance-wide capacity of the vehicles created by the solver (vehicles.capacity), if given
+            capacity = fleet_sizing_capacity if fleet_sizing_capacity is not None else 999
+            vehicle = Vehicle(vid, 0, [{"standard": capacity}], None, None)
         elif use_virtual_vehicles:
             vehicle = vehicle_map[0]
         else:

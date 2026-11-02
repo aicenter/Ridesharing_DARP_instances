@@ -48,6 +48,8 @@ class DARPInstanceConfiguration:
         problem: str = "DARP",
         max_walking_distance: Optional[float] = None,
         cost_weights: Optional[CostWeights] = None,
+        request_revenue: float = 0,
+        min_plan_revenue: float = 0,
     ):
         self.max_route_duration = max_route_duration
         self.max_ride_time = max_ride_time
@@ -64,6 +66,9 @@ class DARPInstanceConfiguration:
         self.relative_delay_cost = relative_delay_cost
         self.problem = problem
         self.max_walking_distance = max_walking_distance
+        # revenue per served request and the minimum revenue of a non-empty plan, in the unit of the cost
+        self.request_revenue = request_revenue
+        self.min_plan_revenue = min_plan_revenue
         if cost_weights is None:
             # legacy cost model expressed in the generalized weights
             cost_weights = CostWeights(
@@ -946,6 +951,8 @@ def load_instance(
         problem,
         max_walking_distance=instance_config.get('max_walking_distance'),
         cost_weights=cost_weights,
+        request_revenue=instance_config.get('request_revenue', 0),
+        min_plan_revenue=instance_config.get('min_plan_revenue', 0),
     )
 
     darp_instance = DARPInstance(

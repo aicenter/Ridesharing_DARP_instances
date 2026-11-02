@@ -262,6 +262,102 @@ def test_max_route_duration_loaded_from_config(tmp_path):
     assert ok
 
 
+def fleet_sizing_solution(plans: list) -> dict:
+    """A fleet sizing solution: each plan departs at its first pickup (no first leg)."""
+    for plan in plans:
+        shift = plan["actions"][0]["arrival_time"] - plan["departure_time"]
+        plan["departure_time"] += shift
+    return {"cost": sum(plan["cost"] for plan in plans), "plans": plans, "dropped_requests": []}
+
+
+def check_fleet_sizing(solution_dict: dict, tmp_path: Path, **config_changes):
+    instance, time_loader = load_fixture("config_fleet_sizing.yaml")
+    for key, value in config_changes.items():
+        setattr(instance.darp_instance_config, key, value)
+    solution_path = write_solution(tmp_path, solution_dict)
+    solution = darpinstances.solution.load_solution(
+        solution_path, instance, time_loader, fleet_sizing=instance.darp_instance_config.is_fleet_sizing
+    )
+    checker = SolutionChecker()
+    ok, failures = checker.check_solution(instance, solution, fleet_sizing=True)
+    return ok, failures
+
+
+def shared_fleet_sizing_plan() -> dict:
+    # both requests in one plan starting at the first pickup: travel 60 + 60 + 200 s
+    plan = two_request_solution()["plans"][0]
+    plan["cost"] = 320
+    return plan
+
+
+def single_fleet_sizing_plans() -> list:
+    # one plan per request, each 200 s of travel (R0: 1 -> 2, R1: 3 -> 1 takes 60 s)
+    first = single_request_solution()["plans"][0]
+    second = copy.deepcopy(first)
+    second["cost"] = 60
+    second["arrival_time"] = 1160
+    second["actions"] = [
+        {
+            "arrival_time": 1100,
+            "departure_time": 1100,
+            "action": {
+                "id": 2, "request_index": 1, "type": "pickup",
+                "position": {"index": 3}, "min_time": 1100, "max_time": 1220,
+                "service_duration": 0,
+            },
+        },
+        {
+            "arrival_time": 1160,
+            "departure_time": 1160,
+            "action": {
+                "id": 3, "request_index": 1, "type": "drop_off",
+                "position": {"index": 1}, "max_time": 1460,
+                "service_duration": 0,
+            },
+        },
+    ]
+    first["cost"] = 200
+    return [first, second]
+
+
+def test_fleet_sizing_min_plan_revenue(tmp_path):
+    # the shared plan earns 2 x 60 >= 100
+    ok, failures = check_fleet_sizing(fleet_sizing_solution([shared_fleet_sizing_plan()]), tmp_path)
+    assert ok, failures
+
+    # one request per plan earns 60 < 100
+    ok, failures = check_fleet_sizing(fleet_sizing_solution(single_fleet_sizing_plans()), tmp_path)
+    assert not ok
+    assert failures[Failure.MIN_PLAN_REVENUE] == 2
+
+    # no minimum by default
+    ok, _ = check_fleet_sizing(fleet_sizing_solution(single_fleet_sizing_plans()), tmp_path, min_plan_revenue=0)
+    assert ok
+
+
+def test_fleet_sizing_capacity_from_config(tmp_path):
+    # both requests are onboard between 1100 and 1160
+    ok, failures = check_fleet_sizing(
+        fleet_sizing_solution([shared_fleet_sizing_plan()]), tmp_path, vehicle_capacity=1
+    )
+    assert not ok
+    assert failures[Failure.CAPACITY] == 1
+
+
+def test_fleet_sizing_max_route_duration(tmp_path):
+    # the shared plan runs 1000 -> 1360 = 360 s from its first pickup
+    ok, failures = check_fleet_sizing(
+        fleet_sizing_solution([shared_fleet_sizing_plan()]), tmp_path, max_route_duration=300
+    )
+    assert not ok
+    assert failures[Failure.MAX_ROUTE_DURATION] == 1
+
+    ok, _ = check_fleet_sizing(
+        fleet_sizing_solution([shared_fleet_sizing_plan()]), tmp_path, max_route_duration=360
+    )
+    assert ok
+
+
 def test_dropped_requests_id_key_fallback(tmp_path):
     solution = single_request_solution()
     dropped = solution["dropped_requests"][0]
