@@ -3,6 +3,7 @@ import logging
 import math
 import os
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime, timedelta, time, timezone
 from pathlib import Path
 from typing import Iterable, Dict, List, Optional, Sequence, TextIO, Tuple, Union
@@ -29,6 +30,45 @@ from darpinstances.travel_time_provider import (
 from roadgraphtool.distance_matrix_generator import resolve_dm_filepath
 
 
+@dataclass
+class OnlineMode:
+    """
+    The ``online_mode`` section of the instance config. In the online mode, a request is known from its time on and
+    the solver re-plans in batches of ``batch_period`` seconds: the batch at time T plans the requests announced by T
+    from the vehicle states at T and changes only what happens after T. Unless ``allow_delay_promised_pickup`` is set,
+    the pickup time a batch schedules for a request is promised: a later batch may serve the request earlier, never
+    later. Solvers must support the online mode explicitly.
+    """
+    on: bool = False
+    batch_period: int = 0
+    allow_delay_promised_pickup: bool = False
+
+
+ONLINE_MODE_KEYS = ('on', 'batch_period', 'allow_delay_promised_pickup')
+
+
+def load_online_mode(instance_config: dict) -> OnlineMode:
+    """Parse the ``online_mode`` section; all off when absent. Unknown keys and a missing batch period are errors."""
+    section = instance_config.get('online_mode')
+    if section is None:
+        return OnlineMode()
+    if not isinstance(section, dict):
+        raise ValueError(f"online_mode must be a mapping with the keys {ONLINE_MODE_KEYS}, got {section!r}")
+    # YAML 1.1 parsers (PyYAML) read the bare key `on` as the boolean True
+    section = {('on' if key is True else key): value for key, value in section.items()}
+    unknown = set(section) - set(ONLINE_MODE_KEYS)
+    if unknown:
+        raise ValueError(f"unknown keys in online_mode: {sorted(unknown)}, supported keys: {ONLINE_MODE_KEYS}")
+    online_mode = OnlineMode(
+        on=bool(section.get('on', False)),
+        batch_period=int(section.get('batch_period', 0)),
+        allow_delay_promised_pickup=bool(section.get('allow_delay_promised_pickup', False)),
+    )
+    if online_mode.on and online_mode.batch_period <= 0:
+        raise ValueError("online_mode.batch_period (seconds, greater than 0) is required when online_mode.on is true")
+    return online_mode
+
+
 class DARPInstanceConfiguration:
     def __init__(
         self,
@@ -50,6 +90,7 @@ class DARPInstanceConfiguration:
         cost_weights: Optional[CostWeights] = None,
         request_revenue: float = 0,
         min_plan_revenue: float = 0,
+        online_mode: Optional[OnlineMode] = None,
     ):
         self.max_route_duration = max_route_duration
         self.max_ride_time = max_ride_time
@@ -69,6 +110,8 @@ class DARPInstanceConfiguration:
         # revenue per served request and the minimum revenue of a non-empty plan, in the unit of the cost
         self.request_revenue = request_revenue
         self.min_plan_revenue = min_plan_revenue
+        # the online mode of the instance (see OnlineMode); off by default
+        self.online_mode = online_mode if online_mode is not None else OnlineMode()
         if cost_weights is None:
             # legacy cost model expressed in the generalized weights
             cost_weights = CostWeights(
@@ -953,6 +996,7 @@ def load_instance(
         cost_weights=cost_weights,
         request_revenue=instance_config.get('request_revenue', 0),
         min_plan_revenue=instance_config.get('min_plan_revenue', 0),
+        online_mode=load_online_mode(instance_config),
     )
 
     darp_instance = DARPInstance(

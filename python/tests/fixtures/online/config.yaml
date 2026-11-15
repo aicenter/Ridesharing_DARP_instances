@@ -1,0 +1,11 @@
+# Basic fixture in the online mode: 30 s batches, promised pickups kept.
+demand:
+  filepath: ./requests.csv
+dm_filepath: ./dm.csv
+max_delay:
+  mode: absolute
+  seconds: 300
+max_pickup_delay: 120
+online_mode:
+  on: true
+  batch_period: 30
