@@ -5,6 +5,32 @@
 # For the configuration of the Road Graph Tool pipeline, refer to road-graph-tool/config_example.yaml.
 # https://github.com/aicenter/road-graph-tool#configuration
 
+# Calibrate the speed factor of the area from the recorded trip durations (SQL: compute_speed_factor).
+# Requires the area contracted with posted speeds (contraction.speed_source: posted) and the top-level srid.
+# The factor is logged and written to <export.dir>/speed_calibration.yaml; set it as dm_generator.speed_factor
+# before generating the distance matrix.
+speed_calibration: {
+    activated: false,
+
+    # area_id defaults to top-level area_id when omitted
+    demand_datasets: [1],
+
+    # Optional filters on demand.origin_time
+    # start_time: 2019-01-01 00:00:00,
+    # end_time: 2019-02-01 00:00:00,
+
+    # Optional zone filters, as in demand_position_sampling
+    # zone_types: [1],
+    # ignored_zones: [],
+
+    # Optional limits of the used trips (defaults shown): recorded duration,
+    # and the ratio of the recorded duration to the network travel time
+    # min_duration_minutes: 1,
+    # max_duration_minutes: 180,
+    # min_ratio: 0.5,
+    # max_ratio: 10,
+}
+
 # Sample origin/destination nodes per demand row (SQL: generate_demand_positions)
 demand_position_sampling: {
     activated: false,

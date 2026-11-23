@@ -89,6 +89,43 @@ CALL generate_trip_times(
 
 Supported modes are `around_origin_time` and `between_times`. In `around_origin_time` mode, both distributions sample around `demand.origin_time` inside a window of `p_time_resolution_minutes`; for example, a 60-minute resolution samples within plus/minus 30 minutes. In `between_times` mode, both distributions sample inside `[p_sample_start_time, p_sample_end_time]`; `truncated_normal` is centered on the midpoint of that interval. When `p_std_dev_minutes` is omitted for `truncated_normal`, it defaults to one sixth of the active sampling window. `p_filter_start_time` and `p_filter_end_time` only select demand rows by `demand.origin_time`; they are separate from the sampling bounds.
 
+# Functions
+
+## compute_speed_factor
+
+Calibrates one speed factor for an area: the multiplier of the edge speeds (Road Graph Tool `dm_generator.speed_factor`) with which the travel times on the road network match the recorded trip durations of the selected demand in total. The network travel time of a trip is the travel time between the representative nodes of its origin and destination zones, computed by pgRouting (`pgr_dijkstraCost`) with the speeds stored in `edges`. The method is described in the section "Speed calibration" of the [main README](../README.md).
+
+```sql
+SELECT *
+FROM compute_speed_factor(
+    p_area_id => 4::smallint,
+    p_area_srid => 32618,
+    p_demand_dataset_ids => ARRAY[2, 3, 4, 5],
+    p_start_time => '2022-04-01 00:00:00',
+    p_end_time => '2022-05-01 00:00:00',
+    p_zone_types => ARRAY[2]::smallint[]
+);
+```
+
+The optional parameters `p_min_duration` and `p_max_duration` (intervals, default 1 minute and 3 hours) limit the recorded trip duration, and `p_min_ratio` and `p_max_ratio` (default 0.5 and 10) limit the ratio of the recorded duration to the network travel time.
+
+The function returns one row: `speed_factor`, the numbers of trips (`trips_total` is the sum of `trips_used`, `trips_without_duration`, `trips_intra_zone`, `trips_zone_without_nodes` and `trips_filtered`), the number of zone pairs of the used trips (`zone_pairs`), and the mean and median ratio of the recorded duration to the network travel time (`mean_ratio`, `median_ratio`).
+
+It raises an exception if the area has no edges, if some edges have no speed, or if no trip can be used.
+
+## select_zone_representative_nodes
+
+Returns the representative road network node of each zone in the temporary table `zones_in_area` (`zone_id`, `zone_type`, `node_id`, `in_circle`). It is used by `compute_speed_factor`. To inspect the representatives on their own, create the temporary tables first, in one transaction:
+
+```sql
+BEGIN;
+CALL create_demand_sampling_edges(4::smallint);
+CALL create_selected_demand(ARRAY[2, 3, 4, 5]);
+CALL create_zones_in_area(4::smallint, ARRAY[2]::smallint[]);
+SELECT * FROM select_zone_representative_nodes(4::smallint, 32618);
+COMMIT;
+```
+
 # address_block
 
 Column | Type | Required | Description
@@ -113,8 +150,8 @@ Column | Type | Required | Description
 Column | Type | Required | Description
 ------- | ------ | ------ | ------------
 `id` | integer | Yes | Unique identifier for the trip request (default from `demand_id_seq`)
-`origin` | bigint | Yes | Origin node id (`nodes.id` from road-graph-tool)
-`destination` | bigint | Yes | Destination node id (`nodes.id` from road-graph-tool)
+`origin` | bigint | Yes | Origin zone id (`zones.id`); the sampled origin nodes are in `trip_locations`
+`destination` | bigint | Yes | Destination zone id (`zones.id`); the sampled destination nodes are in `trip_locations`
 `origin_time` | timestamp without time zone | No | Request start time, if known
 `dataset` | integer | Yes | Foreign key to `dataset.id`
 `passenger_count` | smallint | No | Number of passengers (default 1)

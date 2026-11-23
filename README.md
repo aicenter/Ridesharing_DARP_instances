@@ -585,6 +585,40 @@ The travel time model (blue in the flow chart) is created by the [road-graph-too
 The remaining steps (green) are handled by the code in this repo, which also includes high-level scripts for the instance creation process. For guidance on how to configure the instance creation steps, please refer to the following sections.
 
 
+### Speed calibration
+`speed_calibration`
+
+The travel time model uses the posted speeds of the roads, which are faster than the real traffic. This step calibrates one speed factor for the whole area from the recorded trip durations of the demand, so that the travel times on the road network match the recorded trip durations in total. The factor is the value for the `dm_generator.speed_factor` parameter of the Road Graph Tool, which multiplies all edge speeds when the distance matrix is generated.
+
+The demand is recorded between zones, not between exact locations. Therefore, each zone is represented by one road network node, and the network travel time of a trip is the travel time between the representative nodes of its origin and destination zones. The representative node is selected from the nodes used for the [request location generation](#request-location-generation) that lie within a circle around the zone centroid (half the radius of a circle with the area of the zone): the node with the highest minimum of in-degree and out-degree, the nearest to the centroid on ties. If there is no such node in the circle, the node of the zone nearest to the centroid is used.
+
+A trip is used for the calibration if
+
+- it has a recorded duration (`destination_time` in the `demand` table),
+- its origin and destination zones differ and both have a representative node,
+- its recorded duration is between `min_duration_minutes` and `max_duration_minutes`, and
+- the ratio of its recorded duration to its network travel time is between `min_ratio` and `max_ratio`.
+
+The speed factor is the sum of the network travel times of the used trips divided by the sum of their recorded durations.
+
+The step requires the area graph contracted with posted speeds (`contraction.speed_source: posted`) and the top-level `srid`. The result is logged and written to `speed_calibration.yaml` in the export directory (`export.dir`), together with the numbers of used and excluded trips and the mean and median ratio of the recorded duration to the network travel time. The configuration is not modified. The intended workflow is:
+
+1. run the pipeline with the `speed_calibration` step activated and the `dm_generator` step deactivated,
+2. set the reported factor as `dm_generator.speed_factor`, activate the `dm_generator` step and run the pipeline again.
+
+Configurable parameters:
+
+- `demand_datasets`: the array of demand dataset IDs used for the calibration.
+- `area_id`: the area to calibrate. Default is the top-level `area_id`.
+- `start_time`, `end_time`: optional limits of the request time (`demand.origin_time`).
+- `zone_types`, `ignored_zones`: optional zone filters, as in the request location generation.
+- `min_duration_minutes`, `max_duration_minutes`: limits of the recorded trip duration. Default is 1 and 180.
+- `min_ratio`, `max_ratio`: limits of the ratio of the recorded duration to the network travel time. Default is 0.5 and 10.
+
+The SQL functions of this step are tested against a real database by [`python/tests/test_speed_factor_db.py`](python/tests/test_speed_factor_db.py). These tests are skipped unless the environment variable `DARPINSTANCES_TEST_DB_CONFIG` holds the path to a Road Graph Tool config of a test database, which can be created by the Road Graph Tool script `scripts/setup_test_db.sh`. The tests install the SQL of both projects into that database and insert a small fixture, so do not use a database with real data.
+
+
+
 ### Request location generation
 `demand_position_sampling`
 

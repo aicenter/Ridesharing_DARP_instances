@@ -7,11 +7,12 @@ from types import SimpleNamespace
 import yaml
 from roadgraphtool.config import parse_config_file, set_logging
 import roadgraphtool.db
-from roadgraphtool.distance_matrix_generator import resolve_dm_filepath
+from roadgraphtool.distance_matrix_generator import resolve_dm_filepath, resolve_export_dir
 import roadgraphtool.pipeline
 from darpinstances.instance_generation.demand import generate_demand
 from darpinstances.instance_generation.map import get_exported_map_nodes
 from darpinstances.instance_generation.short_trips_pruning import prune_short_trips
+from darpinstances.instance_generation.speed_calibration import calibrate_speed_factor
 from darpinstances.instance_generation.vehicles import generate_vehicles_from_db
 
 # from darpinstances.instance_generation.demand_positions import generate_positions
@@ -605,6 +606,15 @@ roadgraphtool.db.init_db(config)
 
 # Run the RGT pipeline
 roadgraphtool.pipeline.main(config)
+
+speed_calibration = getattr(config, "speed_calibration", None)
+if speed_calibration is not None and getattr(speed_calibration, "activated", False):
+    logging.info("Running speed calibration (speed_calibration)")
+    try:
+        calibrate_speed_factor(config, speed_calibration, resolve_export_dir(config))
+    except ValueError as error:
+        logging.error(error)
+        sys.exit(1)
 
 demand_position_sampling = getattr(config, "demand_position_sampling", None)
 if demand_position_sampling is not None and getattr(
